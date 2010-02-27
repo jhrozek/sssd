@@ -650,7 +650,7 @@ int confdb_init(TALLOC_CTX *mem_ctx,
 
     old_umask = umask(0177);
 
-    ret = ldb_connect(cdb->ldb, confdb_location, 0, NULL);
+    ret = ldb_connect(cdb->ldb, confdb_location, LDB_FLG_NOSYNC, NULL);
     umask(old_umask);
     if (ret != LDB_SUCCESS) {
         DEBUG(0, ("Unable to open config database [%s]\n",
