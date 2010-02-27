@@ -56,7 +56,7 @@ errno_t sysdb_ldb_connect(TALLOC_CTX *mem_ctx, const char *filename,
         ldb_set_modules_dir(ldb, mod_path);
     }
 
-    ret = ldb_connect(ldb, filename, 0, NULL);
+    ret = ldb_connect(ldb, filename, LDB_FLG_NOSYNC, NULL);
     if (ret != LDB_SUCCESS) {
         return EIO;
     }
