@@ -1,0 +1,2 @@
+#!/bin/bash
+make -j3 V=0 CFLAGS+="-ggdb3 -O0 -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare" $*
