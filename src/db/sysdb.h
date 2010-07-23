@@ -200,6 +200,8 @@ struct ldb_dn *sysdb_user_dn(struct sysdb_ctx *ctx, void *memctx,
                              const char *domain, const char *name);
 struct ldb_dn *sysdb_group_dn(struct sysdb_ctx *ctx, void *memctx,
                               const char *domain, const char *name);
+errno_t sysdb_group_dn_name(struct sysdb_ctx *ctx, void *memctx,
+                            const char *dn_str, char **name);
 struct ldb_dn *sysdb_domain_dn(struct sysdb_ctx *ctx, void *memctx,
                                const char *domain);
 struct ldb_dn *sysdb_custom_dn(struct sysdb_ctx *ctx, void *memctx,
@@ -535,6 +537,16 @@ struct tevent_req *sysdb_remove_group_member_send(TALLOC_CTX *mem_ctx,
                                                   const char *member);
 int sysdb_remove_group_member_recv(struct tevent_req *req);
 
+
+struct tevent_req * sysdb_update_members_send(TALLOC_CTX *mem_ctx,
+                                              struct tevent_context *ev,
+                                              struct sysdb_handle *handle,
+                                              struct sss_domain_info *domain,
+                                              char *user,
+                                              char **add_groups,
+                                              char **del_groups);
+errno_t sysdb_update_members_recv(struct tevent_req *req);
+
 /* Password caching function.
  * If you are in a transaction ignore sysdb and pass in the handle.
  * If you are not in a transaction pass NULL in handle and provide sysdb,
@@ -651,5 +663,11 @@ struct tevent_req *sysdb_delete_group_send(TALLOC_CTX *mem_ctx,
                                            struct sss_domain_info *domain,
                                            const char *name, gid_t gid);
 int sysdb_delete_group_recv(struct tevent_req *req);
+
+errno_t sysdb_attrs_to_list(TALLOC_CTX *memctx,
+                            struct sysdb_attrs **attrs,
+                            int attr_count,
+                            const char *attr_name,
+                            char ***_list);
 
 #endif /* __SYS_DB_H__ */
