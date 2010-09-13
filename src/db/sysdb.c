@@ -56,6 +56,7 @@ errno_t sysdb_group_dn_name(struct sysdb_ctx *ctx, void *memctx,
                             const char *_dn, char **_name)
 {
     struct ldb_dn *dn;
+    const struct ldb_val *val;
     *_name = NULL;
 
     dn = ldb_dn_new_fmt(memctx, ctx->ldb, "%s", _dn);
@@ -63,8 +64,15 @@ errno_t sysdb_group_dn_name(struct sysdb_ctx *ctx, void *memctx,
         return ENOMEM;
     }
 
-    *_name = talloc_strdup(memctx, ldb_dn_get_rdn_name(dn));
-    if (!_name) {
+    val = ldb_dn_get_rdn_val(dn);
+    if (val == NULL) {
+        talloc_zfree(dn);
+        return EINVAL;
+    }
+
+    *_name = talloc_strndup(memctx, (char *) val->data, val->length);
+
+    if (!*_name) {
         talloc_zfree(dn);
         return ENOMEM;
     }
@@ -1983,13 +1991,13 @@ errno_t sysdb_attrs_to_list(TALLOC_CTX *memctx,
     for (attr_idx = 0; attr_idx < attr_count; attr_idx++) {
         /* Examine each attribute within the entry */
         for (i = 0; i < attrs[attr_idx]->num; i++) {
-            if (strcasecmp(attrs[attr_idx]->a->name, attr_name) == 0) {
+            if (strcasecmp(attrs[attr_idx]->a[i].name, attr_name) == 0) {
                 /* Attribute name matches the requested name
                  * Copy it to the output list
                  */
                 list[list_idx] = talloc_strdup(
                         list,
-                        (const char *)attrs[attr_idx]->a->values[0].data);
+                        (const char *)attrs[attr_idx]->a[i].values[0].data);
                 if (!list[list_idx]) {
                     talloc_free(list);
                     return ENOMEM;

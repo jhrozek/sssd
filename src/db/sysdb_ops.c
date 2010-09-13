@@ -2061,6 +2061,191 @@ int sysdb_add_user_recv(struct tevent_req *req)
     return sysdb_op_default_recv(req);
 }
 
+/* =Add-A-Fake-User====================================================== */
+
+struct sysdb_add_fake_user_state {
+    struct tevent_context *ev;
+    struct sysdb_handle *handle;
+    struct sss_domain_info *domain;
+
+    const char *name;
+};
+
+static void sysdb_add_fake_user_group_check(struct tevent_req *subreq);
+static int sysdb_add_fake_user_op(struct tevent_req *req);
+static void sysdb_add_fake_user_op_done(struct tevent_req *subreq);
+
+struct tevent_req *sysdb_add_fake_user_send(TALLOC_CTX *mem_ctx,
+                                            struct tevent_context *ev,
+                                            struct sysdb_handle *handle,
+                                            struct sss_domain_info *domain,
+                                            const char *name)
+{
+    struct tevent_req *req, *subreq;
+    struct sysdb_add_fake_user_state *state;
+    int ret;
+
+    req = tevent_req_create(mem_ctx, &state,
+                            struct sysdb_add_fake_user_state);
+    if (!req) return NULL;
+
+    state->ev = ev;
+    state->handle = handle;
+    state->domain = domain;
+    state->name = name;
+
+    if (handle->ctx->mpg) {
+        /* In MPG domains you can't have groups with the same name as users,
+         * search if a user with the same name exists.
+         * Don't worry about users, if we try to add a user with the same
+         * name the operation will fail */
+        subreq = sysdb_search_group_by_name_send(state, ev, NULL, handle,
+                                                 domain, name, NULL);
+        if (!subreq) {
+            ERROR_OUT(ret, ENOMEM, fail);
+        }
+        tevent_req_set_callback(subreq, sysdb_add_fake_user_group_check, req);
+        return req;
+    }
+
+    /* try to add the user */
+    ret = sysdb_add_fake_user_op(req);
+    if (ret != EOK) goto fail;
+
+    return req;
+
+fail:
+    DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+    tevent_req_error(req, ret);
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static void sysdb_add_fake_user_group_check(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sysdb_add_fake_user_state *state = tevent_req_data(req,
+                                           struct sysdb_add_fake_user_state);
+    struct ldb_message *msg;
+    int ret;
+
+    /* We can succeed only if we get an ENOENT error, which means no users
+     * with the same name exist.
+     * If any other error is returned fail as well. */
+    ret = sysdb_search_user_recv(subreq, state, &msg);
+    talloc_zfree(subreq);
+    if (ret != ENOENT) {
+        if (ret == EOK) ret = EEXIST;
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    /* try to add the user */
+    ret = sysdb_add_fake_user_op(req);
+    if (ret != EOK) {
+        tevent_req_error(req, ret);
+    }
+}
+
+static int sysdb_add_fake_user_op(struct tevent_req *req)
+{
+    struct sysdb_add_fake_user_state *state = tevent_req_data(req,
+                                           struct sysdb_add_fake_user_state);
+    struct ldb_message *msg;
+    struct tevent_req *subreq;
+    struct ldb_request *ldbreq;
+    int ret;
+    time_t now;
+
+    msg = ldb_msg_new(state);
+    if (!msg) {
+        return ENOMEM;
+    }
+
+    /* user dn */
+    msg->dn = sysdb_user_dn(state->handle->ctx, msg,
+                            state->domain->name, state->name);
+    if (!msg->dn) {
+        return ENOMEM;
+    }
+
+    now = time(NULL);
+
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, "objectClass", SYSDB_USER_CLASS);
+    if (ret) return ret;
+
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_NAME, state->name);
+    if (ret) return ret;
+
+    ret = add_ulong(msg, LDB_FLAG_MOD_ADD, SYSDB_CREATE_TIME,
+                    (unsigned long) now);
+    if (ret) return ret;
+
+    ret = add_ulong(msg, LDB_FLAG_MOD_ADD, SYSDB_LAST_UPDATE,
+                    (unsigned long) now);
+    if (ret) return ret;
+
+    /* set last login so that the fake entry does not get cleaned up
+     * immediately */
+    ret = add_ulong(msg, LDB_FLAG_MOD_ADD, SYSDB_LAST_LOGIN,
+                    (unsigned long) now);
+    if (ret) return ret;
+
+    ret = add_ulong(msg, LDB_FLAG_MOD_ADD, SYSDB_CACHE_EXPIRE,
+                    (unsigned long) now-1);
+    if (ret) return ret;
+
+    ret = ldb_build_add_req(&ldbreq, state->handle->ctx->ldb, state, msg,
+                            NULL, NULL, NULL, NULL);
+    if (ret != LDB_SUCCESS) {
+        DEBUG(1, ("Failed to build modify request: %s(%d)[%s]\n",
+                  ldb_strerror(ret), ret, ldb_errstring(state->handle->ctx->ldb)));
+        return sysdb_error_to_errno(ret);
+    }
+
+    subreq = sldb_request_send(state, state->ev,
+                               state->handle->ctx->ldb, ldbreq);
+    if (!subreq) {
+        return ENOMEM;
+    }
+    tevent_req_set_callback(subreq, sysdb_add_fake_user_op_done, req);
+
+    return EOK;
+}
+
+static void sysdb_add_fake_user_op_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                  struct tevent_req);
+    struct sysdb_add_fake_user_state *state = tevent_req_data(req,
+                                            struct sysdb_add_fake_user_state);
+    struct ldb_reply *ldbreply;
+    int ret;
+
+    ret = sldb_request_recv(subreq, state, &ldbreply);
+    talloc_zfree(subreq);
+    if (ret) {
+        DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    if (ldbreply->type != LDB_REPLY_DONE) {
+        DEBUG(6, ("Error: %d (%s)\n", EIO, strerror(EIO)));
+        tevent_req_error(req, EIO);
+        return;
+    }
+
+    tevent_req_done(req);
+}
+
+int sysdb_add_fake_user_recv(struct tevent_req *req)
+{
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+
+    return EOK;
+}
 
 /* =Add-Basic-Group-NO-CHECKS============================================= */
 
@@ -2447,6 +2632,181 @@ int sysdb_add_group_recv(struct tevent_req *req)
     return sysdb_op_default_recv(req);
 }
 
+
+/* =Add-A-Incomplete-Group====================================================== */
+
+struct sysdb_add_incomplete_group_state {
+    struct tevent_context *ev;
+    struct sysdb_handle *handle;
+    struct sss_domain_info *domain;
+
+    const char *name;
+    gid_t gid;
+};
+
+static void sysdb_add_incomplete_group_user_check(struct tevent_req *subreq);
+static void sysdb_add_incomplete_group_basic_done(struct tevent_req *subreq);
+static void sysdb_add_incomplete_group_set_attrs_done(struct tevent_req *subreq);
+
+struct tevent_req *sysdb_add_incomplete_group_send(TALLOC_CTX *mem_ctx,
+                                             struct tevent_context *ev,
+                                             struct sysdb_handle *handle,
+                                             struct sss_domain_info *domain,
+                                             const char *name, gid_t gid)
+{
+    struct tevent_req *req, *subreq;
+    struct sysdb_add_incomplete_group_state *state;
+    int ret;
+
+    req = tevent_req_create(mem_ctx, &state,
+                            struct sysdb_add_incomplete_group_state);
+    if (!req) return NULL;
+
+    state->ev = ev;
+    state->handle = handle;
+    state->domain = domain;
+    state->name = name;
+    state->gid = gid;
+
+    if (handle->ctx->mpg) {
+        /* In MPG domains you can't have groups with the same name as users,
+         * search if a user with the same name exists.
+         * Don't worry about groups, if we try to add a group with the same
+         * name the operation will fail */
+
+        subreq = sysdb_search_user_by_name_send(state, ev, NULL, handle,
+                                                domain, name, NULL);
+        if (!subreq) {
+            ERROR_OUT(ret, ENOMEM, fail);
+        }
+        tevent_req_set_callback(subreq, sysdb_add_incomplete_group_user_check, req);
+        return req;
+    }
+
+    /* try to add the group */
+    subreq = sysdb_add_basic_group_send(state, ev, handle,
+                                        domain, name, gid);
+    if (!subreq) {
+        ERROR_OUT(ret, ENOMEM, fail);
+    }
+    tevent_req_set_callback(subreq, sysdb_add_incomplete_group_basic_done, req);
+    return req;
+
+fail:
+    DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+    tevent_req_error(req, ret);
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static void sysdb_add_incomplete_group_user_check(struct tevent_req *subreq)
+{
+
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sysdb_add_incomplete_group_state *state = tevent_req_data(req,
+                                           struct sysdb_add_incomplete_group_state);
+    struct ldb_message *msg;
+    int ret;
+
+    /* We can succeed only if we get an ENOENT error, which means no users
+     * with the same name exist.
+     * If any other error is returned fail as well. */
+    ret = sysdb_search_user_recv(subreq, state, &msg);
+    talloc_zfree(subreq);
+    if (ret != ENOENT) {
+        if (ret == EOK) ret = EEXIST;
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    /* try to add the group */
+    subreq = sysdb_add_basic_group_send(state, state->ev,
+                                        state->handle, state->domain,
+                                        state->name, state->gid);
+    if (!subreq) {
+        DEBUG(6, ("Error: Out of memory\n"));
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, sysdb_add_incomplete_group_basic_done, req);
+}
+
+static void sysdb_add_incomplete_group_basic_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sysdb_add_incomplete_group_state *state = tevent_req_data(req,
+                                           struct sysdb_add_incomplete_group_state);
+    int ret;
+    struct sysdb_attrs *attrs;
+    time_t now;
+
+    ret = sysdb_add_basic_group_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret) {
+        DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    attrs = sysdb_new_attrs(state);
+    if (!attrs) {
+        DEBUG(6, ("Error: Out of memory\n"));
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+
+    now = time(NULL);
+
+    ret = sysdb_attrs_add_time_t(attrs, SYSDB_LAST_UPDATE, now);
+    if (ret) {
+        DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    ret = sysdb_attrs_add_time_t(attrs, SYSDB_CACHE_EXPIRE,
+                                 now-1);
+    if (ret) {
+        DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    subreq = sysdb_set_group_attr_send(state, state->ev,
+                                       state->handle, state->domain,
+                                       state->name, attrs,
+                                       SYSDB_MOD_REP);
+    if (!subreq) {
+        DEBUG(6, ("Error: Out of memory\n"));
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, sysdb_add_incomplete_group_set_attrs_done, req);
+}
+
+static void sysdb_add_incomplete_group_set_attrs_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    int ret;
+
+    ret = sysdb_set_group_attr_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret) {
+        DEBUG(6, ("Error: %d (%s)\n", ret, strerror(ret)));
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    tevent_req_done(req);
+}
+
+int sysdb_add_incomplete_group_recv(struct tevent_req *req)
+{
+    return sysdb_op_default_recv(req);
+}
 
 /* =Add-Or-Remove-Group-Memeber=========================================== */
 
@@ -2967,11 +3327,12 @@ struct tevent_req *sysdb_add_group_member_send(TALLOC_CTX *mem_ctx,
                                                struct sysdb_handle *handle,
                                                struct sss_domain_info *domain,
                                                const char *group,
-                                               const char *user)
+                                               const char *member,
+                                               enum sysdb_member_type type)
 {
     struct tevent_req *req, *subreq;
     struct sysdb_op_state *state;
-    struct ldb_dn *group_dn, *user_dn;
+    struct ldb_dn *group_dn, *member_dn;
     int ret;
 
     req = tevent_req_create(mem_ctx, &state, struct sysdb_op_state);
@@ -2987,13 +3348,24 @@ struct tevent_req *sysdb_add_group_member_send(TALLOC_CTX *mem_ctx,
         ERROR_OUT(ret, ENOMEM, fail);
     }
 
-    user_dn = sysdb_user_dn(handle->ctx, state, domain->name, user);
-    if (!user_dn) {
+    if (type == SYSDB_MEMBER_USER) {
+        member_dn = sysdb_user_dn(handle->ctx, state,
+                                  domain->name,
+                                  member);
+    } else if (type == SYSDB_MEMBER_GROUP) {
+        member_dn = sysdb_group_dn(handle->ctx, state,
+                                   domain->name,
+                                   member);
+    } else {
+        ERROR_OUT(ret, EINVAL, fail);
+    }
+
+    if (!member_dn) {
         ERROR_OUT(ret, ENOMEM, fail);
     }
 
     subreq = sysdb_mod_group_member_send(state, ev, handle,
-                                         user_dn, group_dn,
+                                         member_dn, group_dn,
                                          SYSDB_MOD_ADD);
     if (!subreq) {
         ERROR_OUT(ret, ENOMEM, fail);
@@ -3041,11 +3413,12 @@ struct tevent_req *sysdb_remove_group_member_send(TALLOC_CTX *mem_ctx,
                                                   struct sysdb_handle *handle,
                                                   struct sss_domain_info *domain,
                                                   const char *group,
-                                                  const char *user)
+                                                  const char *member,
+                                                  enum sysdb_member_type type)
 {
     struct tevent_req *req, *subreq;
     struct sysdb_op_state *state;
-    struct ldb_dn *group_dn, *user_dn;
+    struct ldb_dn *group_dn, *member_dn;
     int ret;
 
     req = tevent_req_create(mem_ctx, &state, struct sysdb_op_state);
@@ -3061,13 +3434,20 @@ struct tevent_req *sysdb_remove_group_member_send(TALLOC_CTX *mem_ctx,
         ERROR_OUT(ret, ENOMEM, fail);
     }
 
-    user_dn = sysdb_user_dn(handle->ctx, state, domain->name, user);
-    if (!user_dn) {
+    if (type == SYSDB_MEMBER_USER) {
+        member_dn = sysdb_user_dn(handle->ctx, state, domain->name, member);
+    } else if (type == SYSDB_MEMBER_GROUP) {
+        member_dn = sysdb_group_dn(handle->ctx, state, domain->name, member);
+    } else {
+        ERROR_OUT(ret, EINVAL, fail);
+    }
+
+    if (!member_dn) {
         ERROR_OUT(ret, ENOMEM, fail);
     }
 
     subreq = sysdb_mod_group_member_send(state, ev, handle,
-                                         user_dn, group_dn,
+                                         member_dn, group_dn,
                                          SYSDB_MOD_DEL);
     if (!subreq) {
         ERROR_OUT(ret, ENOMEM, fail);
@@ -5067,10 +5447,12 @@ int sysdb_cache_auth_recv(struct tevent_req *req, time_t *expire_date,
 }
 
 struct sysdb_update_members_ctx {
-    char *user;
+    char *member;
     struct sss_domain_info *domain;
     struct tevent_context *ev;
     struct sysdb_handle *handle;
+
+    enum sysdb_member_type membertype;
 
     char **add_groups;
     int add_group_iter;
@@ -5099,7 +5481,8 @@ struct tevent_req *sysdb_update_members_send(TALLOC_CTX *mem_ctx,
                                              struct tevent_context *ev,
                                              struct sysdb_handle *handle,
                                              struct sss_domain_info *domain,
-                                             char *user,
+                                             const char *member,
+                                             enum sysdb_member_type type,
                                              char **add_groups,
                                              char **del_groups)
 {
@@ -5112,14 +5495,15 @@ struct tevent_req *sysdb_update_members_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    state->user = talloc_strdup(state, user);
-    if (!state->user) {
+    state->member = talloc_strdup(state, member);
+    if (!state->member) {
         goto error;
     }
 
     state->domain = domain;
     state->ev = ev;
     state->handle = handle;
+    state->membertype = type;
 
     if (add_groups) {
         state->add_groups = dup_string_list(state, (const char**)add_groups);
@@ -5142,6 +5526,14 @@ struct tevent_req *sysdb_update_members_send(TALLOC_CTX *mem_ctx,
         goto error;
     }
     state->del_group_iter = 0;
+
+    if (state->add_groups[state->add_group_iter] == NULL &&
+        state->del_groups[state->del_group_iter] == NULL) {
+        /* Nothing to do */
+        tevent_req_done(req);
+        tevent_req_post(req, state->ev);
+        return req;
+    }
 
     ret = sysdb_update_members_step(req);
     if (ret != EOK) {
@@ -5175,7 +5567,7 @@ sysdb_update_members_step(struct tevent_req *req)
                 state, state->ev, state->handle,
                 state->domain,
                 state->add_groups[state->add_group_iter],
-                state->user);
+                state->member, state->membertype);
         if (!subreq) {
             return EIO;
         }
@@ -5189,7 +5581,7 @@ sysdb_update_members_step(struct tevent_req *req)
                 state, state->ev,
                 state->handle, state->domain,
                 state->del_groups[state->del_group_iter],
-                state->user);
+                state->member, state->membertype);
         if (!subreq) {
             return EIO;
         }
