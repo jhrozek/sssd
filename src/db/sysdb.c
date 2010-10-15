@@ -20,6 +20,7 @@
 */
 
 #include "util/util.h"
+#include "util/strtonum.h"
 #include "db/sysdb_private.h"
 #include "confdb/confdb.h"
 #include <time.h>
@@ -167,6 +168,31 @@ int sysdb_attrs_get_string(struct sysdb_attrs *attrs, const char *name,
     }
 
     *string = (const char *)el->values[0].data;
+    return EOK;
+}
+
+int sysdb_attrs_get_uint32_t(struct sysdb_attrs *attrs, const char *name,
+                             uint32_t *value)
+{
+    struct ldb_message_element *el;
+    int ret;
+    char *endptr;
+    uint32_t val;
+
+    ret = sysdb_attrs_get_el_int(attrs, name, false, &el);
+    if (ret) {
+        return ret;
+    }
+
+    if (el->num_values != 1) {
+        return ERANGE;
+    }
+
+    val = strtouint32((const char *) el->values[0].data, &endptr, 0);
+    if (errno != 0) return errno;
+    if (*endptr) return EINVAL;
+
+    *value = val;
     return EOK;
 }
 
