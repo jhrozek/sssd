@@ -1145,15 +1145,90 @@ static void monitor_quit(struct tevent_context *ev,
                          void *siginfo,
                          void *private_data)
 {
+    struct mt_ctx *mt_ctx = talloc_get_type(private_data, struct mt_ctx);
+    struct mt_svc *svc;
+    pid_t pid;
+    int status;
+    errno_t error;
+    int kret;
+    bool killed;
+
     DEBUG(8, ("Received shutdown command\n"));
-    monitor_cleanup();
+
+    DEBUG(0, ("Monitor received %s: terminating children\n",
+              strsignal(signum)));
+
+    /* Kill all of our known children manually */
+    DLIST_FOR_EACH(svc, mt_ctx->svc_list) {
+        if (svc->pid == 0) {
+            /* The local provider has no PID */
+            continue;
+        }
+
+        killed = false;
+        DEBUG(1, ("Terminating [%s][%d]\n", svc->name, svc->pid));
+        do {
+            errno = 0;
+            kret = kill(svc->pid, SIGTERM);
+            if (kret < 0) {
+                error = errno;
+                DEBUG(1, ("Couldn't kill [%s][%d]: [%s]\n",
+                          svc->name, svc->pid, strerror(error)));
+            }
+
+            do {
+                errno = 0;
+                pid = waitpid(svc->pid, &status, WNOHANG);
+                if (pid == -1) {
+                    /* An error occurred while waiting */
+                    error = errno;
+                    if (error != EINTR) {
+                        DEBUG(0, ("[%d][%s] while waiting for [%s]\n",
+                                  error, strerror(error), svc->name));
+                        /* Forcibly kill this child */
+                        kill(svc->pid, SIGKILL);
+                        break;
+                    }
+                } else if (pid != 0) {
+                    error = 0;
+                    if WIFEXITED(status) {
+                        DEBUG(1, ("Child [%s] exited gracefully\n", svc->name));
+                    } else if WIFSIGNALED(status) {
+                        DEBUG(1, ("Child [%s] terminated with a signal\n", svc->name));
+                    } else {
+                        DEBUG(0, ("Child [%s] did not exit cleanly\n", svc->name));
+                        /* Forcibly kill this child */
+                        kill(svc->pid, SIGKILL);
+                    }
+                    killed = true;
+                }
+            } while (error == EINTR);
+            if (!killed) {
+                /* Sleep 10ms and try again */
+                usleep(10000);
+            }
+        } while (!killed);
+    }
 
 #if HAVE_GETPGRP
+    /* Kill any remaining children in our process group, just in case
+     * we have any leftover children we don't expect. For example, if
+     * a krb5_child or ldap_child is running at the same moment.
+     */
+    error = 0;
     if (getpgrp() == getpid()) {
-        DEBUG(0,("%s: killing children\n", strsignal(signum)));
         kill(-getpgrp(), SIGTERM);
+        do {
+            errno = 0;
+            pid = waitpid(0, &status, 0);
+            if (pid == -1) {
+                error = errno;
+            }
+        } while (error == EINTR || pid > 0);
     }
 #endif
+
+    monitor_cleanup();
 
     exit(0);
 }
@@ -1694,6 +1769,36 @@ int monitor_process_init(struct mt_ctx *ctx,
     int num_providers;
     int ret;
 
+    /* Set up an event handler for a SIGHUP */
+    tes = tevent_add_signal(ctx->ev, ctx, SIGHUP, 0,
+                            monitor_hup, ctx);
+    if (tes == NULL) {
+        return EIO;
+    }
+
+    /* Set up an event handler for a SIGINT */
+    BlockSignals(false, SIGINT);
+    tes = tevent_add_signal(ctx->ev, ctx, SIGINT, 0,
+                            monitor_quit, ctx);
+    if (tes == NULL) {
+        return EIO;
+    }
+
+    /* Set up an event handler for a SIGTERM */
+    tes = tevent_add_signal(ctx->ev, ctx, SIGTERM, 0,
+                            monitor_quit, ctx);
+    if (tes == NULL) {
+        return EIO;
+    }
+
+    /* Handle SIGUSR1 (tell all providers to go offline) */
+    BlockSignals(false, SIGUSR1);
+    tes = tevent_add_signal(ctx->ev, ctx, SIGUSR1, 0,
+                            signal_offline, ctx);
+    if (tes == NULL) {
+        return EIO;
+    }
+
 #if 0
     This feature is incomplete and can leave the SSSD in a bad state if the
     config file is changed while the SSSD is running.
@@ -1770,35 +1875,6 @@ int monitor_process_init(struct mt_ctx *ctx,
 
     /* now start checking for global events */
     set_global_checker(ctx);
-
-    /* Set up an event handler for a SIGHUP */
-    tes = tevent_add_signal(ctx->ev, ctx, SIGHUP, 0,
-                            monitor_hup, ctx);
-    if (tes == NULL) {
-        return EIO;
-    }
-
-    /* Set up an event handler for a SIGINT */
-    tes = tevent_add_signal(ctx->ev, ctx, SIGINT, 0,
-                            monitor_quit, ctx);
-    if (tes == NULL) {
-        return EIO;
-    }
-
-    /* Set up an event handler for a SIGTERM */
-    tes = tevent_add_signal(ctx->ev, ctx, SIGTERM, 0,
-                            monitor_quit, ctx);
-    if (tes == NULL) {
-        return EIO;
-    }
-
-    /* Handle SIGUSR1 (tell all providers to go offline) */
-    BlockSignals(false, SIGUSR1);
-    tes = tevent_add_signal(ctx->ev, ctx, SIGUSR1, 0,
-                            signal_offline, ctx);
-    if (tes == NULL) {
-        return EIO;
-    }
 
     return EOK;
 }
