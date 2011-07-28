@@ -121,6 +121,8 @@ struct cli_ctx {
     int netgrent_cur;
 
     time_t pam_timeout;
+
+    struct tevent_timer *idle;
 };
 
 struct sss_cmd_table {

@@ -50,6 +50,19 @@
 #include <pthread.h>
 #endif
 
+/*
+* Note we set MSG_NOSIGNAL to avoid
+* having to fiddle with signal masks
+* but also do not want to die in case
+* SIGPIPE gets raised and the application
+* does not handle it.
+*/
+#ifdef MSG_NOSIGNAL
+#define SSS_DEFAULT_WRITE_FLAGS MSG_NOSIGNAL
+#else
+#define SSS_DEFAULT_WRITE_FLAGS 0
+#endif
+
 /* common functions */
 
 int sss_cli_sd = -1; /* the sss client socket descriptor */
@@ -134,14 +147,16 @@ static enum nss_status sss_nss_send_req(enum sss_cli_command cmd,
 
         errno = 0;
         if (datasent < SSS_NSS_HEADER_SIZE) {
-            res = write(sss_cli_sd,
-                        (char *)header + datasent,
-                        SSS_NSS_HEADER_SIZE - datasent);
+            res = send(sss_cli_sd,
+                       (char *)header + datasent,
+                       SSS_NSS_HEADER_SIZE - datasent,
+                       SSS_DEFAULT_WRITE_FLAGS);
         } else {
             rdsent = datasent - SSS_NSS_HEADER_SIZE;
-            res = write(sss_cli_sd,
-                        (const char *)rd->data + rdsent,
-                        rd->len - rdsent);
+            res = send(sss_cli_sd,
+                       (const char *)rd->data + rdsent,
+                       rd->len - rdsent,
+                       SSS_DEFAULT_WRITE_FLAGS);
         }
         error = errno;
 
@@ -155,7 +170,7 @@ static enum nss_status sss_nss_send_req(enum sss_cli_command cmd,
 
             /* Write failed */
             sss_cli_close_socket();
-            *errnop = errno;
+            *errnop = error;
             return NSS_STATUS_UNAVAIL;
         }
 
@@ -265,7 +280,7 @@ static enum nss_status sss_nss_recv_rep(enum sss_cli_command cmd,
              * through. */
 
             sss_cli_close_socket();
-            *errnop = errno;
+            *errnop = error;
             ret = NSS_STATUS_UNAVAIL;
             goto failed;
         }
