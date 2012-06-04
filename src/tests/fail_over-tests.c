@@ -170,13 +170,15 @@ test_resolve_service_callback(struct tevent_req *req)
     if (task->new_server_status >= 0)
         fo_set_server_status(server, task->new_server_status);
 
-    he = fo_get_server_hostent(server);
-    fail_if(he == NULL, "%s: fo_get_server_hostent() returned NULL");
-    for (i = 0; he->addr_list[i]; i++) {
-        char buf[256];
+    if (fo_get_server_name(server) != NULL) {
+        he = fo_get_server_hostent(server);
+        fail_if(he == NULL, "%s: fo_get_server_hostent() returned NULL");
+        for (i = 0; he->addr_list[i]; i++) {
+            char buf[256];
 
-        inet_ntop(he->family, he->addr_list[i]->ipaddr, buf, sizeof(buf));
-        fail_if(strcmp(buf, "127.0.0.1") != 0 && strcmp(buf, "::1") != 0);
+            inet_ntop(he->family, he->addr_list[i]->ipaddr, buf, sizeof(buf));
+            fail_if(strcmp(buf, "127.0.0.1") != 0 && strcmp(buf, "::1") != 0);
+        }
     }
 
 }

@@ -1354,7 +1354,16 @@ fo_get_server_port(struct fo_server *server)
     return server->port;
 }
 
-const char *fo_get_server_name(struct fo_server *server)
+const char *
+fo_get_server_name(struct fo_server *server)
+{
+    if (!server->common) {
+        return NULL;
+    }
+    return server->common->name;
+}
+
+const char *fo_get_server_str_name(struct fo_server *server)
 {
     if (!server->common) {
         if (fo_is_srv_lookup(server)) {
@@ -1402,3 +1411,9 @@ void fo_reset_services(struct fo_ctx *fo_ctx)
     }
 }
 
+struct fo_service *
+fo_get_server_service(struct fo_server *server)
+{
+    if (!server) return NULL;
+    return server->service;
+}

@@ -46,6 +46,7 @@ struct be_svc_data {
     bool run_callbacks;
 
     struct be_svc_callback *callbacks;
+    struct fo_server *first_resolved;
 };
 
 struct be_failover_ctx {
@@ -351,6 +352,7 @@ struct be_resolve_server_state {
     int attempts;
 
     struct fo_server *srv;
+    bool first_try;
 };
 
 static void be_resolve_server_done(struct tevent_req *subreq);
@@ -358,7 +360,8 @@ static void be_resolve_server_done(struct tevent_req *subreq);
 struct tevent_req *be_resolve_server_send(TALLOC_CTX *memctx,
                                           struct tevent_context *ev,
                                           struct be_ctx *ctx,
-                                          const char *service_name)
+                                          const char *service_name,
+                                          bool first_try)
 {
     struct tevent_req *req, *subreq;
     struct be_resolve_server_state *state;
@@ -379,6 +382,7 @@ struct tevent_req *be_resolve_server_send(TALLOC_CTX *memctx,
 
     state->svc = svc;
     state->attempts = 0;
+    state->first_try = first_try;
 
     subreq = fo_resolve_service_send(state, ev,
                                      ctx->be_fo->resolv,
@@ -408,31 +412,31 @@ static void be_resolve_server_done(struct tevent_req *subreq)
     switch (ret) {
     case EOK:
         if (!state->srv) {
-            tevent_req_error(req, EFAULT);
-            return;
+            ret = EFAULT;
+            goto fail;
         }
         break;
 
     case ENOENT:
         /* all servers have been tried and none
          * was found good, go offline */
-        tevent_req_error(req, EIO);
-        return;
+        ret = EIO;
+        goto fail;
 
     default:
         /* mark server as bad and retry */
         if (!state->srv) {
-            tevent_req_error(req, EFAULT);
-            return;
+            ret = EFAULT;
+            goto fail;
         }
         DEBUG(6, ("Couldn't resolve server (%s), resolver returned (%d)\n",
-                  fo_get_server_name(state->srv), ret));
+              fo_get_server_str_name(state->srv), ret));
 
         state->attempts++;
         if (state->attempts >= 10) {
             DEBUG(2, ("Failed to find a server after 10 attempts\n"));
-            tevent_req_error(req, EIO);
-            return;
+            ret = EIO;
+            goto fail;
         }
 
         /* now try next one */
@@ -442,8 +446,8 @@ static void be_resolve_server_done(struct tevent_req *subreq)
                                          state->ctx->be_fo->fo_ctx,
                                          state->svc->fo_service);
         if (!subreq) {
-            tevent_req_error(req, ENOMEM);
-            return;
+            ret = ENOMEM;
+            goto fail;
         }
         tevent_req_set_callback(subreq, be_resolve_server_done, req);
 
@@ -451,16 +455,31 @@ static void be_resolve_server_done(struct tevent_req *subreq)
     }
 
     /* all fine we got the server */
+    if (state->svc->first_resolved == NULL || state->first_try == true) {
+        DEBUG(7, ("Saving the first resolved server\n"));
+        state->svc->first_resolved = state->srv;
+    } else if (state->svc->first_resolved == state->srv) {
+        DEBUG(2, ("The fail over cycled through all available servers\n"));
+        ret = ENOENT;
+        goto fail;
+    }
 
-    if (debug_level >= 4) {
+    if (debug_level >= 4 && fo_get_server_name(state->srv)) {
         struct resolv_hostent *srvaddr;
         char ipaddr[128];
         srvaddr = fo_get_server_hostent(state->srv);
+        if (!srvaddr) {
+            DEBUG(3, ("FATAL: No hostent available for server (%s)\n",
+                      fo_get_server_str_name(state->srv)));
+            ret = EFAULT;
+            goto fail;
+        }
+
         inet_ntop(srvaddr->family, srvaddr->addr_list[0]->ipaddr,
                   ipaddr, 128);
 
         DEBUG(4, ("Found address for server %s: [%s] TTL %d\n",
-                  fo_get_server_name(state->srv), ipaddr,
+                  fo_get_server_str_name(state->srv), ipaddr,
                   srvaddr->addr_list[0]->ttl));
     }
 
@@ -481,6 +500,12 @@ static void be_resolve_server_done(struct tevent_req *subreq)
     }
 
     tevent_req_done(req);
+    return;
+
+fail:
+    DEBUG(7, ("Server resolution failed: %d\n", ret));
+    state->svc->first_resolved = NULL;
+    tevent_req_error(req, ret);
 }
 
 int be_resolve_server_recv(struct tevent_req *req, struct fo_server **srv)
@@ -527,3 +552,33 @@ void reset_fo(struct be_ctx *be_ctx)
     fo_reset_services(be_ctx->be_fo->fo_ctx);
 }
 
+void be_fo_set_port_status(struct be_ctx *ctx,
+                           struct fo_server *server,
+                           enum port_status status)
+{
+    struct be_svc_data *svc;
+    struct fo_service *fsvc;
+
+    fo_set_port_status(server, status);
+
+    fsvc = fo_get_server_service(server);
+    if (!fsvc) {
+        DEBUG(3, ("BUG: No service associated with server\n"));
+        return;
+    }
+
+    DLIST_FOR_EACH(svc, ctx->be_fo->svcs) {
+        if (svc->fo_service == fsvc) break;
+    }
+
+    if (!svc) {
+        DEBUG(3, ("BUG: Unknown service\n"));
+        return;
+    }
+
+    if (status == PORT_WORKING) {
+        /* We were successful in connecting to the server. Cycle through all
+         * available servers next time */
+        svc->first_resolved = NULL;
+    }
+}
