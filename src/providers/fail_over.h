@@ -169,6 +169,8 @@ int fo_get_server_port(struct fo_server *server);
 
 const char *fo_get_server_name(struct fo_server *server);
 
+const char *fo_get_server_str_name(struct fo_server *server);
+
 struct resolv_hostent *fo_get_server_hostent(struct fo_server *server);
 
 time_t fo_get_server_hostname_last_change(struct fo_server *server);
@@ -176,4 +178,7 @@ time_t fo_get_server_hostname_last_change(struct fo_server *server);
 int fo_is_srv_lookup(struct fo_server *s);
 
 void fo_reset_services(struct fo_ctx *fo_ctx);
+
+struct fo_service *fo_get_server_service(struct fo_server *server);
+
 #endif /* !__FAIL_OVER_H__ */

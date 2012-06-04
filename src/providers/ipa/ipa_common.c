@@ -566,6 +566,7 @@ static void ipa_resolve_callback(void *private_data, struct fo_server *server)
     char *address;
     const char *safe_address;
     char *new_uri;
+    const char *srv_name;
     int ret;
 
     tmp_ctx = talloc_new(NULL);
@@ -584,7 +585,7 @@ static void ipa_resolve_callback(void *private_data, struct fo_server *server)
     srvaddr = fo_get_server_hostent(server);
     if (!srvaddr) {
         DEBUG(1, ("FATAL: No hostent available for server (%s)\n",
-                  fo_get_server_name(server)));
+                  fo_get_server_str_name(server)));
         talloc_free(tmp_ctx);
         return;
     }
@@ -612,7 +613,14 @@ static void ipa_resolve_callback(void *private_data, struct fo_server *server)
         return;
     }
 
-    new_uri = talloc_asprintf(service, "ldap://%s", fo_get_server_name(server));
+    srv_name = fo_get_server_name(server);
+    if (srv_name == NULL) {
+        DEBUG(1, ("Could not get server host name\n"));
+        talloc_free(tmp_ctx);
+        return;
+    }
+
+    new_uri = talloc_asprintf(service, "ldap://%s", srv_name);
     if (!new_uri) {
         DEBUG(2, ("Failed to copy URI ...\n"));
         talloc_free(tmp_ctx);
