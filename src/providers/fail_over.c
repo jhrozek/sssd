@@ -670,6 +670,11 @@ get_first_server_entity(struct fo_service *service, struct fo_server **_server)
 
     /* First, try servers after the last one we tried. */
     if (service->last_tried_server != NULL) {
+        if (service->last_tried_server->port_status == PORT_NEUTRAL &&
+            server_works(service->last_tried_server)) {
+            server = service->last_tried_server;
+            goto done;
+        }
         DLIST_FOR_EACH(server, service->last_tried_server->next) {
             if (service_works(server)) {
                 goto done;
