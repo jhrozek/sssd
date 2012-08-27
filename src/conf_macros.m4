@@ -473,13 +473,6 @@ AC_DEFUN([WITH_SUDO],
                 [with_sudo=$withval],
                )
 
-    dnl Remove when sudo goes out of experimental
-    if test x"$enable_all_experimental_features" = xyes; then
-        if test x"$with_sudo" != xno; then
-            with_sudo=yes
-        fi
-    fi
-
     if test x"$with_sudo" = xyes; then
         AC_DEFINE(BUILD_SUDO, 1, [whether to build with SUDO support])
     fi
@@ -509,13 +502,6 @@ AC_DEFUN([WITH_AUTOFS],
                 [with_autofs=$withval],
                )
 
-    dnl Remove when autofs goes out of experimental
-    if test x"$enable_all_experimental_features" = xyes; then
-        if test x"$with_autofs" != xno; then
-            with_autofs=yes
-        fi
-    fi
-
     if test x"$with_autofs" = xyes; then
         AC_DEFINE(BUILD_AUTOFS, 1, [whether to build with AUTOFS support])
     fi
@@ -530,13 +516,6 @@ AC_DEFUN([WITH_SSH],
                 ],
                 [with_ssh=$withval],
                )
-
-    dnl Remove when SSH goes out of experimental
-    if test x"$enable_all_experimental_features" = xyes; then
-        if test x"$with_ssh" != xno; then
-            with_ssh=yes
-        fi
-    fi
 
     if test x"$with_ssh" = xyes; then
         AC_DEFINE(BUILD_SSH, 1, [whether to build with SSH support])

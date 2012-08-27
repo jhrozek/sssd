@@ -198,7 +198,6 @@ Requires: libipa_hbac = %{version}-%{release}
 The libipa_hbac-python contains the bindings so that libipa_hbac can be
 used by Python applications.
 
-%if (0%{?enable_experimental} == 1)
 %package -n libsss_sudo
 Summary: A library to allow communication between SUDO and SSSD
 Group: Development/Libraries
@@ -217,7 +216,6 @@ Requires: libsss_sudo = %{version}-%{release}
 
 %description -n libsss_sudo-devel
 A utility library to allow communication between SUDO and SSSD
-%endif
 
 %prep
 %setup -q
@@ -245,6 +243,9 @@ autoreconf -ivf
     --enable-pammoddir=/%{_lib}/security \
     --disable-static \
     --disable-rpath \
+    --with-autofs \
+    --with-ssh \
+    --with-sudo \
     %{with_ccache} \
     %{experimental}
 
@@ -331,11 +332,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/sssd_nss
 %{_libexecdir}/%{servicename}/sssd_pam
 
-%if (0%{?enable_experimental} == 1)
 %{_libexecdir}/%{servicename}/sssd_autofs
 %{_libexecdir}/%{servicename}/sssd_ssh
 %{_libexecdir}/%{servicename}/sssd_sudo
 
+%if (0%{?enable_experimental} == 1)
 # RHEL 5 is too old to support the PAC responder
 %if !0%{?is_rhel5}
 %{_libexecdir}/%{servicename}/sssd_pac
@@ -352,10 +353,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_simple.so
 
 %{ldb_modulesdir}/memberof.so
-%if (0%{?enable_experimental} == 1)
 %{_bindir}/sss_ssh_authorizedkeys
 %{_bindir}/sss_ssh_knownhostsproxy
-%endif
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
@@ -380,10 +379,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man8/sssd.8*
-%if (0%{?enable_experimental} == 1)
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
 %{_mandir}/man1/sss_ssh_knownhostsproxy.1*
-%endif
 %{python_sitearch}/pysss.so
 %{python_sitearch}/pysss_murmur.so
 %dir %{python_sitelib}/SSSDConfig
@@ -475,7 +472,6 @@ A utility library to allow communication between Autofs and SSSD
 %defattr(-,root,root,-)
 %{python_sitearch}/pyhbac.so
 
-%if (0%{?enable_experimental} == 1)
 %files -n libsss_sudo
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
@@ -496,7 +492,6 @@ A utility library to allow communication between Autofs and SSSD
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/sssd/modules/libsss_autofs.so*
-%endif
 
 %post
 /sbin/chkconfig --add %{servicename}
