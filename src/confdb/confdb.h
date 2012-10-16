@@ -216,6 +216,8 @@ struct sss_domain_info {
     const char *override_shell;
     const char *default_shell;
 
+    const char *alias_attr;
+
     uint32_t user_timeout;
     uint32_t group_timeout;
     uint32_t netgroup_timeout;

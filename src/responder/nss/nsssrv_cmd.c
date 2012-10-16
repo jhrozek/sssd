@@ -291,6 +291,8 @@ static int fill_pwent(struct sss_packet *packet,
     struct sized_string shell;
     struct sized_string pwfield;
     struct sized_string fullname;
+    struct sized_string alias;
+    struct sized_string *aliasptr;
     uint32_t uid;
     uint32_t gid;
     size_t rsize, rp, blen;
@@ -354,6 +356,18 @@ static int fill_pwent(struct sss_packet *packet,
             continue;
         }
         to_sized_string(&name, tmpstr);
+
+        if (dom->alias_attr) {
+            tmpstr = ldb_msg_find_attr_as_string(msg, dom->alias_attr, NULL);
+            if (!tmpstr) {
+                aliasptr = NULL;
+            } else {
+                to_sized_string(&alias, tmpstr);
+                aliasptr = &alias;
+            }
+        } else {
+            aliasptr = NULL;
+        }
 
         tmpstr = ldb_msg_find_attr_as_string(msg, SYSDB_GECOS, NULL);
         if (!tmpstr) {
@@ -433,7 +447,7 @@ static int fill_pwent(struct sss_packet *packet,
 
         if (pw_mmap_cache && nctx->pwd_mc_ctx) {
             ret = sss_mmap_cache_pw_store(&nctx->pwd_mc_ctx,
-                                          &fullname, NULL, &pwfield,
+                                          &fullname, aliasptr, &pwfield,
                                           uid, gid,
                                           &gecos, &homedir, &shell);
             if (ret != EOK && ret != ENOMEM) {
@@ -2013,6 +2027,8 @@ static int fill_grent(struct sss_packet *packet,
     struct sized_string name;
     struct sized_string pwfield;
     struct sized_string fullname;
+    struct sized_string alias;
+    struct sized_string *aliasptr;
     size_t delim;
     size_t dom_len;
     int i = 0;
@@ -2089,6 +2105,18 @@ static int fill_grent(struct sss_packet *packet,
             continue;
         }
         to_sized_string(&name, tmpstr);
+
+        if (dom->alias_attr) {
+            tmpstr = ldb_msg_find_attr_as_string(msg, dom->alias_attr, NULL);
+            if (!tmpstr) {
+                aliasptr = NULL;
+            } else {
+                to_sized_string(&alias, tmpstr);
+                aliasptr = &alias;
+            }
+        } else {
+            aliasptr = NULL;
+        }
 
         /* fill in gid and name and set pointer for number of members */
         rsize = STRS_ROFFSET + name.len + pwfield.len; /* name\0x\0 */
@@ -2186,7 +2214,7 @@ static int fill_grent(struct sss_packet *packet,
              * where body used to be, not where it is */
             to_sized_string(&fullname, (const char *)&body[rzero+STRS_ROFFSET]);
             ret = sss_mmap_cache_gr_store(&nctx->grp_mc_ctx,
-                                          &fullname, NULL, &pwfield,
+                                          &fullname, aliasptr, &pwfield,
                                           gid, memnum,
                                           (char *)&body[rzero] + STRS_ROFFSET +
                                             fullname.len + pwfield.len,
