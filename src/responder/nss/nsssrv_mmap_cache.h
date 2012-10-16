@@ -38,6 +38,7 @@ errno_t sss_mmap_cache_init(TALLOC_CTX *mem_ctx, const char *name,
 
 errno_t sss_mmap_cache_pw_store(struct sss_mc_ctx **_mcc,
                                 struct sized_string *name,
+                                struct sized_string *alias,
                                 struct sized_string *pw,
                                 uid_t uid, gid_t gid,
                                 struct sized_string *gecos,
@@ -46,6 +47,7 @@ errno_t sss_mmap_cache_pw_store(struct sss_mc_ctx **_mcc,
 
 errno_t sss_mmap_cache_gr_store(struct sss_mc_ctx **_mcc,
                                 struct sized_string *name,
+                                struct sized_string *alias,
                                 struct sized_string *pw,
                                 gid_t gid, size_t memnum,
                                 char *membuf, size_t memsize);

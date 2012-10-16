@@ -517,6 +517,7 @@ static errno_t sss_mmap_cache_invalidate(struct sss_mc_ctx *mcc,
 
 errno_t sss_mmap_cache_pw_store(struct sss_mc_ctx **_mcc,
                                 struct sized_string *name,
+                                struct sized_string *alias,
                                 struct sized_string *pw,
                                 uid_t uid, gid_t gid,
                                 struct sized_string *gecos,
@@ -565,7 +566,7 @@ errno_t sss_mmap_cache_pw_store(struct sss_mc_ctx **_mcc,
     /* header */
     sss_mmap_set_rec_header(mcc, rec, rec_len, mcc->valid_time_slot,
                             name->str, name->len, uidkey.str, uidkey.len,
-                            NULL, 0);
+                            alias ? alias->str:NULL, alias ? alias->len:0);
 
     /* passwd struct */
     data->name = MC_PTR_DIFF(data->strs, data);
@@ -655,6 +656,7 @@ done:
 
 int sss_mmap_cache_gr_store(struct sss_mc_ctx **_mcc,
                             struct sized_string *name,
+                            struct sized_string *alias,
                             struct sized_string *pw,
                             gid_t gid, size_t memnum,
                             char *membuf, size_t memsize)
@@ -701,7 +703,7 @@ int sss_mmap_cache_gr_store(struct sss_mc_ctx **_mcc,
     /* header */
     sss_mmap_set_rec_header(mcc, rec, rec_len, mcc->valid_time_slot,
                             name->str, name->len, gidkey.str, gidkey.len,
-                            NULL, 0);
+                            alias ? alias->str:NULL, alias ? alias->len:0);
 
     /* group struct */
     data->name = MC_PTR_DIFF(data->strs, data);

@@ -433,7 +433,7 @@ static int fill_pwent(struct sss_packet *packet,
 
         if (pw_mmap_cache && nctx->pwd_mc_ctx) {
             ret = sss_mmap_cache_pw_store(&nctx->pwd_mc_ctx,
-                                          &fullname, &pwfield,
+                                          &fullname, NULL, &pwfield,
                                           uid, gid,
                                           &gecos, &homedir, &shell);
             if (ret != EOK && ret != ENOMEM) {
@@ -2186,7 +2186,8 @@ static int fill_grent(struct sss_packet *packet,
              * where body used to be, not where it is */
             to_sized_string(&fullname, (const char *)&body[rzero+STRS_ROFFSET]);
             ret = sss_mmap_cache_gr_store(&nctx->grp_mc_ctx,
-                                          &fullname, &pwfield, gid, memnum,
+                                          &fullname, NULL, &pwfield,
+                                          gid, memnum,
                                           (char *)&body[rzero] + STRS_ROFFSET +
                                             fullname.len + pwfield.len,
                                           rsize - STRS_ROFFSET -
