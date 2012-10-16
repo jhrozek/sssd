@@ -70,7 +70,7 @@ typedef uint32_t rel_ptr_t;
 
 #define MC_VALID_BARRIER(val) (((val) & 0xff000000) == 0xf0000000)
 
-#define SSS_MC_MAJOR_VNO    0
+#define SSS_MC_MAJOR_VNO    1
 #define SSS_MC_MINOR_VNO    4
 
 #define SSS_MC_HEADER_ALIVE     1   /* current and in use */
@@ -100,6 +100,7 @@ struct sss_mc_rec {
     rel_ptr_t next;         /* ptr of next record rel to data_table */
     uint32_t hash1;         /* val of first hash (usually name of record) */
     uint32_t hash2;         /* val of second hash (usually id of record) */
+    uint32_t hash3;         /* val of third hash (usually sid of record) */
     uint32_t b2;            /* barrier 2 - 32 bytes mark, fits a slot */
     char data[0];
 };

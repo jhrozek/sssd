@@ -195,6 +195,10 @@ static void sss_mc_invalidate_rec(struct sss_mc_ctx *mcc,
     sss_mc_rm_rec_from_chain(mcc, rec, rec->hash1);
     /* hash chain 2 */
     sss_mc_rm_rec_from_chain(mcc, rec, rec->hash2);
+    if (rec->hash3 != MC_INVALID_VAL) {
+        /* hash chain 3 */
+        sss_mc_rm_rec_from_chain(mcc, rec, rec->hash3);
+    }
 
     /* Clear from free_table */
     sss_mc_free_slots(mcc, rec);
@@ -208,6 +212,7 @@ static void sss_mc_invalidate_rec(struct sss_mc_ctx *mcc,
     rec->next = MC_INVALID_VAL32;
     rec->hash1 = MC_INVALID_VAL32;
     rec->hash2 = MC_INVALID_VAL32;
+    rec->hash3 = MC_INVALID_VAL;
     MC_LOWER_BARRIER(rec);
 }
 
@@ -454,12 +459,18 @@ static inline void sss_mmap_set_rec_header(struct sss_mc_ctx *mcc,
                                            struct sss_mc_rec *rec,
                                            size_t len, int ttl,
                                            const char *key1, size_t key1_len,
-                                           const char *key2, size_t key2_len)
+                                           const char *key2, size_t key2_len,
+                                           const char *key3, size_t key3_len)
 {
     rec->len = len;
     rec->expire = time(NULL) + ttl;
     rec->hash1 = sss_mc_hash(mcc, key1, key1_len);
     rec->hash2 = sss_mc_hash(mcc, key2, key2_len);
+    if (key3) {
+        rec->hash3 = sss_mc_hash(mcc, key3, key3_len);
+    } else {
+        rec->hash3 = MC_INVALID_VAL;
+    }
 }
 
 static inline void sss_mmap_chain_in_rec(struct sss_mc_ctx *mcc,
@@ -469,6 +480,10 @@ static inline void sss_mmap_chain_in_rec(struct sss_mc_ctx *mcc,
     sss_mc_add_rec_to_chain(mcc, rec, rec->hash1);
     /* then uid/gid */
     sss_mc_add_rec_to_chain(mcc, rec, rec->hash2);
+    /* then alias */
+    if (rec->hash3 != MC_INVALID_VAL) {
+        sss_mc_add_rec_to_chain(mcc, rec, rec->hash3);
+    }
 }
 
 /***************************************************************************
@@ -549,7 +564,8 @@ errno_t sss_mmap_cache_pw_store(struct sss_mc_ctx **_mcc,
 
     /* header */
     sss_mmap_set_rec_header(mcc, rec, rec_len, mcc->valid_time_slot,
-                            name->str, name->len, uidkey.str, uidkey.len);
+                            name->str, name->len, uidkey.str, uidkey.len,
+                            NULL, 0);
 
     /* passwd struct */
     data->name = MC_PTR_DIFF(data->strs, data);
@@ -684,7 +700,8 @@ int sss_mmap_cache_gr_store(struct sss_mc_ctx **_mcc,
 
     /* header */
     sss_mmap_set_rec_header(mcc, rec, rec_len, mcc->valid_time_slot,
-                            name->str, name->len, gidkey.str, gidkey.len);
+                            name->str, name->len, gidkey.str, gidkey.len,
+                            NULL, 0);
 
     /* group struct */
     data->name = MC_PTR_DIFF(data->strs, data);
@@ -946,9 +963,10 @@ errno_t sss_mmap_cache_init(TALLOC_CTX *mem_ctx, const char *name,
     /* We can use MC_ALIGN64 for this */
     n_elem = MC_ALIGN64(n_elem);
 
-    /* hash table is double the size because it will store both forward and
-     * reverse keys (name/uid, name/gid, ..) */
-    mc_ctx->ht_size = MC_HT_SIZE(n_elem * 2);
+    /* hash table is triple the size because it will store both forward and
+     * reverse keys (name/uid, name/gid, ..) plus an alias for entries coming
+     * from trusted domains (eg a SID for AD trusted users/groups) */
+    mc_ctx->ht_size = MC_HT_SIZE(n_elem * 3);
     mc_ctx->dt_size = MC_DT_SIZE(n_elem, payload);
     mc_ctx->ft_size = MC_FT_SIZE(n_elem);
     mc_ctx->mmap_size = MC_HEADER_SIZE +

@@ -123,7 +123,7 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
         }
 
         /* check record matches what we are searching for */
-        if (hash != rec->hash1) {
+        if (hash != rec->hash1 && hash != rec->hash3) {
             /* if name hash does not match we can skip this immediately */
             slot = rec->next;
             continue;
