@@ -40,7 +40,7 @@
 #include "providers/krb5/krb5_utils.h"
 #include "sss_cli.h"
 
-#define SSSD_KRB5_CHANGEPW_PRINCIPAL "kadmin/changepw"
+#define SSSD_KRB5_CHANGEPW_PRINCIPAL discard_const("kadmin/changepw")
 
 enum k5c_fast_opt {
     K5C_FAST_NEVER,
