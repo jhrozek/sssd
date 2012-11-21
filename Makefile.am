@@ -354,6 +354,7 @@ dist_noinst_HEADERS = \
     src/util/crypto/sss_crypto.h \
     src/util/dlinklist.h \
     src/util/util.h \
+    src/util/util_errors.h \
     src/util/strtonum.h \
     src/util/sss_nss.h \
     src/util/sss_ldap.h \
@@ -510,7 +511,8 @@ libsss_util_la_SOURCES = \
     src/util/atomic_io.c \
     src/util/sss_selinux.c \
     src/util/domain_info_utils.c \
-    src/util/util_lock.c
+    src/util/util_lock.c \
+    src/util/util_errors.c
 libsss_util_la_LIBADD = \
     $(SSSD_LIBS) \
     $(UNICODE_LIBS) \
