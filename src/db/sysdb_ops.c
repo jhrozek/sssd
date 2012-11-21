@@ -2628,7 +2628,7 @@ errno_t check_failed_login_attempts(struct confdb_ctx *cdb,
     if (ret != EOK) {
         DEBUG(1, ("Failed to read the number of allowed failed login "
                   "attempts.\n"));
-        ret = EIO;
+        ret = ERR_INTERNAL;
         goto done;
     }
     ret = confdb_get_int(cdb, CONFDB_PAM_CONF_ENTRY,
@@ -2637,7 +2637,7 @@ errno_t check_failed_login_attempts(struct confdb_ctx *cdb,
                          &failed_login_delay);
     if (ret != EOK) {
         DEBUG(1, ("Failed to read the failed login delay.\n"));
-        ret = EIO;
+        ret = ERR_INTERNAL;
         goto done;
     }
     DEBUG(9, ("Failed login attempts [%d], allowed failed login attempts [%d], "
@@ -2655,12 +2655,12 @@ errno_t check_failed_login_attempts(struct confdb_ctx *cdb,
                 } else {
                     DEBUG(7, ("login delayed until %lld.\n", (long long) end));
                     *delayed_until = end;
-                    ret = EACCES;
+                    ret = ERR_AUTH_DENIED;
                     goto done;
                 }
             } else {
                 DEBUG(4, ("Too many failed logins.\n"));
-                ret = EACCES;
+                ret = ERR_AUTH_DENIED;
                 goto done;
             }
         }
@@ -2738,6 +2738,7 @@ int sysdb_cache_auth(struct sysdb_ctx *sysdb,
     if (ret != EOK) {
         DEBUG(1, ("sysdb_search_user_by_name failed [%d][%s].\n",
                   ret, strerror(ret)));
+        if (ret == ENOENT) ret = ERR_ACCOUNT_UNKNOWN;
         goto done;
     }
 
@@ -2760,7 +2761,7 @@ int sysdb_cache_auth(struct sysdb_ctx *sysdb,
         if (expire_date < time(NULL)) {
             DEBUG(4, ("Cached user entry is too old.\n"));
             expire_date = 0;
-            ret = EACCES;
+            ret = ERR_CACHED_CREDS_EXPIRED;
             goto done;
         }
     } else {
@@ -2786,14 +2787,14 @@ int sysdb_cache_auth(struct sysdb_ctx *sysdb,
     userhash = ldb_msg_find_attr_as_string(ldb_msg, SYSDB_CACHEDPWD, NULL);
     if (userhash == NULL || *userhash == '\0') {
         DEBUG(4, ("Cached credentials not available.\n"));
-        ret = ENOENT;
+        ret = ERR_NO_CACHED_CREDS;
         goto done;
     }
 
     ret = s3crypt_sha512(tmp_ctx, password, userhash, &comphash);
     if (ret) {
         DEBUG(4, ("Failed to create password hash.\n"));
-        ret = EFAULT;
+        ret = ERR_INTERNAL;
         goto done;
     }
 
@@ -2880,7 +2881,7 @@ done:
         ret = EOK;
     } else {
         if (ret == EOK) {
-            ret = EINVAL;
+            ret = ERR_AUTH_FAILED;
         }
     }
     talloc_free(tmp_ctx);

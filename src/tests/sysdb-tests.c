@@ -1665,8 +1665,10 @@ START_TEST (test_sysdb_cached_authentication_missing_password)
     username = talloc_asprintf(tmp_ctx, "testuser%d", _i);
     fail_unless(username != NULL, "talloc_asprintf failed.");
 
-    cached_authentication_without_expiration(username, "abc", ENOENT);
-    cached_authentication_with_expiration(username, "abc", ENOENT);
+    cached_authentication_without_expiration(username, "abc",
+                                             ERR_NO_CACHED_CREDS);
+    cached_authentication_with_expiration(username, "abc",
+                                             ERR_NO_CACHED_CREDS);
 
     talloc_free(tmp_ctx);
 
@@ -1684,8 +1686,10 @@ START_TEST (test_sysdb_cached_authentication_wrong_password)
     username = talloc_asprintf(tmp_ctx, "testuser%d", _i);
     fail_unless(username != NULL, "talloc_asprintf failed.");
 
-    cached_authentication_without_expiration(username, "abc", EINVAL);
-    cached_authentication_with_expiration(username, "abc", EINVAL);
+    cached_authentication_without_expiration(username, "abc",
+                                             ERR_AUTH_FAILED);
+    cached_authentication_with_expiration(username, "abc",
+                                             ERR_AUTH_FAILED);
 
     talloc_free(tmp_ctx);
 
