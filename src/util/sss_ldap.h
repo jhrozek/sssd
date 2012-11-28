@@ -95,5 +95,7 @@ bool sss_ldap_dn_in_search_bases_len(TALLOC_CTX *mem_ctx,
                                      int *_match_len);
 
 char *sss_ldap_encode_ndr_uint32(TALLOC_CTX *mem_ctx, uint32_t flags);
+int sss_ldap_set_debug(int *old_debug);
+int sss_ldap_reset_debug(int ldap_old_debug);
 
 #endif /* __SSS_LDAP_H__ */

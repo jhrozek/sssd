@@ -1163,6 +1163,7 @@ struct sdap_get_generic_ext_state {
     void *cb_data;
 
     unsigned int flags;
+    int old_ldap_debug;
 };
 
 static errno_t sdap_get_generic_ext_step(struct tevent_req *req);
@@ -1347,6 +1348,13 @@ static errno_t sdap_get_generic_ext_step(struct tevent_req *req)
         state->serverctrls[state->nserverctrls+1] = NULL;
     }
 
+    ret = sss_ldap_set_debug(&state->old_ldap_debug);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+               ("Could not set extra LDAP debugging\n"));
+        /* Not fatal, carry on */
+    }
+
     lret = ldap_search_ext(state->sh->ldap, state->search_base,
                            state->scope, state->filter,
                            discard_const(state->attrs),
@@ -1389,6 +1397,9 @@ static errno_t sdap_get_generic_ext_step(struct tevent_req *req)
     }
 
 done:
+    if (ret != EOK) {
+        sss_ldap_reset_debug(state->old_ldap_debug);
+    }
     return ret;
 }
 
@@ -1449,6 +1460,8 @@ static void sdap_get_generic_op_finished(struct sdap_op *op,
     struct berval cookie;
     LDAPControl **returned_controls = NULL;
     LDAPControl *page_control;
+
+    sss_ldap_reset_debug(state->old_ldap_debug);
 
     if (error) {
         tevent_req_error(req, error);
