@@ -154,6 +154,8 @@ void nss_update_pw_memcache(struct nss_ctx *nctx)
                        ret, strerror(ret)));
             }
         }
+
+        talloc_zfree(res);
     }
 }
 
@@ -1853,6 +1855,7 @@ void nss_update_gr_memcache(struct nss_ctx *nctx)
                        ret, strerror(ret)));
             }
         }
+        talloc_zfree(res);
     }
 }
 
@@ -3368,6 +3371,7 @@ void nss_update_initgr_memcache(struct nss_ctx *nctx,
                                 const char *name, const char *domain,
                                 int gnum, uint32_t *groups)
 {
+    TALLOC_CTX *tmp_ctx = NULL;
     struct sss_domain_info *dom;
     struct ldb_result *res;
     bool changed = false;
@@ -3393,12 +3397,14 @@ void nss_update_initgr_memcache(struct nss_ctx *nctx,
         return;
     }
 
-    ret = sysdb_initgroups(NULL, dom->sysdb, name, &res);
+    tmp_ctx = talloc_new(NULL);
+
+    ret = sysdb_initgroups(tmp_ctx, dom->sysdb, name, &res);
     if (ret != EOK && ret != ENOENT) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               ("Failed to make request to our cache! [%d][%s]\n",
                ret, strerror(ret)));
-        return;
+        goto done;
     }
 
     /* copy, we need the original intact in case we need to invalidate
@@ -3453,6 +3459,9 @@ void nss_update_initgr_memcache(struct nss_ctx *nctx,
             }
         }
     }
+
+done:
+    talloc_free(tmp_ctx);
 }
 
 /* FIXME: what about mpg, should we return the user's GID ? */
