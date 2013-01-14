@@ -423,6 +423,7 @@ sssd_pam_LDADD = \
     $(SSSD_LIBS)
 
 sssd_be_SOURCES = \
+    src/providers/child_common.c \
     src/providers/data_provider_be.c \
     src/providers/data_provider_fo.c \
     src/providers/data_provider_opts.c \
@@ -933,7 +934,9 @@ krb5_child_SOURCES = \
     src/providers/child_common.c \
     src/providers/dp_pam_data_util.c \
     src/util/user_info_msg.c \
-    src/util/sss_krb5.c
+    src/util/sss_krb5.c \
+    src/util/util.c \
+    src/util/signal.c
 krb5_child_CFLAGS = \
     $(AM_CFLAGS) \
     $(POPT_CFLAGS) \
@@ -942,13 +945,16 @@ krb5_child_LDADD = \
     $(TALLOC_LIBS) \
     $(TEVENT_LIBS) \
     $(POPT_LIBS) \
+    $(DHASH_LIBS) \
     $(KRB5_LIBS)
 
 ldap_child_SOURCES = \
     $(SSSD_DEBUG_OBJ) \
     src/providers/ldap/ldap_child.c \
     src/providers/child_common.c \
-    src/util/sss_krb5.c
+    src/util/sss_krb5.c \
+    src/util/util.c \
+    src/util/signal.c
 ldap_child_CFLAGS = \
     $(AM_CFLAGS) \
     $(POPT_CFLAGS) \
@@ -958,6 +964,7 @@ ldap_child_LDADD = \
     $(TEVENT_LIBS) \
     $(POPT_LIBS) \
     $(OPENLDAP_LIBS) \
+    $(DHASH_LIBS) \
     $(KRB5_LIBS)
 
 proxy_child_SOURCES = \
