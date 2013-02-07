@@ -233,6 +233,7 @@ SSSD_UTIL_OBJ = \
     src/util/backup_file.c \
     src/util/strtonum.c \
     src/util/check_and_open.c \
+    src/util/atomic_io.c \
     src/util/refcount.c \
     $(SSSD_DEBUG_OBJ)
 
@@ -317,6 +318,7 @@ endif
 
 dist_noinst_HEADERS = \
     src/monitor/monitor.h \
+    src/util/atomic_io.h \
     src/util/crypto/sss_crypto.h \
     src/util/dlinklist.h \
     src/util/util.h \
