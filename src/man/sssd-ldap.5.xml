@@ -2341,7 +2341,6 @@ ldap_access_filter = memberOf=cn=allowedusers,ou=Groups,dc=example,dc=com
     ldap_search_base = dc=mydomain,dc=org
     ldap_tls_reqcert = demand
     cache_credentials = true
-    enumerate = true
 </programlisting>
         </para>
     </refsect1>
