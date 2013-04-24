@@ -1696,6 +1696,7 @@ static int sdap_rebind_proc(LDAP *ldap, LDAP_CONST char *url, ber_tag_t request,
              (ret == LDAP_SUCCESS ? "Successfully" : "Failed to"), url));
 
 done:
+    if (ctrls[0]) ldap_control_free(ctrls[0]);
     talloc_free(tmp_ctx);
 
     return ret;
