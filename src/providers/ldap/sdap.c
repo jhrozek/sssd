@@ -68,6 +68,54 @@ int sdap_copy_map(TALLOC_CTX *memctx,
     return EOK;
 }
 
+int sdap_extend_map(TALLOC_CTX *memctx,
+                    struct sdap_attr_map *src_map,
+                    size_t num_entries,
+                    char **extra_attrs,
+                    struct sdap_attr_map **_map,
+                    size_t *_new_size)
+{
+    struct sdap_attr_map *map;
+    size_t nextra = 0;
+
+    if (extra_attrs == NULL) {
+        DEBUG(SSSDBG_FUNC_DATA, ("No extra attributes\n"));
+        *_map = src_map;
+        *_new_size = num_entries;
+        return EOK;
+    }
+
+    for (nextra=0; extra_attrs[nextra]; nextra++) ;
+    DEBUG(SSSDBG_FUNC_DATA, ("%d extra attributes\n", nextra));
+
+    map = talloc_realloc(memctx, src_map, struct sdap_attr_map,
+                         num_entries + nextra + 1);
+    if (map == NULL) {
+        return ENOMEM;
+    }
+
+    for (int i=0; extra_attrs[i]; i++) {
+        map[num_entries+i].opt_name = talloc_strdup(map, extra_attrs[i]);
+        map[num_entries+i].sys_name = talloc_strdup(map, map[num_entries+i].opt_name);
+        map[num_entries+i].name = talloc_strdup(map, map[num_entries+i].opt_name);
+        if (map[num_entries+i].opt_name == NULL ||
+            map[num_entries+i].sys_name == NULL ||
+            map[num_entries+i].name == NULL) {
+            return ENOMEM;
+        }
+        DEBUG(SSSDBG_TRACE_FUNC, ("Extending map with %s\n", extra_attrs[i]));
+    }
+
+    /* Sentinel */
+    map[num_entries+nextra].opt_name = NULL;
+    map[num_entries+nextra].sys_name = NULL;
+    map[num_entries+nextra].name = NULL;
+
+    *_map = map;
+    *_new_size = num_entries + nextra;
+    return EOK;
+}
+
 int sdap_get_map(TALLOC_CTX *memctx,
                  struct confdb_ctx *cdb,
                  const char *conf_path,
