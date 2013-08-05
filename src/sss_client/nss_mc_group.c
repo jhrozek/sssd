@@ -117,6 +117,10 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
     }
 
     while (slot != MC_INVALID_VAL) {
+        if (slot > MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
+            /* This probably means that the memory cache was corrupted. */
+            return ENOENT;
+        }
 
         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
         if (ret) {
@@ -181,6 +185,10 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
     }
 
     while (slot != MC_INVALID_VAL) {
+        if (slot > MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
+            /* This probably means that the memory cache was corrupted. */
+            return ENOENT;
+        }
 
         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
         if (ret) {
