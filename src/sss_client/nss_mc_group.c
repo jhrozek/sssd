@@ -118,16 +118,11 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
     /* hashes are calculated including the NULL terminator */
     hash = sss_nss_mc_hash(&gr_mc_ctx, name, name_len + 1);
     slot = gr_mc_ctx.hash_table[hash];
-    if (slot > MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
-        return ENOENT;
-    }
 
-    while (slot != MC_INVALID_VAL) {
-        if (slot > MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
-            /* This probably means that the memory cache was corrupted. */
-            return ENOENT;
-        }
-
+    /* If slot is not within the bounds of mmaped region and
+     * it's value is not MC_INVALID_VAL, then the cache is
+     * probbably corrupted. */
+    while (slot < MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
         if (ret) {
             goto done;
@@ -161,7 +156,7 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
         slot = rec->next;
     }
 
-    if (slot == MC_INVALID_VAL) {
+    if (slot >= MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
         ret = ENOENT;
         goto done;
     }
@@ -198,16 +193,11 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
     /* hashes are calculated including the NULL terminator */
     hash = sss_nss_mc_hash(&gr_mc_ctx, gidstr, len+1);
     slot = gr_mc_ctx.hash_table[hash];
-    if (slot > MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
-        return ENOENT;
-    }
 
-    while (slot != MC_INVALID_VAL) {
-        if (slot > MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
-            /* This probably means that the memory cache was corrupted. */
-            return ENOENT;
-        }
-
+    /* If slot is not within the bounds of mmaped region and
+     * it's value is not MC_INVALID_VAL, then the cache is
+     * probbably corrupted. */
+    while (slot < MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
         if (ret) {
             goto done;
@@ -228,7 +218,7 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
         slot = rec->next;
     }
 
-    if (slot == MC_INVALID_VAL) {
+    if (slot >= MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
         ret = ENOENT;
         goto done;
     }
