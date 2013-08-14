@@ -122,7 +122,7 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
     /* If slot is not within the bounds of mmaped region and
      * it's value is not MC_INVALID_VAL, then the cache is
      * probbably corrupted. */
-    while (slot < MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
+    while (MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
         if (ret) {
             goto done;
@@ -156,7 +156,7 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
         slot = rec->next;
     }
 
-    if (slot >= MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
+    if (!MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
         ret = ENOENT;
         goto done;
     }
@@ -197,7 +197,7 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
     /* If slot is not within the bounds of mmaped region and
      * it's value is not MC_INVALID_VAL, then the cache is
      * probbably corrupted. */
-    while (slot < MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
+    while (MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
         if (ret) {
             goto done;
@@ -218,7 +218,7 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
         slot = rec->next;
     }
 
-    if (slot >= MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
+    if (!MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
         ret = ENOENT;
         goto done;
     }

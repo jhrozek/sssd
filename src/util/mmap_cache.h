@@ -68,6 +68,9 @@ typedef uint32_t rel_ptr_t;
 #define MC_SLOT_TO_PTR(base, slot, type) \
                                 (type *)((base) + ((slot) * MC_SLOT_SIZE))
 
+#define MC_SLOT_WITHIN_BOUNDS(slot, dt_size) \
+    ((slot) < ((dt_size) / MC_SLOT_SIZE))
+
 #define MC_VALID_BARRIER(val) (((val) & 0xff000000) == 0xf0000000)
 
 #define SSS_MC_MAJOR_VNO    0
