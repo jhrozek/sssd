@@ -833,6 +833,118 @@ done:
 }
 
 
+struct sss_krb5_ccache {
+    struct sss_creds *creds;
+    krb5_context context;
+    krb5_ccache ccache;
+};
+
+static errno_t sss_close_ccache(struct sss_krb5_ccache *cc);
+
+static errno_t sss_open_ccache_as_user(const char *ccname,
+                                       uid_t uid, gid_t gid,
+                                       struct sss_krb5_ccache **ccache)
+{
+    struct sss_krb5_ccache *cc;
+    krb5_error_code kerr;
+    errno_t ret;
+
+    cc = calloc(sizeof(struct sss_krb5_ccache), 1);
+    if (!cc) {
+        return ENOMEM;
+    }
+
+    ret = switch_creds(uid, gid, 0, NULL, &cc->creds);
+    if (ret) {
+        free(cc);
+        return ret;
+    }
+
+    kerr = krb5_init_context(&cc->context);
+    if (kerr) {
+        ret = EIO;
+        goto done;
+    }
+
+    kerr = krb5_cc_resolve(cc->context, ccname, &cc->ccache);
+    if (kerr == KRB5_FCC_NOFILE || cc->ccache == NULL) {
+        DEBUG(SSSDBG_TRACE_FUNC, ("ccache %s is missing or empty\n", ccname));
+        ret = ERR_NOT_FOUND;
+        goto done;
+    } else if (kerr != 0) {
+        KRB5_DEBUG(SSSDBG_OP_FAILURE, cc->context, kerr);
+        DEBUG(SSSDBG_CRIT_FAILURE, ("krb5_cc_resolve failed.\n"));
+        ret = EIO;
+        goto done;
+    }
+
+    ret = EOK;
+
+done:
+    if (ret) {
+        sss_close_ccache(cc);
+    } else {
+        *ccache = cc;
+    }
+    return ret;
+}
+
+static errno_t sss_destroy_ccache(struct sss_krb5_ccache *cc)
+{
+    krb5_error_code kerr;
+    errno_t ret;
+
+    kerr = krb5_cc_destroy(cc->context, cc->ccache);
+    if (kerr) {
+        KRB5_DEBUG(SSSDBG_OP_FAILURE, cc->context, kerr);
+        DEBUG(SSSDBG_CRIT_FAILURE, ("krb5_cc_destroy failed.\n"));
+        ret = EIO;
+    }
+
+    /* krb5_cc_destroy frees cc->ccache in all events */
+    cc->ccache = NULL;
+
+    return ret;
+}
+
+static errno_t sss_close_ccache(struct sss_krb5_ccache *cc)
+{
+    krb5_error_code kerr = 0;
+    errno_t ret;
+
+    if (cc->ccache) {
+        kerr = krb5_cc_close(cc->context, cc->ccache);
+    }
+    krb5_free_context(cc->context);
+
+    ret = restore_creds(cc->creds);
+
+    free(cc->creds);
+    free(cc);
+
+    if (kerr) return EIO;
+    return ret;
+}
+
+errno_t sss_krb5_cc_destroy(const char *ccname, uid_t uid, gid_t gid)
+{
+    struct sss_krb5_ccache *cc = NULL;
+    errno_t ret;
+
+    ret = sss_open_ccache_as_user(ccname, uid, gid, &cc);
+    if (ret) {
+        return ret;
+    }
+
+    ret = sss_destroy_ccache(cc);
+    if (ret) {
+        sss_close_ccache(cc);
+        return ret;
+    }
+
+    return sss_close_ccache(cc);
+}
+
 
 /*======== ccache back end utilities ========*/
 struct sss_krb5_cc_be *
