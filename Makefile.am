@@ -927,6 +927,7 @@ strtonum_tests_LDADD = \
 krb5_utils_tests_SOURCES = \
     src/tests/krb5_utils-tests.c \
     src/providers/krb5/krb5_utils.c \
+    src/providers/krb5/krb5_become_user.c \
     src/providers/krb5/krb5_common.c \
     src/util/sss_krb5.c \
     src/util/find_uid.c \
