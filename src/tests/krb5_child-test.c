@@ -198,7 +198,7 @@ create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
 {
     struct krb5child_req *kr;
     struct passwd *pwd;
-    bool private = false;
+    char *pubdir = NULL;
     errno_t ret;
 
     /* The top level child request */
@@ -243,15 +243,13 @@ create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
     }
 
     if (!ccname) {
-        kr->ccname = expand_ccname_template(kr, kr,
-                                        dp_opt_get_cstring(kr->krb5_ctx->opts,
-                                                           KRB5_CCNAME_TMPL),
-                                            true, true, &private);
-        if (!kr->ccname) goto fail;
+        ret = expand_ccname_template(kr, kr, tmpl, true, &pubdir, &kr->ccname);
+        if (ret) goto fail;
 
-        DEBUG(SSSDBG_FUNC_DATA, ("ccname [%s] uid [%llu] gid [%llu]\n",
-              kr->ccname, (unsigned long long) kr->uid,
-              (unsigned long long) kr->gid));
+        DEBUG(SSSDBG_FUNC_DATA,
+              ("ccname [%s] pubdir [%s] uid [%llu] gid [%llu]\n",
+               kr->ccname, pubdir ? pubdir : "NULL",
+               (unsigned long long) kr->uid, (unsigned long long) kr->gid));
     } else {
         kr->ccname = talloc_strdup(kr, ccname);
     }
@@ -260,9 +258,9 @@ create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
     DEBUG(SSSDBG_FUNC_DATA, ("ccname [%s] uid [%u] gid [%u]\n",
             kr->ccname, kr->uid, kr->gid));
 
-    ret = sss_krb5_precreate_ccache(kr->ccname,
+    ret = sss_krb5_precreate_ccache(kr->ccname, pubdir,
                                     kr->krb5_ctx->illegal_path_re,
-                                    kr->uid, kr->gid, private);
+                                    kr->uid, kr->gid);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, ("create_ccache_dir failed.\n"));
         goto fail;

@@ -166,41 +166,36 @@ done:
 #define S_EXP_USERNAME "{username}"
 #define L_EXP_USERNAME (sizeof(S_EXP_USERNAME) - 1)
 
-char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
-                             const char *template, bool file_mode,
-                             bool case_sensitive, bool *private_path)
+static errno_t expand_template(TALLOC_CTX *tmp_ctx, struct krb5child_req *kr,
+                               const char *template, bool case_sensitive,
+                               bool dir_mode, char **pubdir, char **ccname)
 {
     char *copy;
     char *p;
     char *n;
     char *result = NULL;
-    char *dummy;
     char *name;
-    char *res = NULL;
     const char *cache_dir_tmpl;
-    TALLOC_CTX *tmp_ctx = NULL;
     char action;
     bool rerun;
+    errno_t ret;
+    bool public_path = true;
+    char *dirname;
 
-    *private_path = false;
-
-    if (template == NULL) {
-        DEBUG(1, ("Missing template.\n"));
-        return NULL;
-    }
-
-    tmp_ctx = talloc_new(NULL);
-    if (!tmp_ctx) return NULL;
+    *pubdir = NULL;
+    *ccname = NULL;
 
     copy = talloc_strdup(tmp_ctx, template);
     if (copy == NULL) {
         DEBUG(1, ("talloc_strdup failed.\n"));
+        ret = ENOMEM;
         goto done;
     }
 
     result = talloc_strdup(tmp_ctx, "");
     if (result == NULL) {
         DEBUG(1, ("talloc_strdup failed.\n"));
+        ret = ENOMEM;
         goto done;
     }
 
@@ -210,6 +205,7 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
         n++;
         if ( *n == '\0' ) {
             DEBUG(1, ("format error, single %% at the end of the template.\n"));
+            ret = EINVAL;
             goto done;
         }
 
@@ -222,6 +218,7 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                 if (kr->pd->user == NULL) {
                     DEBUG(1, ("Cannot expand user name template "
                               "because user name is empty.\n"));
+                    ret = EINVAL;
                     goto done;
                 }
                 name = sss_get_cased_name(tmp_ctx, kr->pd->user,
@@ -229,12 +226,13 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                 if (!name) {
                     DEBUG(SSSDBG_CRIT_FAILURE,
                           ("sss_get_cased_name failed\n"));
+                    ret = ENOMEM;
                     goto done;
                 }
 
                 result = talloc_asprintf_append(result, "%s%s", p,
                                                 name);
-                if (!file_mode) *private_path = true;
+                public_path = false;
                 break;
             case 'U':
                 if (kr->uid <= 0) {
@@ -244,7 +242,7 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                 }
                 result = talloc_asprintf_append(result, "%s%"SPRIuid, p,
                                                 kr->uid);
-                if (!file_mode) *private_path = true;
+                public_path = false;
                 break;
             case 'p':
                 if (kr->upn == NULL) {
@@ -253,60 +251,75 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                     goto done;
                 }
                 result = talloc_asprintf_append(result, "%s%s", p, kr->upn);
-                if (!file_mode) *private_path = true;
+                public_path = false;
                 break;
             case '%':
                 result = talloc_asprintf_append(result, "%s%%", p);
                 break;
             case 'r':
-                dummy = dp_opt_get_string(kr->krb5_ctx->opts, KRB5_REALM);
-                if (dummy == NULL) {
+                name = dp_opt_get_string(kr->krb5_ctx->opts, KRB5_REALM);
+                if (name == NULL) {
                     DEBUG(1, ("Missing kerberos realm.\n"));
+                    ret = EINVAL;
                     goto done;
                 }
-                result = talloc_asprintf_append(result, "%s%s", p, dummy);
+                result = talloc_asprintf_append(result, "%s%s", p, name);
                 break;
             case 'h':
                 if (kr->homedir == NULL) {
                     DEBUG(1, ("Cannot expand home directory template "
                               "because the path is not available.\n"));
+                    ret = EINVAL;
                     goto done;
                 }
                 result = talloc_asprintf_append(result, "%s%s", p, kr->homedir);
-                if (!file_mode) *private_path = true;
+                public_path = false;
                 break;
             case 'd':
-                if (file_mode) {
-                    cache_dir_tmpl = dp_opt_get_string(kr->krb5_ctx->opts,
-                                                       KRB5_CCACHEDIR);
-                    if (cache_dir_tmpl == NULL) {
-                        DEBUG(1, ("Missing credential cache directory.\n"));
-                        goto done;
-                    }
-
-                    dummy = expand_ccname_template(tmp_ctx, kr, cache_dir_tmpl,
-                                                   false, case_sensitive,
-                                                   private_path);
-                    if (dummy == NULL) {
-                        DEBUG(1, ("Expanding credential cache directory "
-                                  "template failed.\n"));
-                        goto done;
-                    }
-                    result = talloc_asprintf_append(result, "%s%s", p, dummy);
-                    talloc_zfree(dummy);
-                } else {
-                    DEBUG(1, ("'%%d' is not allowed in this template.\n"));
+                if (dir_mode) {
+                    DEBUG(SSSDBG_CRIT_FAILURE,
+                          ("'%%d' is not allowed in this template.\n"));
+                    ret = EINVAL;
                     goto done;
                 }
+
+                cache_dir_tmpl = dp_opt_get_string(kr->krb5_ctx->opts,
+                                                   KRB5_CCACHEDIR);
+                if (cache_dir_tmpl == NULL) {
+                    DEBUG(1, ("Missing credential cache directory.\n"));
+                    ret = EINVAL;
+                    goto done;
+                }
+
+                ret = expand_template(tmp_ctx, kr, cache_dir_tmpl,
+                                      case_sensitive, true, &dirname, &name);
+                if (ret) {
+                    DEBUG(1, ("Expanding credential cache directory "
+                              "template failed.\n"));
+                    goto done;
+                }
+                if (dirname) {
+                    *pubdir = talloc_asprintf(tmp_ctx, "%s%s%s",
+                                              result, p, dirname);
+                    if (*pubdir == NULL) {
+                        DEBUG(SSSDBG_CRIT_FAILURE,
+                              ("talloc_asprintf failed.\n"));
+                        ret = ENOMEM;
+                        goto done;
+                    }
+                }
+                result = talloc_asprintf_append(result, "%s%s", p, name);
                 break;
             case 'P':
-                if (!file_mode) {
+                if (dir_mode) {
                     DEBUG(1, ("'%%P' is not allowed in this template.\n"));
+                    ret = EINVAL;
                     goto done;
                 }
                 if (kr->pd->cli_pid == 0) {
                     DEBUG(1, ("Cannot expand PID template "
                               "because PID is not available.\n"));
+                    ret = EINVAL;
                     goto done;
                 }
                 result = talloc_asprintf_append(result, "%s%d", p,
@@ -355,12 +368,14 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                 break;
             default:
                 DEBUG(1, ("format error, unknown template [%%%c].\n", *n));
+                ret = EINVAL;
                 goto done;
             }
         }
 
         if (result == NULL) {
             DEBUG(1, ("talloc_asprintf_append failed.\n"));
+            ret = ENOMEM;
             goto done;
         }
 
@@ -370,13 +385,71 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
     result = talloc_asprintf_append(result, "%s", p);
     if (result == NULL) {
         DEBUG(1, ("talloc_asprintf_append failed.\n"));
+        ret = ENOMEM;
+        goto done;
+    }
+    if (dir_mode && public_path) {
+        *pubdir = talloc_strdup(tmp_ctx, result);
+        if (*pubdir == NULL) {
+            DEBUG(SSSDBG_CRIT_FAILURE, ("talloc_strdup failed.\n"));
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+    *ccname = result;
+done:
+    return ret;
+}
+
+errno_t expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
+                               const char *template, bool case_sensitive,
+                               char **public_dir, char **cc_name)
+{
+    TALLOC_CTX *tmp_ctx = NULL;
+    const char *residual;
+    char *pubdir = NULL;
+    char *ccname = NULL;
+    errno_t ret;
+
+    *public_dir = NULL;
+    *cc_name = NULL;
+
+    if (template == NULL) {
+        DEBUG(1, ("Missing template.\n"));
+        return EINVAL;
+    }
+
+    residual = strchr(template, ':');
+    if (!residual) residual = template;
+    else residual++;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (!tmp_ctx) return ENOMEM;
+
+    ret = expand_template(tmp_ctx, kr, residual,
+                          case_sensitive, false, &pubdir, &ccname);
+    if (ret) {
         goto done;
     }
 
-    res = talloc_move(mem_ctx, &result);
+    if (residual == template) {
+        *cc_name = talloc_move(mem_ctx, &ccname);
+    } else {
+        *cc_name = talloc_asprintf(mem_ctx, "%.*s%s",
+                                   (int)(residual - template), template,
+                                   ccname);
+        if (*cc_name == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+    if (pubdir) {
+        *public_dir = talloc_move(mem_ctx, &pubdir);
+    }
+
 done:
     talloc_zfree(tmp_ctx);
-    return res;
+    return ret;
 }
 
 static errno_t check_parent_stat(bool private_path, struct stat *parent_stat,
@@ -424,6 +497,7 @@ static errno_t check_parent_stat(bool private_path, struct stat *parent_stat,
 struct string_list {
     struct string_list *next;
     struct string_list *prev;
+    size_t len_s;
     char *s;
 };
 
@@ -468,10 +542,16 @@ static errno_t find_ccdir_parent_data(TALLOC_CTX *mem_ctx,
               ("talloc_strdup failed.\n"));
         return ENOMEM;
     }
+    li->len_s = strlen(li->s);
+    /* no trailing slashes */
+    while (li->s[li->len_s - 1] == '/') {
+        li->len_s--;
+        li->s[li->len_s] = '\0';
+    }
 
     DLIST_ADD(*missing_parents, li);
 
-    parent = talloc_strdup(mem_ctx, ccdirname);
+    parent = talloc_strdup(mem_ctx, li->s);
     if (parent == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               ("talloc_strdup failed.\n"));
@@ -480,7 +560,7 @@ static errno_t find_ccdir_parent_data(TALLOC_CTX *mem_ctx,
 
     /* We'll remove all trailing slashes from the back so that
      * we only pass /some/path to find_ccdir_parent_data, not
-     * /some/path */
+     * /some/path/ */
     do {
         end = strrchr(parent, '/');
         if (end == NULL || end == parent) {
@@ -522,9 +602,8 @@ check_ccache_re(const char *filename, pcre *illegal_re)
     return EFAULT;
 }
 
-errno_t
-create_ccache_dir(const char *ccdirname, pcre *illegal_re,
-                  uid_t uid, gid_t gid, bool private_path)
+errno_t create_ccache_dir(const char *ccdirname, const char *pubdir,
+                          pcre *illegal_re, uid_t uid, gid_t gid)
 {
     int ret = EFAULT;
     struct stat parent_stat;
@@ -533,6 +612,9 @@ create_ccache_dir(const char *ccdirname, pcre *illegal_re,
     mode_t old_umask;
     mode_t new_dir_mode;
     TALLOC_CTX *tmp_ctx = NULL;
+    size_t len_pubdir = 0;
+    bool in_pubdir;
+    bool is_pubdir;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -563,26 +645,35 @@ create_ccache_dir(const char *ccdirname, pcre *illegal_re,
         goto done;
     }
 
-    ret = check_parent_stat(private_path, &parent_stat, uid, gid);
+    ret = check_parent_stat((pubdir == NULL), &parent_stat, uid, gid);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               ("check_parent_stat failed for %s directory [%s].\n",
-               private_path ? "private" : "public", ccdirname));
+               (pubdir == NULL) ? "private" : "public", ccdirname));
         goto done;
+    }
+
+    if (pubdir) {
+        len_pubdir = strlen(pubdir);
+        while (pubdir[len_pubdir - 1] == '/') len_pubdir--;
     }
 
     DLIST_FOR_EACH(li, missing_parents) {
         DEBUG(SSSDBG_TRACE_INTERNAL,
               ("Creating directory [%s].\n", li->s));
-        if (li->next == NULL) {
-            new_dir_mode = private_path ? 0700 : 01777;
-        } else {
-            if (private_path &&
-                parent_stat.st_uid == uid && parent_stat.st_gid == gid) {
-                new_dir_mode = 0700;
+        in_pubdir = false;
+        if (len_pubdir && (strncmp(pubdir, li->s, li->len_s) == 0)) {
+            in_pubdir = true;
+            if (len_pubdir == li->len_s) is_pubdir = true;
+        }
+        if (in_pubdir) {
+            if (is_pubdir) {
+                new_dir_mode = 01777;
             } else {
                 new_dir_mode = 0755;
             }
+        } else {
+            new_dir_mode = 0700;
         }
 
         old_umask = umask(0000);
@@ -595,9 +686,7 @@ create_ccache_dir(const char *ccdirname, pcre *illegal_re,
                    strerror(ret)));
             goto done;
         }
-        if (private_path &&
-            ((parent_stat.st_uid == uid && parent_stat.st_gid == gid) ||
-             li->next == NULL)) {
+        if (!in_pubdir) {
             ret = chown(li->s, uid, gid);
             if (ret != EOK) {
                 ret = errno;
@@ -722,8 +811,8 @@ done:
     return EOK;
 }
 
-errno_t sss_krb5_precreate_ccache(const char *ccname, pcre *illegal_re,
-                                  uid_t uid, gid_t gid, bool private_path)
+errno_t sss_krb5_precreate_ccache(const char *ccname, const char *pubdir,
+                                  pcre *illegal_re, uid_t uid, gid_t gid)
 {
     TALLOC_CTX *tmp_ctx = NULL;
     const char *filename;
@@ -767,7 +856,7 @@ errno_t sss_krb5_precreate_ccache(const char *ccname, pcre *illegal_re,
         *end = '\0';
     } while (*(end+1) == '\0');
 
-    ret = create_ccache_dir(ccdirname, illegal_re, uid, gid, private_path);
+    ret = create_ccache_dir(ccdirname, pubdir, illegal_re, uid, gid);
 done:
     talloc_free(tmp_ctx);
     return ret;

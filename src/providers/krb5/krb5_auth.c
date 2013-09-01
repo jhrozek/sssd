@@ -293,7 +293,7 @@ static errno_t krb5_auth_prepare_ccache_name(struct krb5child_req *kr,
 {
     const char *ccname_template;
     const char *realm;
-    bool private_path = false;
+    char *public_dir = NULL;
     errno_t ret;
 
     if (!kr->is_offline) {
@@ -301,11 +301,11 @@ static errno_t krb5_auth_prepare_ccache_name(struct krb5child_req *kr,
     }
 
     ccname_template = dp_opt_get_cstring(kr->krb5_ctx->opts, KRB5_CCNAME_TMPL);
-    kr->ccname = expand_ccname_template(kr, kr, ccname_template, true,
-                                        be_ctx->domain->case_sensitive,
-                                        &private_path);
-    if (kr->ccname == NULL) {
-        DEBUG(1, ("expand_ccname_template failed.\n"));
+    ret = expand_ccname_template(kr, kr, ccname_template,
+                                 be_ctx->domain->case_sensitive,
+                                 &public_dir, &kr->ccname);
+    if (ret != EOK) {
+         DEBUG(1, ("expand_ccname_template failed.\n"));
         return ENOMEM;
     }
 
@@ -354,9 +354,9 @@ static errno_t krb5_auth_prepare_ccache_name(struct krb5child_req *kr,
               kr->valid_tgt ? "" : "not"));
 
     /* always recreate the ccache directory path */
-    ret = sss_krb5_precreate_ccache(kr->ccname,
+    ret = sss_krb5_precreate_ccache(kr->ccname, public_dir,
                                     kr->krb5_ctx->illegal_path_re,
-                                    kr->uid, kr->gid, private_path);
+                                    kr->uid, kr->gid);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, ("ccache precreation failed.\n"));
         return ret;
@@ -626,7 +626,7 @@ struct tevent_req *krb5_auth_send(TALLOC_CTX *mem_ctx,
                                                   NULL);
         if (ccache_file != NULL) {
             kr->old_ccname = talloc_strdup(kr, ccache_file);
-            if (kr->old_ccname == NULL) {
+            if (kr->ccname == NULL || kr->old_ccname == NULL) {
                 DEBUG(1, ("talloc_strdup failed.\n"));
                 ret = ENOMEM;
                 goto done;

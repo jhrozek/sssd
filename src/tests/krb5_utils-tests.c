@@ -117,13 +117,13 @@ START_TEST(test_pub_ccache_dir)
 
     ret = chmod(testpath, 0754);
     fail_unless(ret == EOK, "chmod failed.");
-    ret = sss_krb5_precreate_ccache(filename, NULL, 12345, 12345, false);
+    ret = sss_krb5_precreate_ccache(filename, dirname, NULL, 12345, 12345);
     fail_unless(ret == EINVAL, "sss_krb5_precreate_ccache does not return EINVAL "
                                "while x-bit is missing.");
 
     ret = chmod(testpath, 0755);
     fail_unless(ret == EOK, "chmod failed.");
-    ret = sss_krb5_precreate_ccache(filename, NULL, 12345, 12345, false);
+    ret = sss_krb5_precreate_ccache(filename, dirname, NULL, 12345, 12345);
     fail_unless(ret == EOK, "sss_krb5_precreate_ccache failed.");
 
     check_dir(subdirname, 0, 0, 01777);
@@ -158,9 +158,9 @@ START_TEST(test_pub_ccache_dir_in_user_dir)
     filename = talloc_asprintf(tmp_ctx, "%s/ccfile", subdirname);
     fail_unless(filename != NULL, "talloc_asprintf failed.");
 
-    ret = sss_krb5_precreate_ccache(filename, NULL, 12345, 12345, false);
+    ret = sss_krb5_precreate_ccache(filename, dirname, NULL, 12345, 12345);
     fail_unless(ret == EINVAL, "Creating public ccache dir in user dir "
-                               "does not failed with EINVAL.");
+                               "does not fail with EINVAL.");
 
     RMDIR(dirname);
 }
@@ -193,13 +193,13 @@ START_TEST(test_priv_ccache_dir)
 
     ret = chmod(testpath, 0754);
     fail_unless(ret == EOK, "chmod failed.");
-    ret = sss_krb5_precreate_ccache(filename, NULL, uid, gid, true);
+    ret = sss_krb5_precreate_ccache(filename, NULL, NULL, uid, gid);
     fail_unless(ret == EINVAL, "sss_krb5_precreate_ccache does not return EINVAL "
                                "while x-bit is missing.");
 
     ret = chmod(testpath, 0755);
     fail_unless(ret == EOK, "chmod failed.");
-    ret = sss_krb5_precreate_ccache(filename, NULL, uid, gid, true);
+    ret = sss_krb5_precreate_ccache(filename, NULL, NULL, uid, gid);
     fail_unless(ret == EOK, "sss_krb5_precreate_ccache failed.");
 
     check_dir(subdir, uid, gid, 0700);
@@ -248,13 +248,13 @@ START_TEST(test_private_ccache_dir_in_user_dir)
 
     ret = chmod(user_dir, 0600);
     fail_unless(ret == EOK, "chmod failed.");
-    ret = sss_krb5_precreate_ccache(filename, NULL, uid, gid, true);
+    ret = sss_krb5_precreate_ccache(filename, NULL, NULL, uid, gid);
     fail_unless(ret == EINVAL, "sss_krb5_precreate_ccache does not return EINVAL "
                                "while x-bit is missing.");
 
     ret = chmod(user_dir, 0700);
     fail_unless(ret == EOK, "chmod failed.");
-    ret = sss_krb5_precreate_ccache(filename, NULL, uid, gid, true);
+    ret = sss_krb5_precreate_ccache(filename, NULL, NULL, uid, gid);
     fail_unless(ret == EOK, "sss_krb5_precreate_ccache failed.");
 
     check_dir(dn3, uid, gid, 0700);
@@ -292,7 +292,7 @@ START_TEST(test_private_ccache_dir_in_wrong_user_dir)
     filename = talloc_asprintf(tmp_ctx, "%s/ccfile", subdirname);
     fail_unless(filename != NULL, "talloc_asprintf failed.");
 
-    ret = sss_krb5_precreate_ccache(filename, NULL, 12345, 12345, true);
+    ret = sss_krb5_precreate_ccache(filename, NULL, NULL, 12345, 12345);
     fail_unless(ret == EINVAL, "Creating private ccache dir in wrong user "
                                "dir does not failed with EINVAL.");
 
@@ -304,6 +304,7 @@ START_TEST(test_illegal_patterns)
 {
     int ret;
     char *cwd;
+    char *base;
     char *dirname;
     char *filename;
     uid_t uid = getuid();
@@ -322,38 +323,49 @@ START_TEST(test_illegal_patterns)
     cwd = getcwd(NULL, 0);
     fail_unless(cwd != NULL, "getcwd failed.");
 
-    dirname = talloc_asprintf(tmp_ctx, "%s/%s/priv_ccdir", cwd, TESTS_PATH);
+    base = talloc_strdup(tmp_ctx, cwd);
     free(cwd);
+    fail_unless(base != NULL, "talloc_asprintf failed.");
+
+    dirname = talloc_asprintf(tmp_ctx, "%s/%s/priv_ccdir", base, TESTS_PATH);
     fail_unless(dirname != NULL, "talloc_asprintf failed.");
 
 
     filename = talloc_asprintf(tmp_ctx, "abc/./ccfile");
     fail_unless(filename != NULL, "talloc_asprintf failed.");
-    ret = create_ccache_dir(filename, illegal_re, uid, gid, true);
+    ret = create_ccache_dir(filename, NULL, illegal_re, uid, gid);
     fail_unless(ret == EINVAL, "create_ccache_dir allowed relative path [%s].",
                                filename);
 
     filename = talloc_asprintf(tmp_ctx, "%s/abc/./ccfile", dirname);
     fail_unless(filename != NULL, "talloc_asprintf failed.");
-    ret = create_ccache_dir(filename, illegal_re, uid, gid, true);
+    ret = create_ccache_dir(filename, NULL, illegal_re, uid, gid);
     fail_unless(ret == EINVAL, "create_ccache_dir allowed "
                                "illegal pattern '/./' in filename [%s].",
                                filename);
 
     filename = talloc_asprintf(tmp_ctx, "%s/abc/../ccfile", dirname);
     fail_unless(filename != NULL, "talloc_asprintf failed.");
-    ret = create_ccache_dir(filename, illegal_re, uid, gid, true);
+    ret = create_ccache_dir(filename, NULL, illegal_re, uid, gid);
     fail_unless(ret == EINVAL, "create_ccache_dir allowed "
                                "illegal pattern '/../' in filename [%s].",
                                filename);
 
     filename = talloc_asprintf(tmp_ctx, "%s/abc//ccfile", dirname);
     fail_unless(filename != NULL, "talloc_asprintf failed.");
-    ret = create_ccache_dir(filename, illegal_re, uid, gid, true);
+    ret = create_ccache_dir(filename, NULL, illegal_re, uid, gid);
     fail_unless(ret == EINVAL, "create_ccache_dir allowed "
                                "illegal pattern '//' in filename [%s].",
                                filename);
 
+    dirname = talloc_asprintf(tmp_ctx, "%s/%s/pubdir", base, TESTS_PATH);
+    fail_unless(dirname != NULL, "talloc_asprintf failed.");
+    filename = talloc_asprintf(tmp_ctx, "%s/priv/ate/ccfile", dirname);
+    fail_unless(filename != NULL, "talloc_asprintf failed.");
+
+    ret = create_ccache_dir(filename, dirname, illegal_re, uid, gid);
+    fail_unless(ret == EINVAL,
+                "create_ccache_dir should fail for [%s].", filename);
 }
 END_TEST
 
@@ -362,6 +374,7 @@ START_TEST(test_cc_dir_create)
     char *residual;
     char *dirname;
     char *cwd;
+    char *base;
     uid_t uid = getuid();
     gid_t gid = getgid();
     pcre *illegal_re;
@@ -379,13 +392,17 @@ START_TEST(test_cc_dir_create)
     cwd = getcwd(NULL, 0);
     fail_unless(cwd != NULL, "getcwd failed.");
 
+    base = talloc_strdup(tmp_ctx, cwd);
+    free(cwd);
+    fail_unless(base != NULL, "talloc_asprintf failed.");
+
     dirname = talloc_asprintf(tmp_ctx, "%s/%s/user_dir",
-                              cwd, TESTS_PATH);
+                              base, TESTS_PATH);
     fail_unless(dirname != NULL, "talloc_asprintf failed.");
     residual = talloc_asprintf(tmp_ctx, "DIR:%s/%s", dirname, "ccdir");
     fail_unless(residual != NULL, "talloc_asprintf failed.");
 
-    ret = sss_krb5_precreate_ccache(residual, illegal_re, uid, gid, true);
+    ret = sss_krb5_precreate_ccache(residual, NULL, illegal_re, uid, gid);
     fail_unless(ret == EOK, "sss_krb5_precreate_ccache failed\n");
     ret = rmdir(dirname);
     if (ret < 0) ret = errno;
@@ -393,18 +410,17 @@ START_TEST(test_cc_dir_create)
     talloc_free(residual);
 
     dirname = talloc_asprintf(tmp_ctx, "%s/%s/user_dir2",
-                              cwd, TESTS_PATH);
+                              base, TESTS_PATH);
     fail_unless(dirname != NULL, "talloc_asprintf failed.");
     residual = talloc_asprintf(tmp_ctx, "DIR:%s/%s", dirname, "ccdir/");
     fail_unless(residual != NULL, "talloc_asprintf failed.");
 
-    ret = sss_krb5_precreate_ccache(residual, illegal_re, uid, gid, true);
+    ret = sss_krb5_precreate_ccache(residual, NULL, illegal_re, uid, gid);
     fail_unless(ret == EOK, "sss_krb5_precreate_ccache failed\n");
     ret = rmdir(dirname);
     if (ret < 0) ret = errno;
     fail_unless(ret == 0, "Cannot remove %s: %s\n", dirname, strerror(ret));
     talloc_free(residual);
-    free(cwd);
 }
 END_TEST
 
@@ -463,48 +479,51 @@ void free_talloc_context(void)
 }
 
 static void do_test(const char *file_template, const char *dir_template,
-                    const char *expected, const bool expected_private_path)
+                    const char *expected, const char *expected_pubdir)
 {
     char *result;
+    char *pubdir;
     int ret;
-    bool private_path = false;
 
     ret = dp_opt_set_string(kr->krb5_ctx->opts, KRB5_CCACHEDIR, dir_template);
     fail_unless(ret == EOK, "Failed to set Ccache dir");
 
-    result = expand_ccname_template(tmp_ctx, kr, file_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, file_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result != NULL, "Cannot expand template [%s].", file_template);
-    fail_unless(strcmp(result, expected) == 0,
+    fail_unless(result && expected && strcmp(result, expected) == 0,
                 "Expansion failed, result [%s], expected [%s].",
-                result, expected);
-    fail_unless(private_path == expected_private_path,
-                "Unexpected private path, get [%s], expected [%s].",
-                private_path ? "true" : "false",
-                expected_private_path ? "true" : "false");
+                result ? result : "NULL", expected ? expected : "NULL");
+    fail_unless((expected_pubdir ?
+                    (pubdir && (strcmp(pubdir, expected_pubdir) == 0)) :
+                    (pubdir == NULL)),
+                "Unexpected pubdir, got [%s], expected [%s].",
+                pubdir ? pubdir : "NULL",
+                expected_pubdir ? expected_pubdir : "NULL");
 }
 
 START_TEST(test_multiple_substitutions)
 {
-    do_test(BASE"_%u_%U_%u", CCACHE_DIR, BASE"_"USERNAME"_"UID"_"USERNAME, false);
+    do_test(BASE"_%u_%U_%u", CCACHE_DIR,
+            BASE"_"USERNAME"_"UID"_"USERNAME, NULL);
     do_test("%d/"FILENAME, BASE"_%u_%U_%u",
-            BASE"_"USERNAME"_"UID"_"USERNAME"/"FILENAME, true);
+            BASE"_"USERNAME"_"UID"_"USERNAME"/"FILENAME, NULL);
 }
 END_TEST
 
 START_TEST(test_username)
 {
-    do_test(BASE"_%u", CCACHE_DIR, BASE"_"USERNAME, false);
-    do_test("%d/"FILENAME, BASE"_%u", BASE"_"USERNAME"/"FILENAME, true);
+    do_test(BASE"_%u", CCACHE_DIR, BASE"_"USERNAME, NULL);
+    do_test("%d/"FILENAME, BASE"_%u", BASE"_"USERNAME"/"FILENAME, NULL);
 }
 END_TEST
 
 START_TEST(test_case_sensitive)
 {
     char *result;
+    char *pubdir;
     int ret;
-    bool private_path = false;
     const char *file_template = BASE"_%u";
     const char *expected_cs = BASE"_TestUser";
     const char *expected_ci = BASE"_testuser";
@@ -513,98 +532,92 @@ START_TEST(test_case_sensitive)
     ret = dp_opt_set_string(kr->krb5_ctx->opts, KRB5_CCACHEDIR, CCACHE_DIR);
     fail_unless(ret == EOK, "Failed to set Ccache dir");
 
-    result = expand_ccname_template(tmp_ctx, kr, file_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, file_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result != NULL, "Cannot expand template [%s].", file_template);
-    fail_unless(strcmp(result, expected_cs) == 0,
+    fail_unless(result && expected_cs && strcmp(result, expected_cs) == 0,
                 "Expansion failed, result [%s], expected [%s].",
-                result, expected_cs);
+                result ? result : "NULL", expected_cs ? expected_cs : "NULL");
 
-    result = expand_ccname_template(tmp_ctx, kr, file_template, true,
-                                    false, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, file_template,
+                                 false, &pubdir, &result);
 
     fail_unless(result != NULL, "Cannot expand template [%s].", file_template);
-    fail_unless(strcmp(result, expected_ci) == 0,
+    fail_unless(result && expected_ci && strcmp(result, expected_ci) == 0,
                 "Expansion failed, result [%s], expected [%s].",
-                result, expected_ci);
+                result ? result : "NULL", expected_ci ? expected_ci : "NULL");
 }
 END_TEST
 
 START_TEST(test_uid)
 {
-    do_test(BASE"_%U", CCACHE_DIR, BASE"_"UID, false);
-    do_test("%d/"FILENAME, BASE"_%U", BASE"_"UID"/"FILENAME, true);
+    do_test(BASE"_%U", CCACHE_DIR, BASE"_"UID, NULL);
+    do_test("%d/"FILENAME, BASE"_%U", BASE"_"UID"/"FILENAME, NULL);
 }
 END_TEST
 
 START_TEST(test_upn)
 {
-    do_test(BASE"_%p", CCACHE_DIR, BASE"_"PRINCIPAL_NAME, false);
-    do_test("%d/"FILENAME, BASE"_%p", BASE"_"PRINCIPAL_NAME"/"FILENAME, true);
+    do_test(BASE"_%p", CCACHE_DIR, BASE"_"PRINCIPAL_NAME, NULL);
+    do_test("%d/"FILENAME, BASE"_%p", BASE"_"PRINCIPAL_NAME"/"FILENAME, NULL);
 }
 END_TEST
 
 START_TEST(test_realm)
 {
-    do_test(BASE"_%r", CCACHE_DIR, BASE"_"REALM, false);
-    do_test("%d/"FILENAME, BASE"_%r", BASE"_"REALM"/"FILENAME, false);
+    do_test(BASE"_%r", CCACHE_DIR, BASE"_"REALM, NULL);
+    do_test("%d/"FILENAME, BASE"_%r", BASE"_"REALM"/"FILENAME, BASE"_"REALM);
 }
 END_TEST
 
 START_TEST(test_home)
 {
-    do_test(BASE"_%h", CCACHE_DIR, BASE"_"HOME_DIRECTORY, false);
-    do_test("%d/"FILENAME, BASE"_%h", BASE"_"HOME_DIRECTORY"/"FILENAME, true);
+    do_test(BASE"_%h", CCACHE_DIR, BASE"_"HOME_DIRECTORY, NULL);
+    do_test("%d/"FILENAME, BASE"_%h", BASE"_"HOME_DIRECTORY"/"FILENAME, NULL);
 }
 END_TEST
 
 START_TEST(test_ccache_dir)
 {
     char *result;
+    char *pubdir;
     int ret;
-    bool private_path = false;
 
-    do_test(BASE"_%d", CCACHE_DIR, BASE"_"CCACHE_DIR, false);
+    do_test(BASE"_%d", CCACHE_DIR, BASE"_"CCACHE_DIR, BASE"_"CCACHE_DIR);
 
     ret = dp_opt_set_string(kr->krb5_ctx->opts, KRB5_CCACHEDIR, BASE"_%d");
     fail_unless(ret == EOK, "Failed to set Ccache dir");
 
-    result = expand_ccname_template(tmp_ctx, kr, "%d/"FILENAME, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, "%d/"FILENAME,
+                                 true, &pubdir, &result);
 
     fail_unless(result == NULL, "Using %%d in ccache dir should fail.");
-    fail_unless(private_path == false,
-                "Unexpected private path, get [%s], expected [%s].",
-                private_path ? "true" : "false", "false");
 }
 END_TEST
 
 START_TEST(test_pid)
 {
     char *result;
+    char *pubdir;
     int ret;
-    bool private_path = false;
 
-    do_test(BASE"_%P", CCACHE_DIR, BASE"_"PID, false);
+    do_test(BASE"_%P", CCACHE_DIR, BASE"_"PID, NULL);
 
     ret = dp_opt_set_string(kr->krb5_ctx->opts, KRB5_CCACHEDIR, BASE"_%P");
     fail_unless(ret == EOK, "Failed to set Ccache dir");
 
-    result = expand_ccname_template(tmp_ctx, kr, "%d/"FILENAME, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, "%d/"FILENAME,
+                                 true, &pubdir, &result);
 
     fail_unless(result == NULL, "Using %%P in ccache dir should fail.");
-    fail_unless(private_path == false,
-                "Unexpected private path, get [%s], expected [%s].",
-                private_path ? "true" : "false", "false");
 }
 END_TEST
 
 START_TEST(test_percent)
 {
-    do_test(BASE"_%%", CCACHE_DIR, BASE"_%", false);
-    do_test("%d/"FILENAME, BASE"_%%", BASE"_%/"FILENAME, false);
+    do_test(BASE"_%%", CCACHE_DIR, BASE"_%", NULL);
+    do_test("%d/"FILENAME, BASE"_%%", BASE"_%/"FILENAME, BASE"_%");
 }
 END_TEST
 
@@ -612,11 +625,11 @@ START_TEST(test_unknow_template)
 {
     const char *test_template = BASE"_%X";
     char *result;
+    char *pubdir;
     int ret;
-    bool private_path = false;
 
-    result = expand_ccname_template(tmp_ctx, kr, test_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, test_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result == NULL, "Unknown template [%s] should fail.",
                 test_template);
@@ -624,14 +637,11 @@ START_TEST(test_unknow_template)
     ret = dp_opt_set_string(kr->krb5_ctx->opts, KRB5_CCACHEDIR, BASE"_%X");
     fail_unless(ret == EOK, "Failed to set Ccache dir");
     test_template = "%d/"FILENAME;
-    result = expand_ccname_template(tmp_ctx, kr, test_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, test_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result == NULL, "Unknown template [%s] should fail.",
                 test_template);
-    fail_unless(private_path == false,
-                "Unexpected private path, get [%s], expected [%s].",
-                private_path ? "true" : "false", "false");
 }
 END_TEST
 
@@ -639,16 +649,14 @@ START_TEST(test_NULL)
 {
     char *test_template = NULL;
     char *result;
-    bool private_path = false;
+    char *pubdir;
+    int ret;
 
-    result = expand_ccname_template(tmp_ctx, kr, test_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, test_template,
+                                 true, &pubdir, &result);
 
-    fail_unless(result == NULL, "Expected NULL as a result for an empty input.",
-                test_template);
-    fail_unless(private_path == false,
-                "Unexpected private path, get [%s], expected [%s].",
-                private_path ? "true" : "false", "false");
+    fail_unless(result == NULL,
+                "Expected NULL as a result for an empty input.");
 }
 END_TEST
 
@@ -656,32 +664,33 @@ START_TEST(test_no_substitution)
 {
     const char *test_template = BASE;
     char *result;
-    bool private_path = false;
+    char *pubdir;
+    int ret;
 
-    result = expand_ccname_template(tmp_ctx, kr, test_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, test_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result != NULL, "Cannot expand template [%s].", test_template);
     fail_unless(strcmp(result, test_template) == 0,
                 "Expansion failed, result [%s], expected [%s].",
                 result, test_template);
-    fail_unless(private_path == false,
-                "Unexpected private path, get [%s], expected [%s].",
-                private_path ? "true" : "false", "false");
+    fail_unless(pubdir == NULL,
+                "Unexpected pubdir, got [%s], expected [NULL].", pubdir);
 }
 END_TEST
 
 START_TEST(test_krb5_style_expansion)
 {
-    char *result;
-    bool private_path = false;
     const char *file_template;
     const char *expected;
+    char *result;
+    char *pubdir;
+    int ret;
 
     file_template = BASE"/%{uid}/%{USERID}/%{euid}/%{username}";
     expected = BASE"/"UID"/"UID"/"UID"/"USERNAME;
-    result = expand_ccname_template(tmp_ctx, kr, file_template, true,
-                                    true, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, file_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result != NULL, "Cannot expand template [%s].", file_template);
     fail_unless(strcmp(result, expected) == 0,
@@ -690,8 +699,8 @@ START_TEST(test_krb5_style_expansion)
 
     file_template = BASE"/%{unknown}";
     expected = BASE"/%{unknown}";
-    result = expand_ccname_template(tmp_ctx, kr, file_template, true,
-                                    false, &private_path);
+    ret = expand_ccname_template(tmp_ctx, kr, file_template,
+                                 true, &pubdir, &result);
 
     fail_unless(result != NULL, "Cannot expand template [%s].", file_template);
     fail_unless(strcmp(result, expected) == 0,
