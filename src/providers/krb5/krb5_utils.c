@@ -168,7 +168,7 @@ done:
 
 char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                              const char *template, bool file_mode,
-                             bool case_sensitive, bool *private_path)
+                             bool case_sensitive)
 {
     char *copy;
     char *p;
@@ -181,8 +181,6 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
     TALLOC_CTX *tmp_ctx = NULL;
     char action;
     bool rerun;
-
-    *private_path = false;
 
     if (template == NULL) {
         DEBUG(1, ("Missing template.\n"));
@@ -234,7 +232,6 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
 
                 result = talloc_asprintf_append(result, "%s%s", p,
                                                 name);
-                if (!file_mode) *private_path = true;
                 break;
             case 'U':
                 if (kr->uid <= 0) {
@@ -244,7 +241,6 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                 }
                 result = talloc_asprintf_append(result, "%s%d", p,
                                                 kr->uid);
-                if (!file_mode) *private_path = true;
                 break;
             case 'p':
                 if (kr->upn == NULL) {
@@ -253,7 +249,6 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                     goto done;
                 }
                 result = talloc_asprintf_append(result, "%s%s", p, kr->upn);
-                if (!file_mode) *private_path = true;
                 break;
             case '%':
                 result = talloc_asprintf_append(result, "%s%%", p);
@@ -273,7 +268,6 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                     goto done;
                 }
                 result = talloc_asprintf_append(result, "%s%s", p, kr->homedir);
-                if (!file_mode) *private_path = true;
                 break;
             case 'd':
                 if (file_mode) {
@@ -285,8 +279,7 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
                     }
 
                     dummy = expand_ccname_template(tmp_ctx, kr, cache_dir_tmpl,
-                                                   false, case_sensitive,
-                                                   private_path);
+                                                   false, case_sensitive);
                     if (dummy == NULL) {
                         DEBUG(1, ("Expanding credential cache directory "
                                   "template failed.\n"));
@@ -379,41 +372,27 @@ done:
     return res;
 }
 
-static errno_t check_parent_stat(bool private_path, struct stat *parent_stat,
+static errno_t check_parent_stat(struct stat *parent_stat,
                                  uid_t uid, gid_t gid)
 {
-    if (private_path) {
-        if (!((parent_stat->st_uid == 0 && parent_stat->st_gid == 0) ||
-               parent_stat->st_uid == uid)) {
-            DEBUG(1, ("Private directory can only be created below a "
-                      "directory belonging to root or to [%d][%d].\n",
-                      uid, gid));
-            return EINVAL;
-        }
+    if (!((parent_stat->st_uid == 0 && parent_stat->st_gid == 0) ||
+           parent_stat->st_uid == uid)) {
+        DEBUG(1, ("Private directory can only be created below a "
+                  "directory belonging to root or to [%d][%d].\n",
+                  uid, gid));
+        return EINVAL;
+    }
 
-        if (parent_stat->st_uid == uid) {
-            if (!(parent_stat->st_mode & S_IXUSR)) {
-                DEBUG(1, ("Parent directory does have the search bit set for "
-                          "the owner.\n"));
-                return EINVAL;
-            }
-        } else {
-            if (!(parent_stat->st_mode & S_IXOTH)) {
-                DEBUG(1, ("Parent directory does have the search bit set for "
-                        "others.\n"));
-                return EINVAL;
-            }
+    if (parent_stat->st_uid == uid) {
+        if (!(parent_stat->st_mode & S_IXUSR)) {
+            DEBUG(1, ("Parent directory does not have the search bit set for "
+                      "the owner.\n"));
+            return EINVAL;
         }
     } else {
-        if (parent_stat->st_uid != 0 || parent_stat->st_gid != 0) {
-            DEBUG(1, ("Public directory cannot be created below a user "
-                      "directory.\n"));
-            return EINVAL;
-        }
-
         if (!(parent_stat->st_mode & S_IXOTH)) {
-            DEBUG(1, ("Parent directory does have the search bit set for "
-                      "others.\n"));
+            DEBUG(1, ("Parent directory does not have the search bit set for "
+                    "others.\n"));
             return EINVAL;
         }
     }
@@ -524,7 +503,7 @@ check_ccache_re(const char *filename, pcre *illegal_re)
 
 errno_t
 create_ccache_dir(const char *ccdirname, pcre *illegal_re,
-                  uid_t uid, gid_t gid, bool private_path)
+                  uid_t uid, gid_t gid)
 {
     int ret = EFAULT;
     struct stat parent_stat;
@@ -563,27 +542,17 @@ create_ccache_dir(const char *ccdirname, pcre *illegal_re,
         goto done;
     }
 
-    ret = check_parent_stat(private_path, &parent_stat, uid, gid);
+    ret = check_parent_stat(&parent_stat, uid, gid);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE,
-              ("check_parent_stat failed for %s directory [%s].\n",
-               private_path ? "private" : "public", ccdirname));
+              ("check_parent_stat failed for directory [%s].\n", ccdirname));
         goto done;
     }
 
     DLIST_FOR_EACH(li, missing_parents) {
         DEBUG(SSSDBG_TRACE_INTERNAL,
               ("Creating directory [%s].\n", li->s));
-        if (li->next == NULL) {
-            new_dir_mode = private_path ? 0700 : 01777;
-        } else {
-            if (private_path &&
-                parent_stat.st_uid == uid && parent_stat.st_gid == gid) {
-                new_dir_mode = 0700;
-            } else {
-                new_dir_mode = 0755;
-            }
-        }
+        new_dir_mode = 0700;
 
         old_umask = umask(0000);
         ret = mkdir(li->s, new_dir_mode);
@@ -595,16 +564,12 @@ create_ccache_dir(const char *ccdirname, pcre *illegal_re,
                    strerror(ret)));
             goto done;
         }
-        if (private_path &&
-            ((parent_stat.st_uid == uid && parent_stat.st_gid == gid) ||
-             li->next == NULL)) {
-            ret = chown(li->s, uid, gid);
-            if (ret != EOK) {
-                ret = errno;
-                DEBUG(SSSDBG_MINOR_FAILURE,
-                      ("chown failed [%d][%s].\n", ret, strerror(ret)));
-                goto done;
-            }
+        ret = chown(li->s, uid, gid);
+        if (ret != EOK) {
+            ret = errno;
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  ("chown failed [%d][%s].\n", ret, strerror(ret)));
+            goto done;
         }
     }
 
@@ -723,7 +688,7 @@ done:
 }
 
 errno_t sss_krb5_precreate_ccache(const char *ccname, pcre *illegal_re,
-                                  uid_t uid, gid_t gid, bool private_path)
+                                  uid_t uid, gid_t gid)
 {
     TALLOC_CTX *tmp_ctx = NULL;
     const char *filename;
@@ -767,7 +732,7 @@ errno_t sss_krb5_precreate_ccache(const char *ccname, pcre *illegal_re,
         *end = '\0';
     } while (*(end+1) == '\0');
 
-    ret = create_ccache_dir(ccdirname, illegal_re, uid, gid, private_path);
+    ret = create_ccache_dir(ccdirname, illegal_re, uid, gid);
 done:
     talloc_free(tmp_ctx);
     return ret;
