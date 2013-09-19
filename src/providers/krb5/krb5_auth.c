@@ -292,6 +292,7 @@ static errno_t krb5_auth_prepare_ccache_name(struct krb5child_req *kr,
                                              struct be_ctx *be_ctx)
 {
     const char *ccname_template;
+    const char *realm;
     bool private_path = false;
     errno_t ret;
 
@@ -299,38 +300,66 @@ static errno_t krb5_auth_prepare_ccache_name(struct krb5child_req *kr,
         kr->is_offline = be_is_offline(be_ctx);
     }
 
-    /* The ccache file should be (re)created if one of the following conditions
-     * is true:
-     * - it doesn't exist (kr->ccname == NULL)
-     * - the backend is online and the current ccache file is not used, i.e
-     *   the related user is currently not logged in and it is not a renewal
-     *   request
-     *   (!kr->is_offline && !kr->active_ccache && kr->pd->cmd != SSS_CMD_RENEW)
-     * - the backend is offline and the current cache file not used and
-     *   it does not contain a valid tgt
-     *   (kr->is_offline && !kr->active_ccache && !kr->valid_tgt)
-     */
-    if (kr->ccname == NULL ||
-        (kr->is_offline && !kr->active_ccache && !kr->valid_tgt) ||
-        (!kr->is_offline && !kr->active_ccache && kr->pd->cmd != SSS_CMD_RENEW)) {
-            DEBUG(9, ("Recreating  ccache file.\n"));
-            ccname_template = dp_opt_get_cstring(kr->krb5_ctx->opts,
-                                                 KRB5_CCNAME_TMPL);
-            kr->ccname = expand_ccname_template(kr, kr, ccname_template, true,
-                                                be_ctx->domain->case_sensitive,
-                                                &private_path);
-            if (kr->ccname == NULL) {
-                DEBUG(1, ("expand_ccname_template failed.\n"));
-                return ENOMEM;
-            }
+    ccname_template = dp_opt_get_cstring(kr->krb5_ctx->opts, KRB5_CCNAME_TMPL);
+    kr->ccname = expand_ccname_template(kr, kr, ccname_template, true,
+                                        be_ctx->domain->case_sensitive,
+                                        &private_path);
+    if (kr->ccname == NULL) {
+        DEBUG(1, ("expand_ccname_template failed.\n"));
+        return ENOMEM;
+    }
 
-            ret = sss_krb5_precreate_ccache(kr->ccname,
-                                            kr->krb5_ctx->illegal_path_re,
-                                            kr->uid, kr->gid, private_path);
-            if (ret != EOK) {
-                DEBUG(SSSDBG_OP_FAILURE, ("ccache creation failed.\n"));
-                return ret;
+    if (kr->old_ccname) {
+        if (strcmp(kr->ccname, kr->old_ccname) != 0) {
+            /* it makes sense to test only if old and new ccache name are
+             * different, otherwise we are going to use the old one anyways.
+             * NOTE: this check properly treats randomized names as different
+             * because the old one has an actual random component while
+             * kr->ccname still has the template form so they will not match
+             */
+            realm = dp_opt_get_cstring(kr->krb5_ctx->opts, KRB5_REALM);
+            ret = check_old_ccache(kr->old_ccname, kr, realm,
+                                   &kr->active_ccache, &kr->valid_tgt);
+            if (ret == ENOENT) {
+                DEBUG(SSSDBG_FUNC_DATA,
+                      ("Ignoring ccache attribute [%s], because it doesn't"
+                       "exist.\n", kr->old_ccname));
+                kr->old_ccname = NULL;
+            } else if (ret != EOK) {
+                DEBUG(SSSDBG_CRIT_FAILURE,
+                      ("check_old_ccache failed with error number %d, "
+                       "ignoring error.\n", ret));
             }
+        } else {
+            /* IMPORTANT: unset old_ccname or it may trigger a removal of
+             * the 'old' ccache later, but this is not the 'old' one as it
+             * is identical to the new one
+             */
+            kr->old_ccname = NULL;
+        }
+    } else {
+        kr->active_ccache = false;
+        kr->valid_tgt = false;
+        DEBUG(4, ("No old ccache file for user [%s] found.\n", kr->pd->user));
+    }
+    if (kr->old_ccname && kr->active_ccache) {
+        /* ok the old ccache file name is valid and in use let's use it
+         * instead of the template */
+        kr->ccname = kr->old_ccname;
+        kr->old_ccname = NULL;
+    }
+    DEBUG(9, ("Ccache_file is [%s] and is %s active and TGT is %s valid.\n",
+              kr->ccname,
+              kr->active_ccache ? "" : "not",
+              kr->valid_tgt ? "" : "not"));
+
+    /* always recreate the ccache directory path */
+    ret = sss_krb5_precreate_ccache(kr->ccname,
+                                    kr->krb5_ctx->illegal_path_re,
+                                    kr->uid, kr->gid, private_path);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, ("ccache precreation failed.\n"));
+        return ret;
     }
 
     return EOK;
@@ -596,39 +625,12 @@ struct tevent_req *krb5_auth_send(TALLOC_CTX *mem_ctx,
                                                   SYSDB_CCACHE_FILE,
                                                   NULL);
         if (ccache_file != NULL) {
-            ret = check_old_ccache(ccache_file, kr, realm,
-                                   &kr->active_ccache,
-                                   &kr->valid_tgt);
-            if (ret == ENOENT) {
-                DEBUG(SSSDBG_FUNC_DATA,
-                      ("Ignoring ccache attribute [%s], because it doesn't"
-                       "exist.\n", ccache_file));
-                ccache_file = NULL;
-            } else if (ret != EOK) {
-                DEBUG(SSSDBG_CRIT_FAILURE,
-                      ("check_if_ccache_file_is_used failed.\n"));
-                ccache_file = NULL;
-            }
-        } else {
-            kr->active_ccache = false;
-            kr->valid_tgt = false;
-            DEBUG(4, ("No ccache file for user [%s] found.\n", pd->user));
-        }
-        DEBUG(9, ("Ccache_file is [%s] and is %s active and TGT is %s valid.\n",
-                  ccache_file ? ccache_file : "not set",
-                  kr->active_ccache ? "" : "not",
-                  kr->valid_tgt ? "" : "not"));
-        if (ccache_file != NULL) {
-            kr->ccname = ccache_file;
             kr->old_ccname = talloc_strdup(kr, ccache_file);
             if (kr->old_ccname == NULL) {
                 DEBUG(1, ("talloc_strdup failed.\n"));
                 ret = ENOMEM;
                 goto done;
             }
-        } else {
-            kr->ccname = NULL;
-            kr->old_ccname = NULL;
         }
         break;
 
@@ -740,7 +742,6 @@ static void krb5_auth_resolve_done(struct tevent_req *subreq)
         if (kr->valid_tgt || kr->active_ccache) {
             DEBUG(9, ("Valid TGT available or "
                       "ccache file is already in use.\n"));
-            kr->ccname = kr->old_ccname;
             msg = talloc_asprintf(kr->pd,
                                   "%s=%s", CCACHE_ENV_NAME, kr->ccname);
             if (msg == NULL) {
