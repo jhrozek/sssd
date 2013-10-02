@@ -2204,6 +2204,8 @@ static int client_registration(DBusMessage *message,
         becli->bectx->ssh_cli = becli;
     } else if (strcasecmp(cli_name, "PAC") == 0) {
         becli->bectx->pac_cli = becli;
+    } else if (strcasecmp(cli_name, "InfoPipe") == 0) {
+        becli->bectx->ifp_cli = becli;
     } else {
         DEBUG(1, ("Unknown client! [%s]\n", cli_name));
     }
