@@ -11,11 +11,12 @@ PKG_CHECK_MODULES([SSS_IDMAP], [sss_idmap sss_nss_idmap])
 
 # Checks for programs.
 AC_PROG_CC
+AC_PROG_CC_C99
 
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([limits.h stdlib.h string.h syslog.h cifsidmap.h])
+AC_CHECK_HEADERS([limits.h stdlib.h string.h cifsidmap.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T

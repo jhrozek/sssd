@@ -18,19 +18,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <limits.h>
-
-#include <sss_idmap.h>
-#include <sss_nss_idmap.h>
-#include <cifsidmap.h>
-
-#include <syslog.h>
-
-#define WORLD_SID "S-1-1-0"
-
 /* TODO: Support well known SIDs as in samba's
  *        - librpc/idl/security.idl or
  *        - source4/rpc_server/lsa/lsa_lookup.c?
@@ -41,6 +28,27 @@
  *         Groups: S-1-22-2-%GID
  */
 
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <limits.h>
+#include <stdarg.h>
+
+#include <sss_idmap.h>
+#include <sss_nss_idmap.h>
+#include <cifsidmap.h>
+
+#define WORLD_SID "S-1-1-0"
+
+#ifdef DEBUG
+#include <syslog.h>
+#define debug(str, ...) \
+	syslog(0, "%s: " str "\n", \
+	       __FUNCTION__, ##__VA_ARGS__ )
+#else
+#define debug(...) do { } while(0)
+#endif
+
 struct sssd_ctx {
     struct sss_idmap_ctx *idmap;
     const char **errmsg;
@@ -49,7 +57,7 @@ struct sssd_ctx {
 #define ctx_set_error(ctx, error) \
     do { \
 	*ctx->errmsg = error; \
-        syslog(0, "%s: %s\n", __FUNCTION__, error ? error : ""); \
+        debug("%s", error ? error : ""); \
     } while (0);
      
 int
@@ -81,7 +89,7 @@ cifs_idmap_exit_plugin(void *handle)
 {
     struct sssd_ctx *ctx = handle;
 
-    syslog(0, "%s\n", __FUNCTION__);
+    debug("exit");
 
     sss_idmap_free(ctx->idmap);
 
@@ -98,8 +106,6 @@ int cifs_idmap_sid_to_str(void *handle, const struct cifs_sid *sid,
     enum sss_id_type id_type;
     int err;
 
-    syslog(0, "%s\n", __FUNCTION__);
-
     idmap_err = sss_idmap_bin_sid_to_sid(ctx->idmap,
                                          (uint8_t *) sid, sizeof(*sid),
                                          &str_sid);
@@ -109,7 +115,7 @@ int cifs_idmap_sid_to_str(void *handle, const struct cifs_sid *sid,
         return -1;
     }
 
-    syslog(0, "%s: str_sid: %s\n", __FUNCTION__, str_sid);
+    debug("sid: %s", str_sid);
 
     if (strcmp(str_sid, WORLD_SID) == 0) {
         *name = strdup("\\Everyone");
@@ -127,7 +133,7 @@ int cifs_idmap_sid_to_str(void *handle, const struct cifs_sid *sid,
         return -err;
     }
 
-    syslog(0, "%s: name: %s\n", __FUNCTION__, *name);
+    debug("name: %s", *name);
 
     return 0;
 }
@@ -145,10 +151,10 @@ int cifs_idmap_str_to_sid(void *handle, const char *name,
     size_t length;
     int success = 0;
 
-    syslog(0, "%s: %s\n", __FUNCTION__, name);
+    debug("%s", name);
 
     if (strncmp("S-", name, 2) == 0) {
-        syslog(0, "%s: name is sid string representation\n", __FUNCTION__);
+        debug("%s: name is sid string representation\n", __FUNCTION__);
 	str_sid = strdup(name);
     } else {
         err = sss_nss_getsidbyname(name, &str_sid, &id_type);
@@ -168,7 +174,7 @@ int cifs_idmap_str_to_sid(void *handle, const char *name,
         goto out;
     }
     if (length > sizeof(struct cifs_sid)) {
-        syslog(0, "%s: length: %zd\n", __FUNCTION__, length);
+        debug("length: %zd", length);
         ctx_set_error(ctx, "incompatible internal sid length\n");
         success = -1;
         goto out;
@@ -194,7 +200,7 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
     int success = -1;
     int i;
 
-    syslog(0, "%s: num: %zd\n", __FUNCTION__, num);
+    debug("num: %zd", num);
 
     if (num > UINT_MAX) {
          ctx_set_error(ctx, "num is too large.");
@@ -231,9 +237,9 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
                 continue;
 #endif
             }
-    	    syslog(0, "%s: setting uid of %s to %d\n", __FUNCTION__, str_sid, cuxid[i].id.uid);
+    	    debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
         }
-    	syslog(0, "%s: str_sid: %s, id: %d\n", __FUNCTION__, str_sid, cuxid[i].id.uid);
+    	debug("str_sid: %s, id: %d\n", str_sid, cuxid[i].id.uid);
                         
         success = 0;
 
@@ -266,7 +272,7 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
     int success = -1;
     int i;
 
-    syslog(0, "%s\n", __FUNCTION__);
+    debug("num ids: %zd", num);
 
     for (i = 0; i < num; ++i) {
         char *str_sid;
@@ -289,7 +295,7 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
             continue;
         }
         if (length > sizeof(struct cifs_sid)) {
-            syslog(0, "%s: length: %zd\n", __FUNCTION__, length);
+            debug("length: %zd", length);
             ctx_set_error(ctx, "incompatible internal sid length\n");
             success = -1;
             continue;
