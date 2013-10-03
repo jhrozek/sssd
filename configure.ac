@@ -7,7 +7,13 @@ AM_SILENT_RULES([yes])
 LT_INIT
 AC_CONFIG_MACRO_DIR([m4])
 
+PKG_PROG_PKG_CONFIG()
 PKG_CHECK_MODULES([SSS_IDMAP], [sss_idmap sss_nss_idmap])
+
+if test "x$GCC" = "xyes"; then
+	GCC_CFLAGS="-Wall -Wextra -Wno-unused-parameter -g -Wstrict-prototypes"
+fi
+AC_SUBST(GCC_CFLAGS)
 
 # Checks for programs.
 AC_PROG_CC

@@ -198,7 +198,7 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
     enum idmap_error_code idmap_err;
     int err;
     int success = -1;
-    int i;
+    size_t i;
 
     debug("num: %zd", num);
 
@@ -270,7 +270,7 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
     enum idmap_error_code idmap_err;
     int err;
     int success = -1;
-    int i;
+    size_t i;
 
     debug("num ids: %zd", num);
 
