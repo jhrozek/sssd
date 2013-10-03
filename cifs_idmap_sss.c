@@ -154,7 +154,7 @@ int cifs_idmap_str_to_sid(void *handle, const char *name,
     debug("%s", name);
 
     if (strncmp("S-", name, 2) == 0) {
-        debug("%s: name is sid string representation\n", __FUNCTION__);
+        debug("%s: name is sid string representation", __FUNCTION__);
 	str_sid = strdup(name);
     } else {
         err = sss_nss_getsidbyname(name, &str_sid, &id_type);
@@ -175,7 +175,7 @@ int cifs_idmap_str_to_sid(void *handle, const char *name,
     }
     if (length > sizeof(struct cifs_sid)) {
         debug("length: %zd", length);
-        ctx_set_error(ctx, "incompatible internal sid length\n");
+        ctx_set_error(ctx, "incompatible internal sid length");
         success = -1;
         goto out;
     }
@@ -239,7 +239,7 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
             }
     	    debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
         }
-    	debug("str_sid: %s, id: %d\n", str_sid, cuxid[i].id.uid);
+    	debug("str_sid: %s, id: %d", str_sid, cuxid[i].id.uid);
                         
         success = 0;
 
@@ -296,7 +296,7 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
         }
         if (length > sizeof(struct cifs_sid)) {
             debug("length: %zd", length);
-            ctx_set_error(ctx, "incompatible internal sid length\n");
+            ctx_set_error(ctx, "incompatible internal sid length");
             success = -1;
             continue;
         }
