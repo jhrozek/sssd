@@ -3,8 +3,8 @@ AC_INIT([cifs-idmap-sss-plugin], [0.1], [benjaminfranzke@googlemail.com])
 AC_CONFIG_SRCDIR([cifs_idmap_sss.c])
 
 AM_INIT_AUTOMAKE
+AM_SILENT_RULES([yes])
 LT_INIT
-
 AC_CONFIG_MACRO_DIR([m4])
 
 PKG_CHECK_MODULES([SSS_IDMAP], [sss_idmap sss_nss_idmap])
