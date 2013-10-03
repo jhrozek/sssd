@@ -164,7 +164,7 @@ int cifs_idmap_str_to_sid(void *handle, const char *name,
         }
     }
 
-    // TODO: Map name==Everyone to WOLD_SID | 
+    /* TODO: Map name==Everyone to WOLD_SID? */
 
     idmap_err = sss_idmap_sid_to_bin_sid(ctx->idmap,
                                          str_sid, &bin_sid, &length);
@@ -230,12 +230,8 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
                 cuxid[i].id.uid = 0;
                 cuxid[i].type = CIFS_UXID_TYPE_GID;
             } else {
-#if 0
-                cuxid[i].id.uid = 99;
-                cuxid[i].type = CIFS_UXID_TYPE_BOTH;
-#else
+                /* FIXME: Make this generic and handle all possible ids */
                 continue;
-#endif
             }
     	    debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
         }
