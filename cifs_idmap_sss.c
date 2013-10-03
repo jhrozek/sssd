@@ -274,6 +274,11 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
 
     debug("num ids: %zd", num);
 
+    if (num > UINT_MAX) {
+         ctx_set_error(ctx, "num is too large.");
+         return -EINVAL;
+    }
+
     for (i = 0; i < num; ++i) {
         char *str_sid;
         enum sss_id_type id_type;
