@@ -1,3 +1,5 @@
+ACLOCAL_AMFLAGS = -I m4
+
 lib_LTLIBRARIES = libcifs_idmap_sss.la
 libcifs_idmap_sss_la_SOURCES = cifs_idmap_sss.c
 libcifs_idmap_sss_la_CFLAGS = $(SSS_IDMAP_CFLAGS)
