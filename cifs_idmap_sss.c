@@ -43,8 +43,8 @@
 #ifdef DEBUG
 #include <syslog.h>
 #define debug(str, ...) \
-	syslog(0, "%s: " str "\n", \
-	       __FUNCTION__, ##__VA_ARGS__ )
+    syslog(0, "%s: " str "\n", \
+           __FUNCTION__, ##__VA_ARGS__)
 #else
 #define debug(...) do { } while(0)
 #endif
@@ -56,16 +56,16 @@ struct sssd_ctx {
 
 #define ctx_set_error(ctx, error) \
     do { \
-	*ctx->errmsg = error; \
+        *ctx->errmsg = error; \
         debug("%s", error ? error : ""); \
     } while (0);
-     
+
 int
 cifs_idmap_init_plugin(void **handle, const char **errmsg)
 {
     struct sssd_ctx *ctx;
     enum idmap_error_code err;
-    
+
     ctx = malloc(sizeof *ctx);
     if (!ctx) {
         *errmsg = "Failed to allocate context";
@@ -119,7 +119,7 @@ int cifs_idmap_sid_to_str(void *handle, const struct cifs_sid *sid,
 
     if (strcmp(str_sid, WORLD_SID) == 0) {
         *name = strdup("\\Everyone");
-	if (!*name) {
+        if (!*name) {
             ctx_set_error(ctx, strerror(ENOMEM));
             return -ENOMEM;
         }
@@ -155,7 +155,7 @@ int cifs_idmap_str_to_sid(void *handle, const char *name,
 
     if (strncmp("S-", name, 2) == 0) {
         debug("%s: name is sid string representation", __FUNCTION__);
-	str_sid = strdup(name);
+        str_sid = strdup(name);
     } else {
         err = sss_nss_getsidbyname(name, &str_sid, &id_type);
         if (err != 0)  {
@@ -203,8 +203,8 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
     debug("num: %zd", num);
 
     if (num > UINT_MAX) {
-         ctx_set_error(ctx, "num is too large.");
-         return -EINVAL;
+        ctx_set_error(ctx, "num is too large.");
+        return -EINVAL;
     }
 
     for (i = 0; i < num; ++i) {
@@ -217,7 +217,7 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
             ctx_set_error(ctx, idmap_error_string(idmap_err));
             continue;
         }
-	
+
 
         err = sss_nss_getidbysid(str_sid, (uint32_t *)&cuxid[i].id.uid, &id_type);
         if (err != 0)  {
@@ -233,10 +233,10 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
                 /* FIXME: Make this generic and handle all possible ids */
                 continue;
             }
-    	    debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
+            debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
         }
-    	debug("str_sid: %s, id: %d", str_sid, cuxid[i].id.uid);
-                        
+        debug("str_sid: %s, id: %d", str_sid, cuxid[i].id.uid);
+
         success = 0;
 
         switch (id_type) {
@@ -271,8 +271,8 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
     debug("num ids: %zd", num);
 
     if (num > UINT_MAX) {
-         ctx_set_error(ctx, "num is too large.");
-         return -EINVAL;
+        ctx_set_error(ctx, "num is too large.");
+        return -EINVAL;
     }
 
     for (i = 0; i < num; ++i) {
@@ -287,7 +287,7 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
             sid[i].revision = 0;
             continue;
         }
-        
+
         idmap_err = sss_idmap_sid_to_bin_sid(ctx->idmap, str_sid, &bin_sid, &length);
         free(str_sid);
         if (idmap_err != IDMAP_SUCCESS) {
@@ -304,7 +304,7 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
 
         memcpy(&sid[i], bin_sid, sizeof(sid[i]));
         free(bin_sid);
-                        
+
         success = 0;
     }
 
