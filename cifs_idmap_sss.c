@@ -134,6 +134,8 @@ int cifs_idmap_sid_to_str(void *handle, const struct cifs_sid *sid,
         return -err;
     }
 
+    /* FIXME: Map Samba Unix SIDs? (sid->id and use getpwuid)? */
+
     debug("name: %s", *name);
 
     return 0;
@@ -247,7 +249,11 @@ sss_sid_to_id(struct sssd_ctx *ctx, const char *sid, struct cifs_uxid *cuxid)
     return 0;
 }
 
-
+/**
+ * cifs_idmap_sids_to_ids - convert struct cifs_sids to struct cifs_uxids
+ * usecase: mount.cifs -o sec=krb5,multiuser,cifsacl,nounix 
+ * test: ls -n on mounted share
+ */
 int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
                            const size_t num, struct cifs_uxid *cuxid)
 {
@@ -315,6 +321,8 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
         if (err != 0)  {
             ctx_set_error(ctx, strerror(err));
             sid[i].revision = 0;
+            /* FIXME: would it be safe to map *any* uid/gids unknown by sssd to
+                      SAMBA's UNIX SIDs? */
             continue;
         }
 
