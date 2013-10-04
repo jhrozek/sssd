@@ -141,55 +141,65 @@ int cifs_idmap_sid_to_str(void *handle, const struct cifs_sid *sid,
     return 0;
 }
 
+static int
+sid_to_cifs_sid(struct sssd_ctx *ctx, const char *sid, struct cifs_sid *csid)
+{
+    uint8_t *bin_sid = NULL;
+    enum idmap_error_code idmap_err;
+    size_t length;
+
+    idmap_err = sss_idmap_sid_to_bin_sid(ctx->idmap,
+                                         sid, &bin_sid, &length);
+    if (idmap_err != IDMAP_SUCCESS) {
+        ctx_set_error(ctx, idmap_error_string(idmap_err));
+        return -1;
+    }
+    if (length > sizeof(struct cifs_sid)) {
+        debug("length: %zd", length);
+        ctx_set_error(ctx, "incompatible internal sid length");
+        free(bin_sid);
+        return -1;
+    }
+
+    memcpy(csid, bin_sid, length);
+    free(bin_sid);
+
+    return 0;
+}
+
 /* Test with setcifsacl -a */
 int cifs_idmap_str_to_sid(void *handle, const char *name,
-                          struct cifs_sid *sid)
+                          struct cifs_sid *csid)
 {
     struct sssd_ctx *ctx = handle;
-    enum idmap_error_code idmap_err;
     int err;
     enum sss_id_type id_type;
-    char *str_sid = NULL;
-    uint8_t *bin_sid = NULL;
-    size_t length;
+    const char *str_sid;
+    char *sss_sid = NULL;
     int success = 0;
 
     debug("%s", name);
 
     if (strncmp("S-", name, 2) == 0) {
         debug("%s: name is sid string representation", __FUNCTION__);
-        str_sid = strdup(name);
+        str_sid = name;
+        if (!str_sid) {
+        }
     } else {
-        err = sss_nss_getsidbyname(name, &str_sid, &id_type);
+        err = sss_nss_getsidbyname(name, &sss_sid, &id_type);
         if (err != 0)  {
             ctx_set_error(ctx, strerror(err));
+            /* TODO: Map name==Everyone to WOLD_SID? */
             return -err;
         }
+        str_sid = sss_sid;
     }
 
-    /* TODO: Map name==Everyone to WOLD_SID? */
-
-    idmap_err = sss_idmap_sid_to_bin_sid(ctx->idmap,
-                                         str_sid, &bin_sid, &length);
-    if (idmap_err != IDMAP_SUCCESS) {
-        ctx_set_error(ctx, idmap_error_string(idmap_err));
+    if (sid_to_cifs_sid(ctx, str_sid, csid) != 0)
         success = -1;
-        goto out;
-    }
-    if (length > sizeof(struct cifs_sid)) {
-        debug("length: %zd", length);
-        ctx_set_error(ctx, "incompatible internal sid length");
-        success = -1;
-        goto out;
-    }
 
-    memcpy(sid, bin_sid, length);
-
-out:
-    if (str_sid) 
-        free(str_sid);
-    if (bin_sid)
-        free(bin_sid);
+    if (sss_sid) 
+        free(sss_sid);
 
     return success;
 }
@@ -205,16 +215,16 @@ samba_unix_sid_to_id(const char *sid, struct cifs_uxid *cuxid)
         return -1;
 
     switch (type) {
-        case 1:
-            cuxid->type = CIFS_UXID_TYPE_UID;
-            cuxid->id.uid = id;
-            break;
-        case 2:
-            cuxid->type = CIFS_UXID_TYPE_GID;
-            cuxid->id.gid = id;
-        default:
-            cuxid->type = CIFS_UXID_TYPE_UNKNOWN;
-            return -1;
+    case 1:
+        cuxid->type = CIFS_UXID_TYPE_UID;
+        cuxid->id.uid = id;
+        break;
+    case 2:
+        cuxid->type = CIFS_UXID_TYPE_GID;
+        cuxid->id.gid = id;
+    default:
+        cuxid->type = CIFS_UXID_TYPE_UNKNOWN;
+        return -1;
     }
 
     return 0;
@@ -278,12 +288,12 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
             ctx_set_error(ctx, idmap_error_string(idmap_err));
             continue;
         }
-        
+
         cuxid[i].type = CIFS_UXID_TYPE_UNKNOWN;
 
         if (sss_sid_to_id(ctx, str_sid, &cuxid[i]) == 0 || 
             samba_unix_sid_to_id(str_sid, &cuxid[i]) == 0) {
-       
+
             debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
             success = 0;
         }
@@ -299,9 +309,9 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
                            const size_t num, struct cifs_sid *sid)
 {
     struct sssd_ctx *ctx = handle;
-    enum idmap_error_code idmap_err;
-    int err;
-    int success = -1;
+    int err, success = -1;
+    char *str_sid;
+    enum sss_id_type id_type;
     size_t i;
 
     debug("num ids: %zd", num);
@@ -312,38 +322,21 @@ int cifs_idmap_ids_to_sids(void *handle, const struct cifs_uxid *cuxid,
     }
 
     for (i = 0; i < num; ++i) {
-        char *str_sid;
-        enum sss_id_type id_type;
-        uint8_t *bin_sid = NULL;
-        size_t length;
 
         err = sss_nss_getsidbyid((uint32_t)cuxid[i].id.uid, &str_sid, &id_type);
         if (err != 0)  {
             ctx_set_error(ctx, strerror(err));
             sid[i].revision = 0;
             /* FIXME: would it be safe to map *any* uid/gids unknown by sssd to
-                      SAMBA's UNIX SIDs? */
+               SAMBA's UNIX SIDs? */
             continue;
         }
 
-        idmap_err = sss_idmap_sid_to_bin_sid(ctx->idmap, str_sid, &bin_sid, &length);
-        free(str_sid);
-        if (idmap_err != IDMAP_SUCCESS) {
-            ctx_set_error(ctx, idmap_error_string(idmap_err));
+        if (sid_to_cifs_sid(ctx, str_sid, sid) == 0)
+            success = 0;
+        else
             sid[i].revision = 0;
-            continue;
-        }
-        if (length > sizeof(struct cifs_sid)) {
-            debug("length: %zd", length);
-            ctx_set_error(ctx, "incompatible internal sid length");
-            success = -1;
-            continue;
-        }
-
-        memcpy(&sid[i], bin_sid, sizeof(sid[i]));
-        free(bin_sid);
-
-        success = 0;
+        free(str_sid);
     }
 
     return success;
