@@ -28,6 +28,7 @@
  *         Groups: S-1-22-2-%GID
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -191,14 +192,70 @@ out:
     return success;
 }
 
+static int
+samba_unix_sid_to_id(const char *sid, struct cifs_uxid *cuxid)
+{
+    id_t id;
+    uint8_t type;
+
+    debug("scanf: %d", sscanf(sid, "S-1-22-%hhu-%u", &type, &id));
+    if (sscanf(sid, "S-1-22-%hhu-%u", &type, &id) != 2)
+        return -1;
+
+    switch (type) {
+        case 1:
+            cuxid->type = CIFS_UXID_TYPE_UID;
+            cuxid->id.uid = id;
+            break;
+        case 2:
+            cuxid->type = CIFS_UXID_TYPE_GID;
+            cuxid->id.gid = id;
+        default:
+            cuxid->type = CIFS_UXID_TYPE_UNKNOWN;
+            return -1;
+    }
+
+    return 0;
+}
+
+static int
+sss_sid_to_id(struct sssd_ctx *ctx, const char *sid, struct cifs_uxid *cuxid)
+{
+    int err;
+    enum sss_id_type id_type;
+
+    err = sss_nss_getidbysid(sid, (uint32_t *)&cuxid->id.uid, &id_type);
+    if (err != 0)  {
+        ctx_set_error(ctx, strerror(err));
+        return -1;
+    }
+
+    switch (id_type) {
+    case SSS_ID_TYPE_UID:
+        cuxid->type = CIFS_UXID_TYPE_UID;
+        break;
+    case SSS_ID_TYPE_GID:
+        cuxid->type = CIFS_UXID_TYPE_GID;
+        break;
+    case SSS_ID_TYPE_BOTH:
+        cuxid->type = CIFS_UXID_TYPE_BOTH;
+        break;
+    case SSS_ID_TYPE_NOT_SPECIFIED:
+        return -1;
+    }
+
+    return 0;
+}
+
+
 int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
                            const size_t num, struct cifs_uxid *cuxid)
 {
     struct sssd_ctx *ctx = handle;
     enum idmap_error_code idmap_err;
-    int err;
     int success = -1;
     size_t i;
+    char *str_sid;
 
     debug("num: %zd", num);
 
@@ -208,8 +265,6 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
     }
 
     for (i = 0; i < num; ++i) {
-        char *str_sid;
-        enum sss_id_type id_type;
 
         idmap_err = sss_idmap_bin_sid_to_sid(ctx->idmap, (uint8_t *) &sid[i],
                                              sizeof(sid[i]), &str_sid);
@@ -217,42 +272,17 @@ int cifs_idmap_sids_to_ids(void *handle, const struct cifs_sid *sid,
             ctx_set_error(ctx, idmap_error_string(idmap_err));
             continue;
         }
+        
+        cuxid[i].type = CIFS_UXID_TYPE_UNKNOWN;
 
-
-        err = sss_nss_getidbysid(str_sid, (uint32_t *)&cuxid[i].id.uid, &id_type);
-        if (err != 0)  {
-            ctx_set_error(ctx, strerror(err));
-            cuxid[i].type = CIFS_UXID_TYPE_UNKNOWN;
-            if (strcmp(str_sid, "S-1-22-1-0") == 0) {
-                cuxid[i].id.uid = 0;
-                cuxid[i].type = CIFS_UXID_TYPE_UID;
-            } else if (strcmp(str_sid, "S-1-22-2-0") == 0) {
-                cuxid[i].id.uid = 0;
-                cuxid[i].type = CIFS_UXID_TYPE_GID;
-            } else {
-                /* FIXME: Make this generic and handle all possible ids */
-                continue;
-            }
+        if (sss_sid_to_id(ctx, str_sid, &cuxid[i]) == 0 || 
+            samba_unix_sid_to_id(str_sid, &cuxid[i]) == 0) {
+       
             debug("setting uid of %s to %d", str_sid, cuxid[i].id.uid);
+            success = 0;
         }
-        debug("str_sid: %s, id: %d", str_sid, cuxid[i].id.uid);
 
-        success = 0;
-
-        switch (id_type) {
-        case SSS_ID_TYPE_NOT_SPECIFIED:
-            cuxid[i].type = CIFS_UXID_TYPE_UNKNOWN;
-            break;
-        case SSS_ID_TYPE_UID:
-            cuxid[i].type = CIFS_UXID_TYPE_UID;
-            break;
-        case SSS_ID_TYPE_GID:
-            cuxid[i].type = CIFS_UXID_TYPE_GID;
-            break;
-        case SSS_ID_TYPE_BOTH:
-            cuxid[i].type = CIFS_UXID_TYPE_BOTH;
-            break;
-        }
+        free(str_sid);
     }
 
     return success;
