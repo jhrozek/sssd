@@ -97,8 +97,10 @@ static errno_t sss_send_pac(krb5_authdata **pac_authdata)
     sss_data.len = pac_authdata[0]->length;
     sss_data.data = pac_authdata[0]->contents;
 
+    sss_nss_lock();
     ret = sss_pac_make_request(SSS_PAC_ADD_PAC_USER, &sss_data,
                                NULL, NULL, &errnop);
+    sss_nss_unlock();
     if (ret != NSS_STATUS_SUCCESS || errnop != 0) {
         DEBUG(SSSDBG_OP_FAILURE, ("sss_pac_make_request failed [%d][%d].\n",
                                   ret, errnop));
