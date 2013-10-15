@@ -631,9 +631,14 @@ errno_t sss_ncache_prepopulate(struct sss_nc_ctx *ncache,
                                              rctx->default_domain,
                                              filter_list[i],
                                              &domainname, &name);
-            if (ret != EOK) {
-                DEBUG(1, ("Invalid name in filterUsers list: [%s] (%d)\n",
-                         filter_list[i], ret));
+            if (ret == EAGAIN) {
+                DEBUG(SSSDBG_MINOR_FAILURE, ("Domain component of %s is not "
+                      "known and will be discovered on first lookup\n",
+                      filter_list[i]));
+                continue;
+            } else if (ret != EOK) {
+                DEBUG(SSSDBG_OP_FAILURE, ("Invalid name in filterUsers "
+                      "list: [%s] (%d)\n", filter_list[i], ret));
                 continue;
             }
 
@@ -677,11 +682,17 @@ errno_t sss_ncache_prepopulate(struct sss_nc_ctx *ncache,
         ret = sss_parse_name_for_domains(tmpctx, domain_list,
                                          rctx->default_domain, filter_list[i],
                                          &domainname, &name);
-        if (ret != EOK) {
-            DEBUG(1, ("Invalid name in filterUsers list: [%s] (%d)\n",
-                     filter_list[i], ret));
+        if (ret == EAGAIN) {
+            DEBUG(SSSDBG_MINOR_FAILURE, ("Domain component of %s is not "
+                  "known and will be discovered on first lookup\n",
+                  filter_list[i]));
+            continue;
+        } else if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE, ("Invalid name in filterUsers "
+                 "list: [%s] (%d)\n", filter_list[i], ret));
             continue;
         }
+
         if (domainname) {
             dom = responder_get_domain(rctx, domainname);
             if (!dom) {
@@ -775,11 +786,17 @@ errno_t sss_ncache_prepopulate(struct sss_nc_ctx *ncache,
         ret = sss_parse_name_for_domains(tmpctx, domain_list,
                                          rctx->default_domain, filter_list[i],
                                          &domainname, &name);
-        if (ret != EOK) {
-            DEBUG(1, ("Invalid name in filterGroups list: [%s] (%d)\n",
-                     filter_list[i], ret));
+        if (ret == EAGAIN) {
+            DEBUG(SSSDBG_MINOR_FAILURE, ("Domain component of %s is not "
+                 "known and will be discovered on first lookup\n",
+                 filter_list[i]));
+            continue;
+        } else if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE, ("Invalid name in filterGroups"
+                    "list: [%s] (%d)\n", filter_list[i], ret));
             continue;
         }
+
         if (domainname) {
             dom = responder_get_domain(rctx, domainname);
             if (!dom) {
