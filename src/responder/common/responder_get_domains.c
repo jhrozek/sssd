@@ -329,6 +329,122 @@ errno_t sss_dp_get_domains_recv(struct tevent_req *req)
     return EOK;
 }
 
+struct sss_parse_inp_state {
+    struct resp_ctx *rctx;
+    const char *rawinp;
+
+    char *name;
+    char *domname;
+};
+
+static void sss_parse_inp_done(struct tevent_req *subreq);
+
+struct tevent_req *
+sss_parse_inp_send(TALLOC_CTX *mem_ctx, struct resp_ctx *rctx,
+                   const char *rawinp)
+{
+    errno_t ret;
+    struct tevent_req *req;
+    struct tevent_req *subreq;
+    struct sss_parse_inp_state *state;
+
+    req = tevent_req_create(mem_ctx, &state, struct sss_parse_inp_state);
+    if (req == NULL) {
+         return NULL;
+    }
+    state->rawinp = rawinp;
+
+    ret = sss_parse_name_for_domains(state, rctx->domains,
+                                     rctx->default_domain, rawinp,
+                                     &state->domname, &state->name);
+    if (ret == EOK) {
+        /* Was able to use cached domains */
+        goto done;
+    } else if (ret != EAGAIN) {
+        DEBUG(SSSDBG_OP_FAILURE, ("Invalid name received [%s]\n", rawinp));
+        ret = ERR_INPUT_PARSE;
+        goto done;
+    }
+
+    DEBUG(SSSDBG_FUNC_DATA, ("Requesting info for [%s] from [%s]\n",
+          state->name, state->domname?state->domname:"<ALL>"));
+
+    /* FIXME - the rules for "forcing" the domains are
+     * too baroque. We should try to get rid of them
+     */
+
+    /* FIXME - don't forget Pavel's change
+     */
+
+    /* EAGAIN - check the DP for subdomains */
+    subreq = sss_dp_get_domains_send(state, rctx, true, state->domname);
+    if (subreq == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+    tevent_req_set_callback(subreq, sss_parse_inp_done, req);
+    return req;
+
+done:
+    if (ret == EOK) {
+        tevent_req_done(req);
+    } else {
+        tevent_req_error(req, ret);
+    }
+    tevent_req_post(req, rctx->ev);
+
+    return req;
+}
+
+static void sss_parse_inp_done(struct tevent_req *subreq)
+{
+    errno_t ret;
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sss_parse_inp_state *state = tevent_req_data(req,
+                                                struct sss_parse_inp_state);
+
+    ret = sss_dp_get_domains_recv(subreq);
+    talloc_free(subreq);
+    if (ret != EOK) {
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    ret = sss_parse_name_for_domains(state, state->rctx->domains,
+                                     state->rctx->default_domain, 
+                                     state->rawinp,
+                                     &state->domname, &state->name);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              ("Invalid name received [%s]\n", state->rawinp));
+        tevent_req_error(req, ERR_INPUT_PARSE);
+        return;
+    }
+
+    /* Was able to parse the name now */
+    tevent_req_done(req);
+}
+
+errno_t sss_parse_inp_recv(struct tevent_req *req, TALLOC_CTX *mem_ctx,
+                           char **_name, char **_domname)
+{
+    struct sss_parse_inp_state *state = tevent_req_data(req,
+                                                struct sss_parse_inp_state);
+
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+
+    if (_name) {
+        *_name = talloc_steal(mem_ctx, state->name);
+    }
+
+    if (_domname) {
+        *_domname = talloc_steal(mem_ctx, state->domname);
+    }
+
+    return EOK;
+}
+
 static void set_time_of_last_request(struct resp_ctx *rctx)
 {
     int ret;

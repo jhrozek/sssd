@@ -296,6 +296,12 @@ struct tevent_req *sss_dp_get_domains_send(TALLOC_CTX *mem_ctx,
 
 errno_t sss_dp_get_domains_recv(struct tevent_req *req);
 
+struct tevent_req *
+sss_parse_inp_send(TALLOC_CTX *mem_ctx, struct resp_ctx *rctx,
+                   const char *rawinp);
+errno_t sss_parse_inp_recv(struct tevent_req *req, TALLOC_CTX *mem_ctx,
+                           char **_name, char **_domain);
+
 errno_t schedule_get_domains_task(TALLOC_CTX *mem_ctx,
                                   struct tevent_context *ev,
                                   struct resp_ctx *rctx);
