@@ -314,6 +314,7 @@ SSSD_RESPONDER_OBJ = \
     src/responder/common/responder_common.c \
     src/responder/common/responder_dp.c \
     src/responder/common/responder_packet.c \
+    src/responder/common/responder_cache.c \
     src/responder/common/responder_get_domains.c
 
 SSSD_TOOLS_OBJ = \
@@ -423,6 +424,7 @@ dist_noinst_HEADERS = \
     src/monitor/monitor_interfaces.h \
     src/responder/common/responder.h \
     src/responder/common/responder_packet.h \
+    src/responder/common/responder_cache.h \
     src/responder/common/responder_sbus.h \
     src/responder/pam/pamsrv.h \
     src/responder/pam/pam_helpers.h \
