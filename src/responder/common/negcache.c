@@ -256,6 +256,9 @@ static int sss_cache_check_ent(struct sss_nc_ctx *ctx, int ttl,
     char *lower;
     errno_t ret;
 
+    /* If the negative cache is not initialized, don't bother */
+    if (ctx == NULL) return ENOENT;
+
     if (dom->case_sensitive == false) {
         lower = sss_tc_utf8_str_tolower(ctx, name);
         if (!lower) return ENOMEM;
@@ -475,6 +478,9 @@ static int sss_ncache_set_ent(struct sss_nc_ctx *ctx, bool permanent,
 {
     char *lower;
     errno_t ret;
+
+    /* If the negative cache is not initialized, don't bother */
+    if (ctx == NULL) return EOK;
 
     if (dom->case_sensitive == false) {
         lower = sss_tc_utf8_str_tolower(ctx, name);
