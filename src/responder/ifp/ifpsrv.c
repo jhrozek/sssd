@@ -42,6 +42,8 @@
 #include "responder/common/responder_sbus.h"
 #include "responder/common/negcache.h"
 
+#define DEFAULT_ALLOWED_UIDS "0"
+
 struct sbus_method monitor_ifp_methods[] = {
     { MON_CLI_METHOD_PING, monitor_common_pong },
     { MON_CLI_METHOD_RES_INIT, monitor_common_res_init },
@@ -202,6 +204,7 @@ static int ifp_process_init(TALLOC_CTX *mem_ctx,
     struct be_conn *iter;
     int ret;
     int max_retries;
+    char *uid_str;
 
     ifp_cmds = get_ifp_cmds();
     /* FIXME - we don't need a socket or a client. Remove them later. */
@@ -241,6 +244,23 @@ static int ifp_process_init(TALLOC_CTX *mem_ctx,
     ret = sss_ncache_init(rctx, &ifp_ctx->ncache);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, ("fatal error initializing negcache\n"));
+        goto fail;
+    }
+
+    ret = confdb_get_string(ifp_ctx->rctx->cdb, ifp_ctx->rctx,
+                            CONFDB_IFP_CONF_ENTRY, CONFDB_SERVICE_ALLOWED_UIDS,
+                            DEFAULT_ALLOWED_UIDS, &uid_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, ("Failed to get allowed UIDs.\n"));
+        goto fail;
+    }
+
+    ret = csv_string_to_uid_array(ifp_ctx->rctx, uid_str, true,
+                                  &ifp_ctx->rctx->allowed_uids_count,
+                                  &ifp_ctx->rctx->allowed_uids);
+    talloc_free(uid_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, ("Failed to set allowed UIDs.\n"));
         goto fail;
     }
 

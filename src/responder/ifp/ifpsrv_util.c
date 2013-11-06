@@ -113,6 +113,19 @@ struct infp_req *infp_req_create(TALLOC_CTX *mem_ctx,
         goto fail;
     }
 
+    ret = check_allowed_uids(req->caller, ifp_ctx->rctx->allowed_uids_count,
+                             ifp_ctx->rctx->allowed_uids);
+    if (ret == EACCES) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              ("User %"SPRIuid" not in ACL\n", req->caller));
+        goto fail;
+    } else if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+               ("Cannot check if user %"SPRIuid" is present in ACL\n",
+               req->caller));
+        goto fail;
+    }
+
     return req;
 
 fail:
