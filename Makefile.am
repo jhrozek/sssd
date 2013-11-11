@@ -746,9 +746,12 @@ sssd_pac_LDADD = \
 if BUILD_IFP
 sssd_ifp_SOURCES = \
     src/responder/ifp/ifpsrv.c \
+    src/responder/ifp/ifpsrv_util.c \
     src/responder/ifp/ifpsrv_cmd.c \
     $(SSSD_UTIL_OBJ) \
     $(SSSD_RESPONDER_OBJ)
+sssd_ifp_CFLAGS = \
+    $(AM_CFLAGS)
 sssd_ifp_LDADD = \
     $(SSSD_LIBS) \
     $(SSSD_INTERNAL_LTLIBS)
