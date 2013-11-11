@@ -81,6 +81,8 @@ errno_t infp_add_ldb_el_to_dict(DBusMessageIter *iter_dict,
  * must also be updated in the org.freedesktop.sssd.infopipe.Introspect.xml
  * or clients may not behave properly.
  */
+#define INFP_USER_GET_ATTR "GetUserAttr"
+int infp_user_get_attr(DBusMessage *message, struct sbus_connection *conn);
 
 /* Introspection */
 int infp_introspect(DBusMessage *message, struct sbus_connection *conn);

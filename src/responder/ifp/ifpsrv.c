@@ -40,6 +40,7 @@
 #include "confdb/confdb.h"
 #include "responder/ifp/ifp_private.h"
 #include "responder/common/responder_sbus.h"
+#include "responder/common/negcache.h"
 
 struct sbus_method monitor_ifp_methods[] = {
     { MON_CLI_METHOD_PING, monitor_common_pong },
@@ -79,6 +80,7 @@ struct sss_cmd_table *get_ifp_cmds(void)
 }
 
 struct sbus_method ifp_sysbus_methods[] = {
+    { INFP_USER_GET_ATTR, infp_user_get_attr },
     { NULL, NULL }
 };
 
@@ -233,6 +235,12 @@ static int ifp_process_init(TALLOC_CTX *mem_ctx,
                                    "%1$s@%2$s", &ifp_ctx->snctx);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE, ("fatal error initializing regex data\n"));
+        goto fail;
+    }
+
+    ret = sss_ncache_init(rctx, &ifp_ctx->ncache);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, ("fatal error initializing negcache\n"));
         goto fail;
     }
 

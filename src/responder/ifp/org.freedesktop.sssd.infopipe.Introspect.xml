@@ -11,5 +11,22 @@
             value="This is a D-BUS interface used for reading POSIX and extended user attributes within the System Security Services Daemon."
         />
 
+<!--
+**************************************************************************
+* User Methods                                                           *
+**************************************************************************
+-->
+        <method name="GetUserAttr">
+            <annotation
+                name="org.freedesktop.sssd.infopipe.DocString"
+                value="
+                       @param user The user to query.
+                       @param attr The list of user attributes to retrieve.
+                       @return values Array of dictionaries, each containing a string (attribute name) and a variant (array of values)"
+            />
+            <arg name="user" type="s" direction="in" />
+            <arg name="attr" type="as" direction="in" />
+            <arg name="values" type="a{sv}" direction="out"/>
+        </method>
     </interface>
 </node>

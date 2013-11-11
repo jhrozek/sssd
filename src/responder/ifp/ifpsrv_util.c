@@ -179,3 +179,81 @@ void infp_return_failure(struct infp_req *ireq, const char *err_msg)
         sbus_conn_send_reply(ireq->conn, reply);
     }
 }
+
+errno_t infp_add_ldb_el_to_dict(DBusMessageIter *iter_dict,
+                                struct ldb_message_element *el)
+{
+    DBusMessageIter iter_dict_entry;
+    DBusMessageIter iter_dict_val;
+    DBusMessageIter iter_array;
+    dbus_bool_t dbret;
+    unsigned int i;
+
+    if (el == NULL) {
+        return EINVAL;
+    }
+
+    dbret = dbus_message_iter_open_container(iter_dict,
+                                             DBUS_TYPE_DICT_ENTRY, NULL,
+                                             &iter_dict_entry);
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    /* Start by appending the key */
+    dbret = dbus_message_iter_append_basic(&iter_dict_entry,
+                                           DBUS_TYPE_STRING, &(el->name));
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    dbret = dbus_message_iter_open_container(&iter_dict_entry,
+                                             DBUS_TYPE_VARIANT,
+                                             DBUS_TYPE_ARRAY_AS_STRING
+                                             DBUS_TYPE_STRING_AS_STRING,
+                                             &iter_dict_val);
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    /* Open container for values */
+    dbret = dbus_message_iter_open_container(&iter_dict_val,
+                                 DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING,
+                                 &iter_array);
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    /* Now add all the values */
+    for (i = 0; i < el->num_values; i++) {
+        DEBUG(SSSDBG_TRACE_FUNC, ("element [%s] has value [%s]\n",
+              el->name, (const char *) el->values[i].data));
+
+        dbret = dbus_message_iter_append_basic(&iter_array,
+                                               DBUS_TYPE_STRING,
+                                               &(el->values[i].data));
+        if (!dbret) {
+            return ENOMEM;
+        }
+    }
+
+    dbret = dbus_message_iter_close_container(&iter_dict_val,
+                                              &iter_array);
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    dbret = dbus_message_iter_close_container(&iter_dict_entry,
+                                              &iter_dict_val);
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    dbret = dbus_message_iter_close_container(iter_dict,
+                                              &iter_dict_entry);
+    if (!dbret) {
+        return ENOMEM;
+    }
+
+    return EOK;
+}
