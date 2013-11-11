@@ -1,0 +1,15 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/org/freedesktop/sssd/infopipe">
+    <interface name="org.freedesktop.sssd.infopipe">
+        <annotation
+            name="org.freedesktop.sssd.infopipe.DocString.Summary"
+            value="InfoPipe Interface version PoC"
+        />
+        <annotation
+            name="org.freedesktop.sssd.infopipe.DocString"
+            value="This is a D-BUS interface used for reading POSIX and extended user attributes within the System Security Services Daemon."
+        />
+
+    </interface>
+</node>

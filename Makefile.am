@@ -39,6 +39,8 @@ sssdconfdir = $(sysconfdir)/sssd
 sssddatadir = $(datadir)/sssd
 sssdapiplugindir = $(sssddatadir)/sssd.api.d
 dbusintrospectdir = $(datarootdir)/sssd/introspect
+dbuspolicydir = $(sysconfdir)/dbus-1/system.d
+
 localedir = @localedir@
 nsslibdir = @nsslibdir@
 pamlibdir = @pammoddir@
@@ -298,7 +300,7 @@ AM_CPPFLAGS = \
     -DVARDIR=\"$(localstatedir)\" \
     -DSHLIBEXT=\"$(SHLIBEXT)\" \
     -DSSSD_LIBEXEC_PATH=\"$(sssdlibexecdir)\" \
-    -DSSSD_INTROSPECT_PATH=\"$(dbusinstropectdir)\" \
+    -DSSSD_INTROSPECT_PATH=\"$(dbusintrospectdir)\" \
     -DSSSD_CONF_DIR=\"$(sssdconfdir)\" \
     -DSSS_NSS_MCACHE_DIR=\"$(mcpath)\" \
     -DSSS_NSS_SOCKET_NAME=\"$(pipepath)/nss\" \
@@ -744,6 +746,8 @@ sssd_pac_LDADD = \
     $(SSSD_INTERNAL_LTLIBS)
 
 if BUILD_IFP
+infpintrospectdir = $(dbusintrospectdir)/infopipe
+
 sssd_ifp_SOURCES = \
     src/responder/ifp/ifpsrv.c \
     src/responder/ifp/ifpsrv_util.c \
@@ -755,6 +759,10 @@ sssd_ifp_CFLAGS = \
 sssd_ifp_LDADD = \
     $(SSSD_LIBS) \
     $(SSSD_INTERNAL_LTLIBS)
+dist_dbuspolicy_DATA = \
+    src/responder/ifp/org.freedesktop.sssd.infopipe.conf
+dist_infpintrospect_DATA = \
+    src/responder/ifp/org.freedesktop.sssd.infopipe.Introspect.xml
 endif
 
 sssd_be_SOURCES = \
@@ -2016,6 +2024,7 @@ installsssddirs::
     $(DESTDIR)$(pluginpath) \
     $(DESTDIR)$(libdir)/ldb \
     $(DESTDIR)$(dbusintrospectdir) \
+    $(DESTDIR)$(dbuspolicydir) \
     $(DESTDIR)$(pipepath)/private \
     $(DESTDIR)$(sssdlibdir) \
     $(DESTDIR)$(pkglibdir) \

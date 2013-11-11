@@ -557,6 +557,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/sssd_be
 %{_libexecdir}/%{servicename}/sssd_nss
 %{_libexecdir}/%{servicename}/sssd_pam
+%{_libexecdir}/%{servicename}/sssd_ifp
 
 %{_libexecdir}/%{servicename}/sssd_autofs
 %{_libexecdir}/%{servicename}/sssd_ssh
@@ -660,6 +661,9 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 %{_libexecdir}/%{servicename}/sssd_ifp
 %{_mandir}/man5/sssd-ifp.5*
+# InfoPipe DBus plumbing
+%{_sysconfdir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
+%{_datadir}/sssd/introspect/infopipe/org.freedesktop.sssd.infopipe.Introspect.xml
 
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)

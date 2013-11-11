@@ -1,6 +1,7 @@
 /*
     Authors:
         Jakub Hrozek <jhrozek@redhat.com>
+        Stephen Gallagher <sgallagh@redhat.com>
 
     Copyright (C) 2013 Red Hat
 
@@ -26,9 +27,62 @@
 #include "responder/common/responder.h"
 #include "providers/data_provider.h"
 
+#define INFP_INTROSPECT_XML "infopipe/org.freedesktop.sssd.infopipe.Introspect.xml"
+
+#define INFOPIPE_DBUS_NAME "org.freedesktop.sssd.infopipe"
+#define INFOPIPE_INTERFACE "org.freedesktop.sssd.infopipe"
+#define INFOPIPE_PATH "/org/freedesktop/sssd/infopipe"
+
+struct sysbus_ctx {
+    struct sbus_connection *conn;
+    char *introspect_xml;
+};
+
 struct ifp_ctx {
     struct resp_ctx *rctx;
     struct sss_names_ctx *snctx;
+    struct sss_nc_ctx *ncache;
+
+    struct sysbus_ctx *sysbus;
 };
+
+/* == Utility functions == */
+errno_t sysbus_get_caller(struct sbus_connection *conn,
+                          DBusMessage *message,
+                          uid_t *_uid);
+
+struct infp_req {
+    struct ifp_ctx *ifp_ctx;
+    struct sysbus_ctx *system_bus;
+
+    struct sbus_connection *conn;
+    DBusMessage *message;
+    DBusMessage *reply;
+    uid_t caller;
+};
+
+struct infp_req *infp_req_create(TALLOC_CTX *mem_ctx,
+                                 DBusMessage *message,
+                                 struct sbus_connection *conn);
+
+errno_t infp_enomem(struct infp_req *ireq);
+
+errno_t infp_invalid_args(struct infp_req *ireq,
+                          DBusError *error);
+
+void infp_return_failure(struct infp_req *ireq, const char *err_msg);
+
+errno_t infp_add_ldb_el_to_dict(DBusMessageIter *iter_dict,
+                                struct ldb_message_element *el);
+
+/* == Public InfoPipe Methods ==
+ *
+ * NOTE: Any changes to the method names and arguments for these calls
+ * must also be updated in the org.freedesktop.sssd.infopipe.Introspect.xml
+ * or clients may not behave properly.
+ */
+
+/* Introspection */
+int infp_introspect(DBusMessage *message, struct sbus_connection *conn);
 
 #endif /* _SSHSRV_PRIVATE_H_ */

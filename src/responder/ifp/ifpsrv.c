@@ -1,10 +1,11 @@
 /*
     Authors:
         Jakub Hrozek <jhrozek@redhat.com>
+        Stephen Gallagher <sgallagh@redhat.com>
 
     Copyright (C) 2013 Red Hat
 
-    Autofs responder: the responder server
+    InfoPipe responder: the responder server
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -77,6 +78,18 @@ struct sss_cmd_table *get_ifp_cmds(void)
     return ifp_cmds;
 }
 
+struct sbus_method ifp_sysbus_methods[] = {
+    { NULL, NULL }
+};
+
+struct sbus_interface ifp_sysbus_interface = {
+    INFOPIPE_INTERFACE,
+    INFOPIPE_PATH,
+    SBUS_DEFAULT_VTABLE,
+    ifp_sysbus_methods,
+    infp_introspect
+};
+
 static void ifp_dp_reconnect_init(struct sbus_connection *conn,
                                   int status, void *pvt)
 {
@@ -103,9 +116,83 @@ static void ifp_dp_reconnect_init(struct sbus_connection *conn,
                                  be_conn->domain->name));
 }
 
-int ifp_process_init(TALLOC_CTX *mem_ctx,
-                     struct tevent_context *ev,
-                     struct confdb_ctx *cdb)
+static errno_t sysbus_init(TALLOC_CTX *mem_ctx,
+                           struct tevent_context *ev,
+                           const char *dbus_name,
+                           struct sbus_interface *sbus_if,
+                           void *pvt,
+                           struct sysbus_ctx **sysbus)
+{
+    DBusError dbus_error;
+    DBusConnection *conn = NULL;
+    struct sysbus_ctx *system_bus = NULL;
+    errno_t ret;
+
+    system_bus = talloc_zero(mem_ctx, struct sysbus_ctx);
+    if (system_bus == NULL) {
+        return ENOMEM;
+    }
+
+    dbus_error_init(&dbus_error);
+
+    /* Connect to the well-known system bus */
+    conn = dbus_bus_get(DBUS_BUS_SYSTEM, &dbus_error);
+    if (conn == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              ("Failed to connect to D-BUS system bus.\n"));
+        ret = EIO;
+        goto fail;
+    }
+    dbus_connection_set_exit_on_disconnect(conn, FALSE);
+
+    ret = dbus_bus_request_name(conn, dbus_name,
+                                /* We want exclusive access */
+                                DBUS_NAME_FLAG_DO_NOT_QUEUE,
+                                &dbus_error);
+    if (ret != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
+        /* We were unable to register on the system bus */
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              ("Unable to request name on the system bus.\n"));
+        ret = EIO;
+        goto fail;
+    }
+
+    DEBUG(SSSDBG_TRACE_FUNC, ("Listening on %s\n", dbus_name));
+
+    /* Integrate with tevent loop */
+    ret = sbus_init_connection(system_bus, ev, conn,
+                               sbus_if,
+                               SBUS_CONN_TYPE_SHARED,
+                               &system_bus->conn);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              ("Could not integrate D-BUS into mainloop.\n"));
+        goto fail;
+    }
+    talloc_set_destructor((TALLOC_CTX *)system_bus, sbus_default_connection_destructor);
+
+    /* Set the ifp_ctx as private data to make it easy to access
+     * responder data structures */
+    sbus_conn_set_private_data(system_bus->conn, pvt);
+
+    *sysbus = system_bus;
+    return EOK;
+
+fail:
+    if (dbus_error_is_set(&dbus_error)) {
+        DEBUG(SSSDBG_OP_FAILURE, ("DBus error message: %s\n", dbus_error.message));
+        dbus_error_free(&dbus_error);
+    }
+
+    if (conn) dbus_connection_unref(conn);
+
+    talloc_free(system_bus);
+    return ret;
+}
+
+static int ifp_process_init(TALLOC_CTX *mem_ctx,
+                            struct tevent_context *ev,
+                            struct confdb_ctx *cdb)
 {
     struct resp_ctx *rctx;
     struct sss_cmd_table *ifp_cmds;
@@ -163,6 +250,17 @@ int ifp_process_init(TALLOC_CTX *mem_ctx,
     for (iter = ifp_ctx->rctx->be_conns; iter; iter = iter->next) {
         sbus_reconnect_init(iter->conn, max_retries,
                             ifp_dp_reconnect_init, iter);
+    }
+
+    /* Connect to the D-BUS system bus and set up methods */
+    ret = sysbus_init(ifp_ctx, ifp_ctx->rctx->ev,
+                      INFOPIPE_DBUS_NAME,
+                      &ifp_sysbus_interface,
+                      ifp_ctx, &ifp_ctx->sysbus);
+    if (ret != EOK) {
+        DEBUG(0, ("Failed to connect to the system message bus\n"));
+        talloc_free(ifp_ctx);
+        return EIO;
     }
 
     ret = schedule_get_domains_task(rctx, rctx->ev, rctx);
