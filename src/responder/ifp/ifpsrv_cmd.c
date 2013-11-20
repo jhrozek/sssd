@@ -117,8 +117,11 @@ infp_user_get_attr_unpack_msg(struct infp_attr_req *attr_req,
     dbus_bool_t dbret;
     char **attrs;
     int nattrs;
-    int i;
+    int i, ai;
     errno_t ret;
+    struct ifp_ctx *ifp_ctx;
+
+    ifp_ctx = attr_req->ireq->ifp_ctx;
 
     dbret = dbus_message_get_args(message, error,
                                   DBUS_TYPE_STRING, &attr_req->user,
@@ -136,12 +139,21 @@ infp_user_get_attr_unpack_msg(struct infp_attr_req *attr_req,
         goto done;
     }
 
+    ai = 0;
     for (i = 0; i < nattrs; i++) {
-        attr_req->attrs[i] = talloc_strdup(attr_req->attrs, attrs[i]);
-        if (attr_req->attrs[i] == NULL) {
+        if (ifp_attr_allowed(ifp_ctx->user_whitelist, attrs[i]) == false) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  ("Attribute %s not present in the whitelist, skipping\n",
+                   attrs[i]));
+            continue;
+        }
+
+        attr_req->attrs[ai] = talloc_strdup(attr_req->attrs, attrs[i]);
+        if (attr_req->attrs[ai] == NULL) {
             ret = ENOMEM;
             goto done;
         }
+        ai++;
     }
 
     ret = EOK;

@@ -161,7 +161,12 @@ if HAVE_CMOCKA
         test_sss_idmap \
         test_utils \
         ad_access_filter_tests
-endif
+
+if BUILD_IFP
+non_interactive_cmocka_based_tests += ifp_tests
+endif   # BUILD_IFP
+
+endif	# HAVE_CMOCKA
 
 check_PROGRAMS = \
     stress-tests \
@@ -1308,7 +1313,8 @@ TEST_MOCK_RESP_OBJ = \
      src/responder/common/responder_packet.c \
      src/responder/common/responder_cmd.c \
      src/responder/common/negcache.c \
-     src/responder/common/responder_common.c
+     src/responder/common/responder_common.c \
+     src/responder/common/responder_cache.c
 
 EXTRA_nss_srv_tests_DEPENDENCIES = \
      $(ldblib_LTLIBRARIES)
@@ -1442,6 +1448,23 @@ ad_access_filter_tests_LDADD = \
     libsss_idmap.la \
     libsss_krb5_common.la \
     libsss_test_common.la
+
+if BUILD_IFP
+ifp_tests_DEPENDENCIES = \
+     $(ldblib_LTLIBRARIES)
+ifp_tests_SOURCES = \
+     $(TEST_MOCK_RESP_OBJ) \
+    src/tests/cmocka/test_ifp.c \
+    src/responder/ifp/ifpsrv_cmd.c \
+    src/responder/ifp/ifpsrv_util.c
+ifp_tests_CFLAGS = \
+    $(AM_CFLAGS)
+ifp_tests_LDADD = \
+    $(CMOCKA_LIBS) \
+    $(SSSD_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    libsss_test_common.la
+endif
 
 endif
 

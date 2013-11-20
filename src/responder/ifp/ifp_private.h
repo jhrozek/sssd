@@ -44,6 +44,7 @@ struct ifp_ctx {
     struct sss_nc_ctx *ncache;
 
     struct sysbus_ctx *sysbus;
+    const char **user_whitelist;
 };
 
 /* == Utility functions == */
@@ -74,6 +75,10 @@ void infp_return_failure(struct infp_req *ireq, const char *err_msg);
 
 errno_t infp_add_ldb_el_to_dict(DBusMessageIter *iter_dict,
                                 struct ldb_message_element *el);
+
+const char **ifp_parse_attr_list(TALLOC_CTX *mem_ctx, const char *conf_str);
+
+bool ifp_attr_allowed(const char *whitelist[], const char *attr);
 
 /* == Public InfoPipe Methods ==
  *
