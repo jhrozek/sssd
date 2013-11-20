@@ -83,6 +83,7 @@ struct sss_cmd_table *get_ifp_cmds(void)
 
 struct sbus_method ifp_sysbus_methods[] = {
     { INFP_USER_GET_ATTR, infp_user_get_attr },
+    { INFP_USER_GET_GROUPS, infp_user_get_groups },
     { NULL, NULL }
 };
 

@@ -89,6 +89,9 @@ bool ifp_attr_allowed(const char *whitelist[], const char *attr);
 #define INFP_USER_GET_ATTR "GetUserAttr"
 int infp_user_get_attr(DBusMessage *message, struct sbus_connection *conn);
 
+#define INFP_USER_GET_GROUPS "GetUserGroups"
+int infp_user_get_groups(DBusMessage *message, struct sbus_connection *conn);
+
 /* Introspection */
 int infp_introspect(DBusMessage *message, struct sbus_connection *conn);
 

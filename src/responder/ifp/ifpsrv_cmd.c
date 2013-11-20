@@ -35,6 +35,7 @@ struct infp_attr_req {
 
 static struct tevent_req *
 ifp_user_get_attr_send(TALLOC_CTX *mem_ctx, struct resp_ctx *rctx,
+                       enum sss_dp_acct_type search_type,
                        const char *inp, const char **attrs);
 static errno_t ifp_user_get_attr_recv(TALLOC_CTX *mem_ctx,
                                       struct tevent_req *req,
@@ -94,7 +95,7 @@ int infp_user_get_attr(DBusMessage *message, struct sbus_connection *conn)
            attr_req->user, ireq->caller));
 
 
-    req = ifp_user_get_attr_send(ireq, ifp_ctx->rctx,
+    req = ifp_user_get_attr_send(ireq, ifp_ctx->rctx, SSS_DP_USER,
                                  attr_req->user, attr_req->attrs);
     if (req == NULL) {
         infp_enomem(ireq);
@@ -243,9 +244,189 @@ done:
     return ret;
 }
 
+static errno_t
+infp_user_get_groups_unpack_msg(struct infp_attr_req *attr_req,
+                                DBusMessage *message,
+                                DBusError *error);
+
+static void infp_user_get_groups_process(struct tevent_req *req);
+static errno_t infp_user_get_groups_reply(struct infp_req *ireq,
+                                          const char *user,
+                                          struct ldb_result *res);
+
+int infp_user_get_groups(DBusMessage *message, struct sbus_connection *conn)
+{
+    errno_t ret;
+    DBusError error;
+    struct infp_req *ireq;
+    struct ifp_ctx *ifp_ctx;
+    struct infp_attr_req *group_req;
+    struct tevent_req *req;
+
+    ifp_ctx = talloc_get_type(sbus_conn_get_private_data(conn),
+                              struct ifp_ctx);
+    if (ifp_ctx == NULL || ifp_ctx->sysbus == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, ("Bad private pointer\n"));
+        return EFAULT;
+    }
+
+    ireq = infp_req_create(conn, message, conn);
+    if (ireq == NULL) {
+        return EIO;
+    }
+
+    group_req = talloc_zero(ireq, struct infp_attr_req);
+    if (group_req == NULL) {
+        infp_enomem(ireq);
+        ret = ENOMEM;
+        goto fail;
+    }
+    group_req->ireq = ireq;
+
+    dbus_error_init(&error);
+    ret = infp_user_get_groups_unpack_msg(group_req, message, &error);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              ("Parsing arguments to %s failed: %s:%s\n",
+              INFP_USER_GET_ATTR, error.name, error.message));
+        ret = infp_invalid_args(ireq, &error);
+        goto fail;
+    }
+
+    DEBUG(SSSDBG_FUNC_DATA,
+          ("Looking up groups of user [%s] on behalf of %"SPRIuid"\n",
+           group_req->user, ireq->caller));
+
+    req = ifp_user_get_attr_send(ireq, ifp_ctx->rctx, SSS_DP_INITGROUPS,
+                                 group_req->user, group_req->attrs);
+    if (req == NULL) {
+        infp_enomem(ireq);
+        ret = ENOMEM;
+        goto fail;
+    }
+    tevent_req_set_callback(req, infp_user_get_groups_process, group_req);
+    return EOK;
+
+fail:
+    talloc_free(ireq);
+    return ret;
+}
+
+static errno_t
+infp_user_get_groups_unpack_msg(struct infp_attr_req *group_req,
+                                DBusMessage *message,
+                                DBusError *error)
+{
+    dbus_bool_t dbret;
+
+    dbret = dbus_message_get_args(message, error,
+                                  DBUS_TYPE_STRING, &group_req->user,
+                                  DBUS_TYPE_INVALID);
+    if (!dbret) {
+        return EIO;
+    }
+
+    group_req->attrs = talloc_zero_array(group_req, const char *, 2);
+    if (group_req->attrs == NULL) {
+        return ENOMEM;
+    }
+
+    group_req->attrs[0] = talloc_strdup(group_req->attrs, SYSDB_MEMBEROF);
+    if (group_req->attrs[0] == NULL) {
+        return ENOMEM;
+    }
+
+    return EOK;
+}
+
+static void infp_user_get_groups_process(struct tevent_req *req)
+{
+    struct infp_attr_req *group_req;
+    errno_t ret;
+    struct ldb_result *res;
+
+    group_req = tevent_req_callback_data(req, struct infp_attr_req);
+
+    ret = ifp_user_get_attr_recv(group_req, req, &res);
+    talloc_zfree(req);
+    if (ret == ENOENT) {
+        infp_return_failure(group_req->ireq, "No such user\n");
+        return;
+    } else if (ret != EOK) {
+        infp_return_failure(group_req->ireq, "Failed to read user attribute\n");
+        return;
+    }
+
+    ret = infp_user_get_groups_reply(group_req->ireq, group_req->user,
+                                     res);
+    if (ret != EOK) {
+        infp_return_failure(group_req->ireq, "Failed to construct a reply\n");
+        return;
+    }
+}
+
+static errno_t
+infp_user_get_groups_reply(struct infp_req *ireq, const char *user,
+                           struct ldb_result *res)
+{
+    errno_t ret;
+    dbus_bool_t dbret;
+    DBusMessageIter iter;
+    DBusMessageIter iter_array;
+    int i, num;
+    const char *name;
+
+    /* Construct a reply */
+    dbus_message_iter_init_append(ireq->reply, &iter);
+
+    dbret = dbus_message_iter_open_container(
+                                      &iter, DBUS_TYPE_ARRAY,
+                                      DBUS_TYPE_STRING_AS_STRING,
+                                      &iter_array);
+    if (!dbret) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    /* one less, the first one is the user entry */
+    num = res->count -1;
+
+    for (i = 0; i < num; i++) {
+        name = ldb_msg_find_attr_as_string(res->msgs[i + 1], SYSDB_NAME, NULL);
+        if (name == NULL) {
+            DEBUG(SSSDBG_MINOR_FAILURE, ("Skipping a group with no name\n"));
+            continue;
+        }
+
+        DEBUG(SSSDBG_TRACE_FUNC, ("Adding group %s\n", name));
+
+        dbret = dbus_message_iter_append_basic(&iter_array,
+                                               DBUS_TYPE_STRING,
+                                               &name);
+        if (!dbret) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    dbret = dbus_message_iter_close_container(&iter, &iter_array);
+    if (!dbret) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = EOK;
+    sbus_conn_send_reply(ireq->conn, ireq->reply);
+done:
+    talloc_free(ireq);
+    return ret;
+}
+
 struct ifp_user_get_attr_state {
     const char *inp;
     const char **attrs;
+
+    enum sss_dp_acct_type search_type;
 
     char *name;
     char *domname;
@@ -258,10 +439,12 @@ static void ifp_user_get_attr_dom(struct tevent_req *subreq);
 static errno_t
 ifp_user_get_attr_search(struct cache_req *creq,
                          const char **attrs,
+                         enum sss_dp_acct_type search_type,
                          struct tevent_req *req);
 
 static struct tevent_req *
 ifp_user_get_attr_send(TALLOC_CTX *mem_ctx, struct resp_ctx *rctx,
+                       enum sss_dp_acct_type search_type,
                        const char *inp, const char **attrs)
 {
     errno_t ret;
@@ -276,6 +459,7 @@ ifp_user_get_attr_send(TALLOC_CTX *mem_ctx, struct resp_ctx *rctx,
     state->inp = inp;
     state->attrs = attrs;
     state->rctx = rctx;
+    state->search_type = search_type;
 
     subreq = sss_parse_inp_send(req, rctx, inp);
     if (subreq == NULL) {
@@ -319,7 +503,8 @@ ifp_user_get_attr_dom(struct tevent_req *subreq)
     state->creq->inp.str = state->name;
 
     /* All set up, do the search! */
-    ret = ifp_user_get_attr_search(state->creq, state->attrs, req);
+    ret = ifp_user_get_attr_search(state->creq, state->attrs,
+                                   state->search_type, req);
     if (ret == EOK) {
         /* The data was cached. Just quit */
         tevent_req_done(req);
@@ -335,6 +520,7 @@ static void ifp_dp_callback(uint16_t err_maj, uint32_t err_min,
 static errno_t
 ifp_user_get_attr_search(struct cache_req *creq,
                          const char **attrs,
+                         enum sss_dp_acct_type search_type,
                          struct tevent_req *req)
 {
     struct sss_domain_info *dom = creq->domain;
@@ -388,17 +574,32 @@ ifp_user_get_attr_search(struct cache_req *creq,
         DEBUG(SSSDBG_FUNC_DATA,
               ("Requesting info for [%s@%s]\n", name, dom->name));
 
-        ret = sysdb_get_user_attr(creq, dom, name, attrs, &creq->res);
+        switch (search_type) {
+            case SSS_DP_USER:
+                ret = sysdb_get_user_attr(creq, dom, name,
+                                          attrs, &creq->res);
+                break;
+            case SSS_DP_INITGROUPS:
+                ret = sysdb_initgroups(creq, dom, name,
+                                       &creq->res);
+                break;
+            default:
+                DEBUG(SSSDBG_OP_FAILURE, ("Unsupported operation\n"));
+                return EIO;
+        }
+
         if (ret != EOK) {
             DEBUG(SSSDBG_CRIT_FAILURE,
                    ("Failed to make request to our cache!\n"));
             return EIO;
         }
 
-        if (creq->res->count > 1) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  ("getpwnam call returned more than one result !?!\n"));
-            return ENOENT;
+        if (search_type == SSS_DP_USER) {
+            if (creq->res->count > 1) {
+                DEBUG(SSSDBG_CRIT_FAILURE,
+                      ("getpwnam call returned more than one result !?!\n"));
+                return ENOENT;
+            }
         }
 
         if (creq->res->count == 0 && creq->check_provider == false) {
@@ -423,7 +624,7 @@ ifp_user_get_attr_search(struct cache_req *creq,
         /* if this is a caching provider (or if we haven't checked the cache
          * yet) then verify that the cache is uptodate */
         if (creq->check_provider) {
-            ret = cache_req_check(creq, creq->res, SSS_DP_USER,
+            ret = cache_req_check(creq, creq->res, search_type,
                                   ifp_dp_callback, 0, req);
             if (ret != EOK) {
                 /* Anything but EOK means we should reenter the mainloop
@@ -461,7 +662,8 @@ static void ifp_dp_callback(uint16_t err_maj, uint32_t err_min,
     }
 
     /* Backend was updated successfully. Check again */
-    ret = ifp_user_get_attr_search(state->creq, state->attrs, req);
+    ret = ifp_user_get_attr_search(state->creq, state->attrs,
+                                   state->search_type, req);
     if (ret) {
         tevent_req_error(req, ret);
         return;

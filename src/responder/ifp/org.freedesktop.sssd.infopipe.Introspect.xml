@@ -28,5 +28,16 @@
             <arg name="attr" type="as" direction="in" />
             <arg name="values" type="a{sv}" direction="out"/>
         </method>
+
+        <method name="GetUserGroups">
+            <annotation
+                name="org.freedesktop.sssd.infopipe.DocString"
+                value="
+                       @param user The user to query.
+                       @return groups Array of group names the user is a member of, as strings"
+            />
+            <arg name="user" type="s" direction="in" />
+            <arg name="values" type="as" direction="out"/>
+        </method>
     </interface>
 </node>
