@@ -58,17 +58,9 @@ alias reconfig='autoreconf -if \
                   && cd $SSS_ARCH/ \
                   && fedconfig'
 
-# Set the list of warnings that you want to detect (and in the case of remake
-# and chmake want to treat as errors)
-SSS_WARNINGS='-Wall \
-              -Wextra \
-              -Wno-unused-parameter \
-              -Wno-sign-compare \
-              -Wformat-security'
-
 # Build (or finish building) all objects and then run the build-tests against
 # them. This builds with optimizations turned off and GDB debugging symbols.
-alias chmake='make V=0 CFLAGS+="-ggdb3 -O0 $SSS_WARNINGS $SSS_WERROR" \
+alias chmake='make V=0 CFLAGS+="-ggdb3 -O0 $SSS_WERROR" \
                    -j$PROCESSORS check'
 
 # Clean the build directory and rebuild all objects, then run the build-tests
@@ -79,7 +71,7 @@ alias remake='make clean > /dev/null && chmake'
 # Clean the build directory and rebuild all objects, hiding most of the build
 # output except for warnings and errors. This builds with standard CFLAGS.
 alias warn='make clean >/dev/null \
-              && make CFLAGS+="$SSS_WARNINGS" -j$PROCESSORS tests > /dev/null'
+              && make -j$PROCESSORS tests > /dev/null'
 
 # Install the built sources to the current system, cleaning up the LDB modules
 # and making sure that the NSS and PAM modules have the right SELinux context.

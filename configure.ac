@@ -312,6 +312,29 @@ abs_build_dir=`pwd`
 AC_DEFINE_UNQUOTED([ABS_BUILD_DIR], ["$abs_build_dir"], [Absolute path to the build directory])
 AC_SUBST([abs_builddir], $abs_build_dir)
 
+dnl Warnings -- after all other checks are done
+
+SSS_WARNINGS='
+    -Wall
+    -Wextra
+    -Wno-unused-parameter
+    -Wno-sign-compare
+    -Wformat-security
+'
+
+for option in $SSS_WARNINGS; do
+    SAVE_CFLAGS="$CFLAGS"
+    CFLAGS="$CFLAGS $option"
+    AC_MSG_CHECKING([compiler option $option])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [])],
+                      [has_option=yes],
+                      [has_option=no])
+    AC_MSG_RESULT($has_option)
+    if test $has_option = no; then
+        CFLAGS="$SAVE_CFLAGS"
+    fi
+done
+
 AC_CONFIG_FILES([Makefile contrib/sssd.spec src/examples/rwtab src/doxy.config
                  src/sysv/systemd/sssd.service src/sysv/sssd
                  src/sysv/gentoo/sssd src/sysv/SUSE/sssd
