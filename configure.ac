@@ -335,6 +335,22 @@ for option in $SSS_WARNINGS; do
     fi
 done
 
+dnl Strict Compilation -- -Werror etc.
+
+AC_ARG_ENABLE(strict, [
+               AS_HELP_STRING([--enable-strict],
+               [Strict code compilation [default: no]])
+             ])
+
+AC_MSG_CHECKING([build strict])
+if test "$enable_strict" = "yes"; then
+    CFLAGS="$CFLAGS -Werror"
+else
+    enable_strict="no"
+fi
+AC_MSG_RESULT($enable_strict)
+
+
 AC_CONFIG_FILES([Makefile contrib/sssd.spec src/examples/rwtab src/doxy.config
                  src/sysv/systemd/sssd.service src/sysv/sssd
                  src/sysv/gentoo/sssd src/sysv/SUSE/sssd
