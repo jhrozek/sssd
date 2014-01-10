@@ -181,6 +181,7 @@ def source_methods(iface, methods):
             print "        %s__out," % meth.fq_c_name()
         else:
             print "        NULL, /* no out_args */"
+        print "        offsetof(struct %s, %s)," % (iface.c_name(), meth.c_name())
         print "    },"
     print "    { NULL, }"
     print "};"
@@ -249,7 +250,7 @@ def source_interface(iface):
     print "};"
     print
 
-def generate_source(ifaces, filename):
+def generate_source(ifaces, filename, include_header=None):
     basename = os.path.basename(filename)
 
     print "/* The following definitions are auto-generated from %s */" % basename
@@ -258,6 +259,8 @@ def generate_source(ifaces, filename):
     print "#include \"util/util.h\""
     print "#include \"sbus/sssd_dbus.h\""
     print "#include \"sbus/sssd_dbus_meta.h\""
+    if include_header:
+        print "#include \"%s\"" % include_header
     print
 
     for iface in ifaces:
@@ -277,6 +280,20 @@ def generate_source(ifaces, filename):
         # The sbus_interface structure
         source_interface(iface)
 
+def header_vtable(iface, methods):
+    print "/* vtable for %s */" % iface.name
+    print "struct %s {" % iface.c_name()
+    print "    struct sbus_vtable vtable; /* derive from sbus_vtable */"
+
+    # All methods
+    for meth in iface.methods:
+        print "    sbus_msg_handler_fn %s;" % meth.c_name()
+
+    # TODO: Property getters and setters will go here
+
+    print "};"
+    print
+
 def generate_header(ifaces, filename):
     basename = os.path.basename(filename)
     guard = "__%s__" % re.sub(r'([^_A-Z0-9])', "_", basename.upper())
@@ -288,6 +305,22 @@ def generate_header(ifaces, filename):
     print
     print "#include \"sbus/sssd_dbus.h\""
     print
+
+    print "/* ------------------------------------------------------------------------"
+    print " * DBus Vtable handler structures"
+    print " *"
+    print " * These structures are filled in by implementors of the different"
+    print " * dbus interfaces to handle method calls."
+    print " *"
+    print " * Handler functions of type sbus_msg_handler_fn accept raw messages,"
+    print " * other handlers will be typed appropriately. If a handler that is"
+    print " * set to NULL is invoked it will result in a"
+    print " * org.freedesktop.DBus.Error.NotSupported error for the caller."
+    print " */"
+    print
+    for iface in ifaces:
+        if iface.methods:
+            header_vtable(iface, iface.methods)
 
     print "/* ------------------------------------------------------------------------"
     print " * DBus Interface Metadata"
@@ -465,6 +498,10 @@ def parse_options():
                       dest="output", default=None,
                       help="Set output file name (default: stdout)",
                       metavar="FILE")
+    parser.add_option("--include",
+                      dest="include", default=None,
+                      help="name of a header to #include",
+                      metavar="HEADER")
     (options, args) = parser.parse_args()
 
     if not args:
@@ -488,7 +525,7 @@ def main():
         if options.mode == "header":
             generate_header(parser.parsed_interfaces, filename)
         elif options.mode == "source":
-            generate_source(parser.parsed_interfaces, filename)
+            generate_source(parser.parsed_interfaces, filename, options.include)
         else:
             assert False, "should not be reached"
 
