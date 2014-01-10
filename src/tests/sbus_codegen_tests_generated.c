@@ -85,3 +85,4 @@ const struct sbus_interface_meta test_pilot_meta = {
     NULL, /* no signals */
     test_pilot__properties
 };
+
