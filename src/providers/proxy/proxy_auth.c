@@ -580,8 +580,8 @@ static struct tevent_req *proxy_pam_conv_send(TALLOC_CTX *mem_ctx,
 
     msg = dbus_message_new_method_call(NULL,
                                        DP_PATH,
-                                       DP_INTERFACE,
-                                       DP_METHOD_PAMHANDLER);
+                                       DATA_PROVIDER_IFACE,
+                                       DATA_PROVIDER_IFACE_PAMHANDLER);
     if (msg == NULL) {
         DEBUG(1, ("dbus_message_new_method_call failed.\n"));
         talloc_zfree(req);

@@ -427,8 +427,8 @@ int proxy_child_send_id(struct sbus_connection *conn,
     /* create the message */
     msg = dbus_message_new_method_call(NULL,
                                        DP_PATH,
-                                       DP_INTERFACE,
-                                       DP_METHOD_REGISTER);
+                                       DATA_PROVIDER_IFACE,
+                                       DATA_PROVIDER_IFACE_REGISTERSERVICE);
     if (msg == NULL) {
         DEBUG(0, ("Out of memory?!\n"));
         return ENOMEM;
