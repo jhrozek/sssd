@@ -1,0 +1,25 @@
+git st
+
+ DBus infrastructure
+  handling properties, events 
+  handling ObjectManager
+  handling N-instances of same interface
+  automatic introspection
+
+ Dbus may seem foreign
+  - We don't have to go fully crazy
+  - There's a balance to trying to paper over it....
+
+ Some of the initial patches may seem like overkill.
+
+ DBus Introspection is XML
+  - But we need to be able to read it from C
+  - I've come up with a simple way 
+  - codegen from XML to C
+
+ Code generation
+  - should always be treated with suspicion
+  - in fact it's fine to hand craft these C structures to map the API
+  - The code generation will give us compiler errors and warnings
+    when the implementation code doesn't match the documented interface.
+
