@@ -716,27 +716,26 @@ immediate:
         talloc_free(be_req);
     }
 
-    if (reply) {
-        dbret = dbus_message_append_args(reply,
-                                         DBUS_TYPE_UINT16, &err_maj,
-                                         DBUS_TYPE_UINT32, &err_min,
-                                         DBUS_TYPE_STRING, &err_msg,
-                                         DBUS_TYPE_INVALID);
-        if (!dbret) {
-            DEBUG(SSSDBG_CRIT_FAILURE, ("Failed to generate dbus reply\n"));
-            dbus_message_unref(reply);
-            return EIO;
-        }
-
-        if (!(err_maj == DP_ERR_FATAL && err_min == ENODEV)) {
-            DEBUG(SSSDBG_TRACE_LIBS, ("Request processed. Returned %d,%d,%s\n",
-                  err_maj, err_min, err_msg));
-        }
-
-        /* send reply back */
-        sbus_conn_send(conn, reply);
+    /* reply has been allocated */
+    dbret = dbus_message_append_args(reply,
+                                     DBUS_TYPE_UINT16, &err_maj,
+                                     DBUS_TYPE_UINT32, &err_min,
+                                     DBUS_TYPE_STRING, &err_msg,
+                                     DBUS_TYPE_INVALID);
+    if (!dbret) {
+        DEBUG(SSSDBG_CRIT_FAILURE, ("Failed to generate dbus reply\n"));
         dbus_message_unref(reply);
+        return EIO;
     }
+
+    if (!(err_maj == DP_ERR_FATAL && err_min == ENODEV)) {
+        DEBUG(SSSDBG_TRACE_LIBS, ("Request processed. Returned %d,%d,%s\n",
+                err_maj, err_min, err_msg));
+    }
+
+    /* send reply back */
+    sbus_request_complete(conn, reply);
+    dbus_message_unref(reply);
 
     return EOK;
 }
@@ -1293,21 +1292,19 @@ done:
         talloc_free(be_req);
     }
 
-    if (reply) {
-        dbret = dbus_message_append_args(reply,
-                                         DBUS_TYPE_UINT16, &err_maj,
-                                         DBUS_TYPE_UINT32, &err_min,
-                                         DBUS_TYPE_STRING, &err_msg,
-                                         DBUS_TYPE_INVALID);
-        if (!dbret) return EIO;
+    dbret = dbus_message_append_args(reply,
+                                     DBUS_TYPE_UINT16, &err_maj,
+                                     DBUS_TYPE_UINT32, &err_min,
+                                     DBUS_TYPE_STRING, &err_msg,
+                                     DBUS_TYPE_INVALID);
+    if (!dbret) return EIO;
 
-        DEBUG(4, ("Request processed. Returned %d,%d,%s\n",
-                  err_maj, err_min, err_msg));
+    DEBUG(4, ("Request processed. Returned %d,%d,%s\n",
+            err_maj, err_min, err_msg));
 
-        /* send reply back */
-        sbus_conn_send(conn, reply);
-        dbus_message_unref(reply);
-    }
+    /* send reply back */
+    sbus_conn_send(conn, reply);
+    dbus_message_unref(reply);
 
     return EOK;
 }
@@ -1884,21 +1881,19 @@ done:
         talloc_free(be_req);
     }
 
-    if (reply) {
-        dbret = dbus_message_append_args(reply,
-                                         DBUS_TYPE_UINT16, &err_maj,
-                                         DBUS_TYPE_UINT32, &err_min,
-                                         DBUS_TYPE_STRING, &err_msg,
-                                         DBUS_TYPE_INVALID);
-        if (!dbret) return EIO;
+    dbret = dbus_message_append_args(reply,
+                                     DBUS_TYPE_UINT16, &err_maj,
+                                     DBUS_TYPE_UINT32, &err_min,
+                                     DBUS_TYPE_STRING, &err_msg,
+                                     DBUS_TYPE_INVALID);
+    if (!dbret) return EIO;
 
-        DEBUG(SSSDBG_TRACE_LIBS, ("Request processed. Returned %d,%d,%s\n",
-              err_maj, err_min, err_msg));
+    DEBUG(SSSDBG_TRACE_LIBS, ("Request processed. Returned %d,%d,%s\n",
+            err_maj, err_min, err_msg));
 
-        /* send reply back */
-        sbus_conn_send(conn, reply);
-        dbus_message_unref(reply);
-    }
+    /* send reply back */
+    sbus_conn_send(conn, reply);
+    dbus_message_unref(reply);
 
     return EOK;
 }
@@ -2105,22 +2100,20 @@ done:
         talloc_free(be_req);
     }
 
-    if (reply) {
-        dbret = dbus_message_append_args(reply,
-                                         DBUS_TYPE_UINT16, &err_maj,
-                                         DBUS_TYPE_UINT32, &err_min,
-                                         DBUS_TYPE_STRING, &err_msg,
-                                         DBUS_TYPE_INVALID);
-        if (!dbret) return EIO;
+    dbret = dbus_message_append_args(reply,
+                                     DBUS_TYPE_UINT16, &err_maj,
+                                     DBUS_TYPE_UINT32, &err_min,
+                                     DBUS_TYPE_STRING, &err_msg,
+                                     DBUS_TYPE_INVALID);
+    if (!dbret) return EIO;
 
-        DEBUG(SSSDBG_TRACE_LIBS,
-              ("Request processed. Returned %d,%d,%s\n",
-               err_maj, err_min, err_msg));
+    DEBUG(SSSDBG_TRACE_LIBS,
+          ("Request processed. Returned %d,%d,%s\n",
+           err_maj, err_min, err_msg));
 
-        /* send reply back */
-        sbus_conn_send(conn, reply);
-        dbus_message_unref(reply);
-    }
+    /* send reply back */
+    sbus_conn_send(conn, reply);
+    dbus_message_unref(reply);
 
     return EOK;
 }
