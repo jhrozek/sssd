@@ -387,7 +387,7 @@ static int sbus_reply_internal_error(DBusMessage *message,
     DBusMessage *reply = dbus_message_new_error(message, DBUS_ERROR_IO_ERROR,
                                                 "Internal Error");
     if (reply) {
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
         return DBUS_HANDLER_RESULT_HANDLED;
     }
@@ -444,14 +444,14 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
             /* Reply DBUS_ERROR_UNKNOWN_METHOD */
             DEBUG(1, ("No matching method found for %s.\n", msg_method));
             reply = dbus_message_new_error(message, DBUS_ERROR_UNKNOWN_METHOD, NULL);
-            sbus_conn_send_reply(intf_p->conn, reply);
+            sbus_conn_send(intf_p->conn, reply);
             dbus_message_unref(reply);
 
         } else if (!handler_fn) {
             /* Reply DBUS_ERROR_NOT_SUPPORTED */
             DEBUG(1, ("No matching handler found for %s.\n", msg_method));
             reply = dbus_message_new_error(message, DBUS_ERROR_NOT_SUPPORTED, NULL);
-            sbus_conn_send_reply(intf_p->conn, reply);
+            sbus_conn_send(intf_p->conn, reply);
             dbus_message_unref(reply);
 
         } else {
@@ -712,12 +712,12 @@ bool sbus_conn_disconnecting(struct sbus_connection *conn)
  * that the connection is not open for
  * communication.
  */
-int sbus_conn_send(struct sbus_connection *conn,
-                   DBusMessage *msg,
-                   int timeout_ms,
-                   DBusPendingCallNotifyFunction reply_handler,
-                   void *pvt,
-                   DBusPendingCall **pending)
+int sbus_conn_send_with_reply(struct sbus_connection *conn,
+                              DBusMessage *msg,
+                              int timeout_ms,
+                              DBusPendingCallNotifyFunction reply_handler,
+                              void *pvt,
+                              DBusPendingCall **pending)
 {
     DBusPendingCall *pending_reply;
     DBusConnection *dbus_conn;
@@ -772,7 +772,7 @@ int sbus_conn_send(struct sbus_connection *conn,
     return EAGAIN;
 }
 
-void sbus_conn_send_reply(struct sbus_connection *conn, DBusMessage *reply)
+void sbus_conn_send(struct sbus_connection *conn, DBusMessage *reply)
 {
     dbus_connection_send(conn->dbus.conn, reply, NULL);
 }

@@ -230,7 +230,7 @@ static int get_monitor_version(DBusMessage *message,
     }
 
     /* send reply back */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
     return EOK;
@@ -325,7 +325,7 @@ static int client_registration(DBusMessage *message,
     }
 
     /* send reply back */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
 done:
@@ -749,9 +749,9 @@ static int service_signal(struct mt_svc *svc, const char *svc_signal)
         return ENOMEM;
     }
 
-    ret = sbus_conn_send(svc->conn, msg,
-                         svc->mt_ctx->service_id_timeout,
-                         reload_reply, svc, NULL);
+    ret = sbus_conn_send_with_reply(svc->conn, msg,
+                                    svc->mt_ctx->service_id_timeout,
+                                    reload_reply, svc, NULL);
 
     dbus_message_unref(msg);
     return ret;
@@ -2370,9 +2370,9 @@ static int service_send_ping(struct mt_svc *svc)
         return ENOMEM;
     }
 
-    ret = sbus_conn_send(svc->conn, msg,
-                         svc->ping_time * 1000, /* milliseconds */
-                         ping_check, svc, &svc->pending);
+    ret = sbus_conn_send_with_reply(svc->conn, msg,
+                                    svc->ping_time * 1000, /* milliseconds */
+                                    ping_check, svc, &svc->pending);
     dbus_message_unref(msg);
     return ret;
 }

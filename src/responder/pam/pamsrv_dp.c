@@ -151,9 +151,9 @@ int pam_dp_send_req(struct pam_auth_req *preq, int timeout)
     preq->dpreq_spy = pdp_req;
     talloc_set_destructor(pdp_req, pdp_req_destructor);
 
-    res = sbus_conn_send(be_conn->conn, msg,
-                         timeout, pam_dp_process_reply,
-                         pdp_req, NULL);
+    res = sbus_conn_send_with_reply(be_conn->conn, msg,
+                                    timeout, pam_dp_process_reply,
+                                    pdp_req, NULL);
     dbus_message_unref(msg);
     return res;
 }

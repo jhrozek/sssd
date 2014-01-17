@@ -599,8 +599,8 @@ static struct tevent_req *proxy_pam_conv_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    ret = sbus_conn_send(state->conn, msg, state->auth_ctx->timeout_ms,
-                         proxy_pam_conv_reply, req, NULL);
+    ret = sbus_conn_send_with_reply(state->conn, msg, state->auth_ctx->timeout_ms,
+                                    proxy_pam_conv_reply, req, NULL);
     if (ret != EOK) {
         dbus_message_unref(msg);
         talloc_zfree(req);

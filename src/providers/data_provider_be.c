@@ -734,7 +734,7 @@ immediate:
         }
 
         /* send reply back */
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
     }
 
@@ -876,8 +876,8 @@ static void acctinfo_initgroups_callback(struct be_req *be_req,
     }
 
     /* ping the NSS service, no reply expected */
-    ret = sbus_conn_send(be_req->be_ctx->nss_cli->conn, msg, -1,
-                         acctinfo_callback_initgr_sbus, be_req, NULL);
+    ret = sbus_conn_send_with_reply(be_req->be_ctx->nss_cli->conn, msg, -1,
+                                    acctinfo_callback_initgr_sbus, be_req, NULL);
     if (ret != EOK) {
         DEBUG(SSSDBG_TRACE_FUNC,
               ("Error contacting NSS responder: %d [%s]\n",
@@ -1180,7 +1180,7 @@ static int be_get_account_info(DBusMessage *message, struct sbus_connection *con
         DEBUG(4, ("Request processed. Returned %d,%d,%s\n",
                   err_maj, err_min, err_msg));
 
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
         reply = NULL;
         /* This reply will be queued and sent
@@ -1305,7 +1305,7 @@ done:
                   err_maj, err_min, err_msg));
 
         /* send reply back */
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
     }
 
@@ -1495,7 +1495,7 @@ done:
     }
 
     /* send reply back immediately */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
     talloc_free(be_req);
@@ -1799,7 +1799,7 @@ static int be_autofs_handler(DBusMessage *message, struct sbus_connection *conn)
         DEBUG(SSSDBG_TRACE_LIBS, ("Request processed. Returned %d,%d,%s\n",
               err_maj, err_min, err_msg));
 
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
         reply = NULL;
         /* This reply will be queued and sent
@@ -1896,7 +1896,7 @@ done:
               err_maj, err_min, err_msg));
 
         /* send reply back */
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
     }
 
@@ -2025,7 +2025,7 @@ static int be_host_handler(DBusMessage *message, struct sbus_connection *conn)
               ("Request processed. Returned %d,%d,%s\n",
                err_maj, err_min, err_msg));
 
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
         reply = NULL;
         /* This reply will be queued and sent
@@ -2118,7 +2118,7 @@ done:
                err_maj, err_min, err_msg));
 
         /* send reply back */
-        sbus_conn_send_reply(conn, reply);
+        sbus_conn_send(conn, reply);
         dbus_message_unref(reply);
     }
 
@@ -2228,7 +2228,7 @@ static int client_registration(DBusMessage *message,
     }
 
     /* send reply back */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
     becli->initialized = true;

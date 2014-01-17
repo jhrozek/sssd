@@ -378,7 +378,7 @@ int dp_common_send_id(struct sbus_connection *conn, uint16_t version,
         return EIO;
     }
 
-    retval = sbus_conn_send(conn, msg, 30000, dp_id_callback, NULL, NULL);
+    retval = sbus_conn_send_with_reply(conn, msg, 30000, dp_id_callback, NULL, NULL);
 
     dbus_message_unref(msg);
     return retval;

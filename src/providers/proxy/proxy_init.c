@@ -451,7 +451,7 @@ static int client_registration(DBusMessage *message,
     }
 
     /* send reply back */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
     hret = hash_lookup(proxy_cli->proxy_auth_ctx->request_table, &key, &value);

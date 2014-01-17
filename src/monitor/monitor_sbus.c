@@ -135,9 +135,9 @@ int monitor_common_send_id(struct sbus_connection *conn,
         return EIO;
     }
 
-    retval = sbus_conn_send(conn, msg, 3000,
-                            id_callback,
-                            NULL, NULL);
+    retval = sbus_conn_send_with_reply(conn, msg, 3000,
+                                       id_callback,
+                                       NULL, NULL);
     dbus_message_unref(msg);
     return retval;
 }
@@ -158,7 +158,7 @@ int monitor_common_pong(DBusMessage *message,
     }
 
     /* send reply back */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
     return EOK;

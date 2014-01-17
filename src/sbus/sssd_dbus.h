@@ -152,7 +152,9 @@ DBusHandlerResult sbus_message_handler(DBusConnection *conn,
                                   void *user_data);
 
 /*
- * Send a message across the SBUS
+ * Send a DBus message and expect a reply. This is useful
+ * for method invocations.
+ *
  * If requested, the DBusPendingCall object will
  * be returned to the caller.
  *
@@ -160,14 +162,18 @@ DBusHandlerResult sbus_message_handler(DBusConnection *conn,
  * that the connection is not open for
  * communication.
  */
-int sbus_conn_send(struct sbus_connection *conn,
-                   DBusMessage *msg,
-                   int timeout_ms,
-                   DBusPendingCallNotifyFunction reply_handler,
-                   void *pvt,
-                   DBusPendingCall **pending);
+int sbus_conn_send_with_reply(struct sbus_connection *conn,
+                              DBusMessage *msg,
+                              int timeout_ms,
+                              DBusPendingCallNotifyFunction reply_handler,
+                              void *pvt,
+                              DBusPendingCall **pending);
 
-void sbus_conn_send_reply(struct sbus_connection *conn,
-                          DBusMessage *reply);
+/*
+ * Send a DBus message to which no reply is needed.
+ * This is useful for signals or method replies.
+ */
+void sbus_conn_send(struct sbus_connection *conn,
+                    DBusMessage *reply);
 
 #endif /* _SSSD_DBUS_H_*/

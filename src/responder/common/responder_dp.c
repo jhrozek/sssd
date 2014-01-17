@@ -689,11 +689,11 @@ sss_dp_internal_get_send(struct resp_ctx *rctx,
         goto error;
     }
 
-    ret = sbus_conn_send(be_conn->conn, msg,
-                         SSS_CLI_SOCKET_TIMEOUT / 2,
-                         sss_dp_internal_get_done,
-                         req,
-                         &state->sdp_req->pending_reply);
+    ret = sbus_conn_send_with_reply(be_conn->conn, msg,
+                                    SSS_CLI_SOCKET_TIMEOUT / 2,
+                                    sss_dp_internal_get_done,
+                                    req,
+                                    &state->sdp_req->pending_reply);
     if (ret != EOK) {
         /*
          * Critical Failure

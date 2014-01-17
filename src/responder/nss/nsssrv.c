@@ -365,7 +365,7 @@ static int nss_memcache_initgr_check(DBusMessage *message,
     }
 
     /* send reply back */
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
 
     return EOK;

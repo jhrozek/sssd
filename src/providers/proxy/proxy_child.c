@@ -370,7 +370,7 @@ static int pc_pam_handler(DBusMessage *message, struct sbus_connection *conn)
         goto done;
     }
 
-    sbus_conn_send_reply(conn, reply);
+    sbus_conn_send(conn, reply);
     dbus_message_unref(reply);
     talloc_free(pd);
 
@@ -446,7 +446,7 @@ int proxy_child_send_id(struct sbus_connection *conn,
         return EIO;
     }
 
-    retval = sbus_conn_send(conn, msg, 30000, dp_id_callback, NULL, NULL);
+    retval = sbus_conn_send_with_reply(conn, msg, 30000, dp_id_callback, NULL, NULL);
 
     dbus_message_unref(msg);
     return retval;
