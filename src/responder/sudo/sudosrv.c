@@ -43,7 +43,6 @@ struct mon_cli_iface monitor_sudo_methods = {
 struct sbus_interface monitor_sudo_interface = {
     MONITOR_PATH,
     &monitor_sudo_methods.vtable,
-    NULL
 };
 
 static struct data_provider_iface sudo_dp_methods = {
@@ -60,7 +59,6 @@ static struct data_provider_iface sudo_dp_methods = {
 struct sbus_interface sudo_dp_interface = {
     DP_PATH,
     &sudo_dp_methods.vtable,
-    NULL
 };
 
 static void sudo_dp_reconnect_init(struct sbus_connection *conn,

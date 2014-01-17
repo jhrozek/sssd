@@ -43,8 +43,7 @@ static struct data_provider_iface proxy_methods = {
 
 struct sbus_interface proxy_interface = {
     DP_PATH,
-    &proxy_methods.vtable,
-    NULL
+    &proxy_methods.vtable
 };
 
 static void proxy_shutdown(struct be_req *req)

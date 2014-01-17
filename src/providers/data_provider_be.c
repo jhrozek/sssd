@@ -103,7 +103,6 @@ struct data_provider_iface be_methods = {
 struct sbus_interface be_interface = {
     DP_PATH,
     &be_methods.vtable,
-    NULL
 };
 
 static struct bet_data bet_data[] = {

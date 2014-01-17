@@ -63,7 +63,6 @@ struct data_provider_iface pc_methods = {
 struct sbus_interface pc_interface = {
     DP_PATH,
     &pc_methods.vtable,
-    NULL
 };
 
 struct pc_ctx {

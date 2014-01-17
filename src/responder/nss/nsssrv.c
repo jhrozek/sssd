@@ -380,7 +380,6 @@ static struct data_provider_rev_iface nss_dp_methods = {
 struct sbus_interface nss_dp_interface = {
     DP_PATH,
     &nss_dp_methods.vtable,
-    NULL
 };
 
 

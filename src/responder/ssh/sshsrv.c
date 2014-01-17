@@ -43,7 +43,6 @@ struct mon_cli_iface monitor_ssh_methods = {
 struct sbus_interface monitor_ssh_interface = {
     MONITOR_PATH,
     &monitor_ssh_methods.vtable,
-    NULL
 };
 
 static struct data_provider_iface ssh_dp_methods = {
@@ -60,7 +59,6 @@ static struct data_provider_iface ssh_dp_methods = {
 struct sbus_interface ssh_dp_interface = {
     DP_PATH,
     &ssh_dp_methods.vtable,
-    NULL
 };
 
 static void ssh_dp_reconnect_init(struct sbus_connection *conn,

@@ -461,24 +461,7 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
         }
     }
     else {
-        /* Special case: check for Introspection request
-         * This is usually only useful for system bus connections
-         */
-        if (strcmp(msg_interface, DBUS_INTROSPECT_INTERFACE) == 0 &&
-            strcmp(msg_method, DBUS_INTROSPECT_METHOD) == 0)
-        {
-            if (intf_p->intf->introspect_fn) {
-                /* If we have been asked for introspection data and we have
-                 * an introspection function registered, user that.
-                 */
-                ret = intf_p->intf->introspect_fn(message, intf_p->conn);
-                if (ret != EOK) {
-                    return sbus_reply_internal_error(message, intf_p->conn);
-                }
-            }
-        }
-        else
-            return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
     }
 
     return DBUS_HANDLER_RESULT_HANDLED;

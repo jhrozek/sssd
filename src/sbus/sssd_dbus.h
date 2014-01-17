@@ -70,14 +70,9 @@ struct sbus_vtable {
     /* derived structs place function pointers here. */
 };
 
-/* Special interface and method for D-BUS introspection */
-#define DBUS_INTROSPECT_INTERFACE "org.freedesktop.DBus.Introspectable"
-#define DBUS_INTROSPECT_METHOD "Introspect"
-
 struct sbus_interface {
     const char *path;
     struct sbus_vtable *vtable;
-    sbus_msg_handler_fn introspect_fn;
 };
 
 /* Server Functions */

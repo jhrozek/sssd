@@ -523,7 +523,6 @@ struct mon_srv_iface monitor_methods = {
 struct sbus_interface monitor_server_interface = {
     MON_SRV_PATH,
     &monitor_methods.vtable,
-    NULL
 };
 
 /* monitor_dbus_init

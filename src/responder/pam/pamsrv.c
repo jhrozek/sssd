@@ -62,7 +62,6 @@ struct mon_cli_iface monitor_pam_methods = {
 struct sbus_interface monitor_pam_interface = {
     MONITOR_PATH,
     &monitor_pam_methods.vtable,
-    NULL
 };
 
 static struct data_provider_iface pam_dp_methods = {
@@ -79,7 +78,6 @@ static struct data_provider_iface pam_dp_methods = {
 struct sbus_interface pam_dp_interface = {
     DP_PATH,
     &pam_dp_methods.vtable,
-    NULL
 };
 
 

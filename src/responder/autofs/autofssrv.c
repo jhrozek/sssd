@@ -47,7 +47,6 @@ struct mon_cli_iface monitor_autofs_methods = {
 struct sbus_interface monitor_autofs_interface = {
     MONITOR_PATH,
     &monitor_autofs_methods.vtable,
-    NULL
 };
 
 static struct data_provider_iface autofs_dp_methods = {
@@ -64,7 +63,6 @@ static struct data_provider_iface autofs_dp_methods = {
 struct sbus_interface autofs_dp_interface = {
     DP_PATH,
     &autofs_dp_methods.vtable,
-    NULL
 };
 
 static errno_t
