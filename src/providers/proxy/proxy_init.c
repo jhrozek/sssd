@@ -27,8 +27,7 @@
 #include "util/sss_format.h"
 #include "providers/proxy/proxy.h"
 
-static int client_registration(DBusMessage *message,
-                               struct sbus_connection *conn);
+static int client_registration(struct sbus_request *req);
 
 static struct data_provider_iface proxy_methods = {
     { &data_provider_iface_meta, 0 },
@@ -378,12 +377,11 @@ static void init_timeout(struct tevent_context *ev,
      */
 }
 
-static int client_registration(DBusMessage *message,
-                               struct sbus_connection *conn)
+static int client_registration(struct sbus_request *request)
 {
     dbus_uint16_t version = DATA_PROVIDER_VERSION;
+    struct sbus_connection *conn;
     struct proxy_client *proxy_cli;
-    DBusMessage *reply;
     DBusError dbus_error;
     dbus_uint16_t cli_ver;
     uint32_t cli_id;
@@ -395,7 +393,9 @@ static int client_registration(DBusMessage *message,
     struct tevent_req *req;
     struct proxy_child_ctx *child_ctx;
     struct pc_init_ctx *init_ctx;
+    int ret;
 
+    conn = request->conn;
     data = sbus_conn_get_private_data(conn);
     proxy_cli = talloc_get_type(data, struct proxy_client);
     if (!proxy_cli) {
@@ -409,7 +409,7 @@ static int client_registration(DBusMessage *message,
 
     dbus_error_init(&dbus_error);
 
-    dbret = dbus_message_get_args(message, &dbus_error,
+    dbret = dbus_message_get_args(request->message, &dbus_error,
                                   DBUS_TYPE_UINT16, &cli_ver,
                                   DBUS_TYPE_UINT32, &cli_id,
                                   DBUS_TYPE_INVALID);
@@ -433,30 +433,18 @@ static int client_registration(DBusMessage *message,
     }
 
     /* reply that all is ok */
-    reply = dbus_message_new_method_return(message);
-    if (!reply) {
-        DEBUG(0, ("Dbus Out of memory!\n"));
-        return ENOMEM;
-    }
-
-    dbret = dbus_message_append_args(reply,
-                                     DBUS_TYPE_UINT16, &version,
-                                     DBUS_TYPE_INVALID);
-    if (!dbret) {
-        DEBUG(0, ("Failed to build dbus reply\n"));
-        dbus_message_unref(reply);
+    ret = sbus_request_reply_method(request,
+                                    DBUS_TYPE_UINT16, &version,
+                                    DBUS_TYPE_INVALID);
+    if (ret != EOK) {
         sbus_disconnect(conn);
-        return EIO;
+        return ret;
     }
-
-    /* send reply back */
-    sbus_conn_send(conn, reply);
-    dbus_message_unref(reply);
 
     hret = hash_lookup(proxy_cli->proxy_auth_ctx->request_table, &key, &value);
     if (hret != HASH_SUCCESS) {
         DEBUG(1, ("Hash error [%d][%s]\n", hret, hash_error_string(hret)));
-        sbus_disconnect(conn);
+        sbus_disconnect(request->conn);
     }
 
     /* Signal that the child is up and ready to receive the request */
@@ -475,7 +463,7 @@ static int client_registration(DBusMessage *message,
     }
 
     init_ctx = tevent_req_data(child_ctx->init_req, struct pc_init_ctx);
-    init_ctx->conn = conn;
+    init_ctx->conn = request->conn;
     tevent_req_done(child_ctx->init_req);
     child_ctx->init_req = NULL;
 

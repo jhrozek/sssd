@@ -398,12 +398,19 @@ static int sbus_reply_internal_error(DBusMessage *message,
 #define VTABLE_FUNC(vtable, offset) \
     (*((void **)((char *)(vtable) + (offset))))
 
+int sbus_request_destructor(void *data)
+{
+    struct sbus_request *req = data;
+    dbus_message_unref(req->message);
+    return 0;
+}
+
 /* messsage_handler
  * Receive messages and process them
  */
 DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
-                                         DBusMessage *message,
-                                         void *user_data)
+                                       DBusMessage *message,
+                                       void *user_data)
 {
     struct sbus_interface_p *intf_p;
     const char *msg_method;
@@ -412,6 +419,7 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
     DBusMessage *reply = NULL;
     const struct sbus_method_meta *method;
     const struct sbus_interface_meta *interface;
+    struct sbus_request *req = NULL;
     sbus_msg_handler_fn handler_fn;
     int ret;
 
@@ -455,9 +463,21 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
             dbus_message_unref(reply);
 
         } else {
-            ret = handler_fn(message, intf_p->conn);
-            if (ret != EOK)
+            req = talloc_zero(intf_p, struct sbus_request);
+            if (!req) {
+                ret = ENOMEM;
+            } else {
+                req->conn = intf_p->conn;
+                req->message = dbus_message_ref(message);
+                req->method = method;
+                talloc_set_destructor(req, sbus_request_destructor);
+                ret = handler_fn(req);
+            }
+            if (ret != EOK) {
+                if (req)
+                    talloc_free(req);
                 return sbus_reply_internal_error(message, intf_p->conn);
+            }
         }
     }
     else {
@@ -760,3 +780,52 @@ void sbus_conn_send(struct sbus_connection *conn, DBusMessage *reply)
     dbus_connection_send(conn->dbus.conn, reply, NULL);
 }
 
+int sbus_request_reply(struct sbus_request *request,
+                       DBusMessage *reply)
+{
+    if (reply)
+        sbus_conn_send(request->conn, reply);
+    return talloc_free(request);
+}
+
+int sbus_request_reply_method (struct sbus_request *request,
+                               int first_arg_type,
+                               ...)
+{
+    DBusMessage *reply;
+    dbus_bool_t ret;
+    va_list va;
+
+    reply = dbus_message_new_method_return(request->message);
+    if (!reply) {
+        DEBUG(SSSDBG_CRIT_FAILURE, ("Out of memory allocating DBus message\n"));
+        return ENOMEM;
+    }
+
+    va_start(va, first_arg_type);
+    ret = dbus_message_append_args_valist(reply, first_arg_type, va);
+    va_end(va);
+
+    if (!ret) {
+        dbus_message_unref(reply);
+        DEBUG(SSSDBG_CRIT_FAILURE, ("Out of memory building DBus message\n"));
+        return ENOMEM;
+    }
+
+    return sbus_request_reply(request, reply);
+}
+
+int sbus_request_reply_error (struct sbus_request *request,
+                              const char *dbus_error,
+                              const char *message)
+{
+    DBusMessage *reply;
+
+    reply = dbus_message_new_error(request->message, dbus_error, message);
+    if (!reply) {
+        DEBUG(SSSDBG_CRIT_FAILURE, ("Out of memory allocating DBus message\n"));
+        return ENOMEM;
+    }
+
+    return sbus_request_reply(request, reply);
+}

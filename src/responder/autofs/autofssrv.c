@@ -29,8 +29,7 @@
 #include "providers/data_provider.h"
 #include "responder/autofs/autofs_private.h"
 
-static int autofs_clean_hash_table(DBusMessage *message,
-                                   struct sbus_connection *conn);
+static int autofs_clean_hash_table(struct sbus_request *request);
 
 struct mon_cli_iface monitor_autofs_methods = {
     { &mon_cli_iface_meta, 0 },
@@ -110,10 +109,9 @@ autofs_dp_reconnect_init(struct sbus_connection *conn,
                                  be_conn->domain->name));
 }
 
-static int autofs_clean_hash_table(DBusMessage *message,
-                                   struct sbus_connection *conn)
+static int autofs_clean_hash_table(struct sbus_request *request)
 {
-    struct resp_ctx *rctx = talloc_get_type(sbus_conn_get_private_data(conn),
+    struct resp_ctx *rctx = talloc_get_type(sbus_conn_get_private_data(request->conn),
                                             struct resp_ctx);
     struct autofs_ctx *actx =
             talloc_get_type(rctx->pvt_ctx, struct autofs_ctx);
@@ -125,7 +123,7 @@ static int autofs_clean_hash_table(DBusMessage *message,
         return ret;
     }
 
-    return monitor_common_pong(message, conn);
+    return sbus_request_reply_method(request, DBUS_TYPE_INVALID);
 }
 
 static int

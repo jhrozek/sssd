@@ -90,3 +90,4 @@ const struct sbus_interface_meta mon_cli_iface_meta = {
     NULL, /* no signals */
     NULL, /* no propetries */
 };
+

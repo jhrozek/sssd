@@ -24,9 +24,11 @@
 
 struct sbus_connection;
 
+struct sbus_request;
+
 #include <dbus/dbus.h>
 
-typedef int (*sbus_msg_handler_fn)(DBusMessage *, struct sbus_connection *);
+typedef int (*sbus_msg_handler_fn)(struct sbus_request *req);
 
 /*
  * sbus_conn_destructor_fn
@@ -166,9 +168,36 @@ int sbus_conn_send_with_reply(struct sbus_connection *conn,
 
 /*
  * Send a DBus message to which no reply is needed.
- * This is useful for signals or method replies.
  */
 void sbus_conn_send(struct sbus_connection *conn,
                     DBusMessage *reply);
+
+/*
+ * This structure is passed to all dbus method and property
+ * handlers. It is a talloc context which will be valid until
+ * the request is completed with either the sbus_request_complete()
+ * or sbus_request_fail() functions.
+ */
+struct sbus_request {
+    struct sbus_connection *conn;
+    DBusMessage *message;
+    const struct sbus_method_meta *method;
+};
+
+/*
+ * Send a reply back to the caller of a DBus method, and free
+ * the @request context. The @request is no longer valid after
+ * this function returns.
+ */
+int sbus_request_reply(struct sbus_request *request,
+                       DBusMessage *reply);
+
+int sbus_request_reply_method (struct sbus_request *request,
+                                int first_arg_type,
+                                ...);
+
+int sbus_request_reply_error (struct sbus_request *request,
+                              const char *dbus_error,
+                              const char *message);
 
 #endif /* _SSSD_DBUS_H_*/
