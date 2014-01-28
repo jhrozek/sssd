@@ -75,5 +75,4 @@ extern const struct sbus_interface_meta mon_srv_iface_meta;
 /* interface info for org.freedesktop.sssd.service */
 extern const struct sbus_interface_meta mon_cli_iface_meta;
 
-
 #endif /* __MONITOR_IFACE_XML__ */

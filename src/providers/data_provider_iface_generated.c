@@ -84,4 +84,3 @@ const struct sbus_interface_meta data_provider_rev_iface_meta = {
     NULL, /* no signals */
     NULL, /* no propetries */
 };
-

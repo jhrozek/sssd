@@ -57,5 +57,4 @@ extern const struct sbus_interface_meta com_planetexpress_Ship_meta;
 /* interface info for com.planetexpress.Pilot */
 extern const struct sbus_interface_meta test_pilot_meta;
 
-
 #endif /* __SBUS_CODEGEN_TESTS_XML__ */

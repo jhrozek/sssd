@@ -149,17 +149,19 @@ class Interface(Base):
 # -----------------------------------------------------------------------------
 # Code Generation
 
-class CodegenException(Exception):
-    pass
+def out(format, *args):
+    str = format % args
+    sys.stdout.write(str)
+    sys.stdout.write("\n")
 
 def source_args(parent, args, suffix):
-    print "/* arguments for %s.%s */" % (parent.iface.name, parent.name)
-    print "const struct sbus_arg_meta %s%s[] = {" % (parent.fq_c_name(), suffix)
+    out("")
+    out("/* arguments for %s.%s */", parent.iface.name, parent.name)
+    out("const struct sbus_arg_meta %s%s[] = {", parent.fq_c_name(), suffix)
     for arg in args:
-        print "    { \"%s\", \"%s\" }," % (arg.name, arg.signature)
-    print "    { NULL, }"
-    print "};"
-    print
+        out("    { \"%s\", \"%s\" },", arg.name, arg.signature)
+    out("    { NULL, }")
+    out("};")
 
 def source_methods(iface, methods):
     for meth in methods:
@@ -168,100 +170,99 @@ def source_methods(iface, methods):
         if meth.out_args:
             source_args(meth, meth.out_args, "__out")
 
-    print "/* methods for %s */" % iface.name
-    print "const struct sbus_method_meta %s__methods[] = {" % iface.c_name()
+    out("")
+    out("/* methods for %s */", iface.name)
+    out("const struct sbus_method_meta %s__methods[] = {", iface.c_name())
     for meth in methods:
-        print "    {"
-        print "        \"%s\", /* name */" % meth.name
+        out("    {")
+        out("        \"%s\", /* name */", meth.name)
         if meth.in_args:
-            print "        %s__in," % meth.fq_c_name()
+            out("        %s__in,", meth.fq_c_name())
         else:
-            print "        NULL, /* no in_args */"
+            out("        NULL, /* no in_args */")
         if meth.out_args:
-            print "        %s__out," % meth.fq_c_name()
+            out("        %s__out,", meth.fq_c_name())
         else:
-            print "        NULL, /* no out_args */"
-        print "        offsetof(struct %s, %s)," % (iface.c_name(), meth.c_name())
-        print "    },"
-    print "    { NULL, }"
-    print "};"
-    print
+            out("        NULL, /* no out_args */")
+        out("        offsetof(struct %s, %s),", iface.c_name(), meth.c_name())
+        out("    },")
+    out("    { NULL, }")
+    out("};")
 
 def source_signals(iface, signals):
     for sig in iface.signals:
         if sig.args:
             source_args(sig, sig.args, "__args")
 
-    print "/* signals for %s */" % iface.name
-    print "const struct sbus_signal_meta %s__signals[] = {" % iface.c_name()
+    out("")
+    out("/* signals for %s */", iface.name)
+    out("const struct sbus_signal_meta %s__signals[] = {", iface.c_name())
     for sig in signals:
-        print "    {"
-        print "        \"%s\", /* name */" % sig.name
+        out("    {")
+        out("        \"%s\", /* name */", sig.name)
         if sig.args:
-            print "        %s__args" % sig.fq_c_name()
+            out("        %s__args", sig.fq_c_name())
         else:
-            print "        NULL, /* no args */"
-        print "    },"
-    print "    { NULL, }"
-    print "};"
-    print
+            out("        NULL, /* no args */")
+        out("    },")
+    out("    { NULL, }")
+    out("};")
 
 def source_properties(iface, properties):
-    print "/* property info for %s */" % iface.name
-    print "const struct sbus_property_meta %s__properties[] = {" % iface.c_name()
+    out("")
+    out("/* property info for %s */", iface.name)
+    out("const struct sbus_property_meta %s__properties[] = {", iface.c_name())
     for prop in properties:
-        print "    {"
-        print "        \"%s\", /* name */" % prop.name
-        print "        \"%s\", /* signature */" % prop.signature
+        out("    {")
+        out("        \"%s\", /* name */", prop.name)
+        out("        \"%s\", /* signature */", prop.signature)
         if prop.readable and prop.writable:
-            print "        SBUS_PROPERTY_READABLE | SBUS_PROPERTY_WRITABLE,"
+            out("        SBUS_PROPERTY_READABLE | SBUS_PROPERTY_WRITABLE,")
         elif prop.readable:
-            print "        SBUS_PROPERTY_READABLE,"
+            out("        SBUS_PROPERTY_READABLE,")
         elif prop.writable:
-            print "        SBUS_PROPERTY_WRITABLE,"
+            out("        SBUS_PROPERTY_WRITABLE,")
         else:
             assert False, "should not be reached"
-        print "    },"
-    print "    { NULL, }"
-    print "};"
-    print
+        out("    },")
+    out("    { NULL, }")
+    out("};")
 
 def header_interface(iface):
-    print "/* interface info for %s */" % iface.name
-    print "extern const struct sbus_interface_meta %s_meta;" % iface.c_name();
-    print
+    out("")
+    out("/* interface info for %s */", iface.name)
+    out("extern const struct sbus_interface_meta %s_meta;", iface.c_name())
 
 def source_interface(iface):
-    print "/* interface info for %s */" % iface.name
-    print "const struct sbus_interface_meta %s_meta = {" % iface.c_name();
-    print "    \"%s\", /* name */" % iface.name
+    out("")
+    out("/* interface info for %s */", iface.name)
+    out("const struct sbus_interface_meta %s_meta = {", iface.c_name())
+    out("    \"%s\", /* name */", iface.name)
     if iface.methods:
-        print "    %s__methods," % iface.c_name()
+        out("    %s__methods,", iface.c_name())
     else:
-        print "    NULL, /* no methods */"
+        out("    NULL, /* no methods */")
     if iface.signals:
-        print "    %s__signals," % iface.c_name()
+        out("    %s__signals,", iface.c_name())
     else:
-        print "    NULL, /* no signals */"
+        out("    NULL, /* no signals */")
     if iface.properties:
-        print "    %s__properties" % iface.c_name()
+        out("    %s__properties", iface.c_name())
     else:
-        print "    NULL, /* no propetries */"
-    print "};"
-    print
+        out("    NULL, /* no propetries */")
+    out("};")
 
 def generate_source(ifaces, filename, include_header=None):
     basename = os.path.basename(filename)
 
-    print "/* The following definitions are auto-generated from %s */" % basename
-    print
+    out("/* The following definitions are auto-generated from %s */", basename)
+    out("")
 
-    print "#include \"util/util.h\""
-    print "#include \"sbus/sssd_dbus.h\""
-    print "#include \"sbus/sssd_dbus_meta.h\""
+    out("#include \"util/util.h\"")
+    out("#include \"sbus/sssd_dbus.h\"")
+    out("#include \"sbus/sssd_dbus_meta.h\"")
     if include_header:
-        print "#include \"%s\"" % include_header
-    print
+        out("#include \"%s\"", include_header)
 
     for iface in ifaces:
 
@@ -281,84 +282,83 @@ def generate_source(ifaces, filename, include_header=None):
         source_interface(iface)
 
 def header_vtable(iface, methods):
-    print "/* vtable for %s */" % iface.name
-    print "struct %s {" % iface.c_name()
-    print "    struct sbus_vtable vtable; /* derive from sbus_vtable */"
+    out("")
+    out("/* vtable for %s */", iface.name)
+    out("struct %s {", iface.c_name())
+    out("    struct sbus_vtable vtable; /* derive from sbus_vtable */")
 
     # All methods
     for meth in iface.methods:
-        print "    sbus_msg_handler_fn %s;" % meth.c_name()
+        out("    sbus_msg_handler_fn %s;", meth.c_name())
 
     # TODO: Property getters and setters will go here
 
-    print "};"
-    print
+    out("};")
 
 def header_constants(iface):
-    print "/* constants for %s */" % iface.name
-    print "#define %s \"%s\"" % (iface.c_name().upper(), iface.name)
+    out("")
+    out("/* constants for %s */", iface.name)
+    out("#define %s \"%s\"", iface.c_name().upper(), iface.name)
     for meth in iface.methods:
-        print "#define %s \"%s\"" % (meth.fq_c_name().upper(), meth.name)
+        out("#define %s \"%s\"", meth.fq_c_name().upper(), meth.name)
     for sig in iface.signals:
-        print "#define %s \"%s\"" % (sig.fq_c_name().upper(), sig.name)
+        out("#define %s \"%s\"", sig.fq_c_name().upper(), sig.name)
     for prop in iface.properties:
-        print "#define %s \"%s\"" % (prop.fq_c_name().upper(), prop.name)
-    print
+        out("#define %s \"%s\"", prop.fq_c_name().upper(), prop.name)
 
 def generate_header(ifaces, filename):
     basename = os.path.basename(filename)
     guard = "__%s__" % re.sub(r'([^_A-Z0-9])', "_", basename.upper())
 
-    print "/* The following declarations are auto-generated from %s */" % basename
-    print
-    print "#ifndef %s" % guard
-    print "#define %s" % guard
-    print
-    print "#include \"sbus/sssd_dbus.h\""
-    print
+    out("/* The following declarations are auto-generated from %s */", basename)
+    out("")
+    out("#ifndef %s", guard)
+    out("#define %s", guard)
+    out("")
+    out("#include \"sbus/sssd_dbus.h\"")
 
-    print "/* ------------------------------------------------------------------------"
-    print " * DBus Constants"
-    print " *"
-    print " * Various constants of interface and method names mostly for use by clients"
-    print " */"
-    print
+    out("")
+    out("/* ------------------------------------------------------------------------")
+    out(" * DBus Constants")
+    out(" *")
+    out(" * Various constants of interface and method names mostly for use by clients")
+    out(" */")
 
     for iface in ifaces:
         header_constants(iface)
 
-    print "/* ------------------------------------------------------------------------"
-    print " * DBus Vtable handler structures"
-    print " *"
-    print " * These structures are filled in by implementors of the different"
-    print " * dbus interfaces to handle method calls."
-    print " *"
-    print " * Handler functions of type sbus_msg_handler_fn accept raw messages,"
-    print " * other handlers will be typed appropriately. If a handler that is"
-    print " * set to NULL is invoked it will result in a"
-    print " * org.freedesktop.DBus.Error.NotSupported error for the caller."
-    print " */"
-    print
+    out("")
+    out("/* ------------------------------------------------------------------------")
+    out(" * DBus Vtable handler structures")
+    out(" *")
+    out(" * These structures are filled in by implementors of the different")
+    out(" * dbus interfaces to handle method calls.")
+    out(" *")
+    out(" * Handler functions of type sbus_msg_handler_fn accept raw messages,")
+    out(" * other handlers will be typed appropriately. If a handler that is")
+    out(" * set to NULL is invoked it will result in a")
+    out(" * org.freedesktop.DBus.Error.NotSupported error for the caller.")
+    out(" */")
     for iface in ifaces:
         if iface.methods:
             header_vtable(iface, iface.methods)
 
-    print "/* ------------------------------------------------------------------------"
-    print " * DBus Interface Metadata"
-    print " *"
-    print " * These structure definitions are filled in with the information about"
-    print " * the interfaces, methods, properties and so on."
-    print " *"
-    print " * The actual definitions are found in the accompanying C file next"
-    print " * to this header."
-    print " */"
-    print
+    out("")
+    out("/* ------------------------------------------------------------------------")
+    out(" * DBus Interface Metadata")
+    out(" *")
+    out(" * These structure definitions are filled in with the information about")
+    out(" * the interfaces, methods, properties and so on.")
+    out(" *")
+    out(" * The actual definitions are found in the accompanying C file next")
+    out(" * to this header.")
+    out(" */")
 
     for iface in ifaces:
         header_interface(iface)
 
-    print
-    print "#endif /* %s */" % guard
+    out("")
+    out("#endif /* %s */", guard)
 
 # -----------------------------------------------------------------------------
 # XML Interface Parsing

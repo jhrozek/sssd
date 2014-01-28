@@ -73,5 +73,4 @@ extern const struct sbus_interface_meta data_provider_iface_meta;
 /* interface info for org.freedesktop.sssd.dataprovider_rev */
 extern const struct sbus_interface_meta data_provider_rev_iface_meta;
 
-
 #endif /* __DATA_PROVIDER_IFACE_XML__ */
