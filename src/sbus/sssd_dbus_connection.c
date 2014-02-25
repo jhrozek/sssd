@@ -346,18 +346,6 @@ void sbus_disconnect (struct sbus_connection *conn)
     DEBUG(SSSDBG_TRACE_FUNC ,"Disconnected %p\n", conn->dbus.conn);
 }
 
-static int sbus_reply_internal_error(DBusMessage *message,
-                                     struct sbus_connection *conn) {
-    DBusMessage *reply = dbus_message_new_error(message, DBUS_ERROR_IO_ERROR,
-                                                "Internal Error");
-    if (reply) {
-        sbus_conn_send_reply(conn, reply);
-        dbus_message_unref(reply);
-        return DBUS_HANDLER_RESULT_HANDLED;
-    }
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
 /* Looks up a vtable func, in a struct derived from struct sbus_vtable */
 #define VTABLE_FUNC(vtable, offset) \
     (*((void **)((char *)(vtable) + (offset))))
@@ -379,7 +367,6 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
     struct sbus_request *dbus_req = NULL;
     sbus_msg_handler_fn handler_fn = NULL;
     DBusHandlerResult result;
-    int ret;
 
     if (!user_data) {
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -429,17 +416,9 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
 
     if (handler_fn) {
         dbus_req = sbus_new_request(intf_p->conn, intf_p->intf, message);
-        if (!dbus_req) {
-            ret = ENOMEM;
-        } else {
+        if (dbus_req) {
             dbus_req->method = method;
-            ret = handler_fn(dbus_req, intf_p->intf->instance_data);
-        }
-        if (ret != EOK) {
-            if (dbus_req)
-                talloc_free(dbus_req);
-            result = sbus_reply_internal_error(message, intf_p->conn);
-        } else {
+            sbus_request_invoke_or_finish(dbus_req, handler_fn, method->invoker);
             result = DBUS_HANDLER_RESULT_HANDLED;
         }
     }
