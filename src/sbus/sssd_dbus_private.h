@@ -22,6 +22,8 @@
 #ifndef _SSSD_DBUS_PRIVATE_H_
 #define _SSSD_DBUS_PRIVATE_H_
 
+#include "sssd_dbus_meta.h"
+
 union dbus_conn_pointer {
     DBusServer *server;
     DBusConnection *conn;
@@ -97,5 +99,9 @@ void sbus_remove_timeout(DBusTimeout *dbus_timeout, void *data);
 struct sbus_request *
 sbus_new_request(struct sbus_connection *conn, struct sbus_interface *intf,
                  DBusMessage *message);
+
+void
+sbus_request_invoke_or_finish(struct sbus_request *dbus_req, sbus_msg_handler_fn handler_fn,
+                              sbus_method_invoker_fn invoker_fn);
 
 #endif /* _SSSD_DBUS_PRIVATE_H_ */
