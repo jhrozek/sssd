@@ -65,6 +65,10 @@ struct sbus_connection {
     struct sbus_watch_ctx *watch_list;
 };
 
+/* Looks up a vtable func, in a struct derived from struct sbus_vtable */
+#define VTABLE_FUNC(vtable, offset) \
+    (*((void **)((char *)(vtable) + (offset))))
+
 /* =Watches=============================================================== */
 
 struct sbus_watch_ctx {
@@ -103,5 +107,11 @@ sbus_new_request(struct sbus_connection *conn, struct sbus_interface *intf,
 void
 sbus_request_invoke_or_finish(struct sbus_request *dbus_req, sbus_msg_handler_fn handler_fn,
                               sbus_method_invoker_fn invoker_fn);
+
+/* =Properties============================================================ */
+
+DBusHandlerResult
+sbus_properties_dispatch(struct sbus_connection *conn, struct sbus_interface *intf,
+                         DBusMessage *message);
 
 #endif /* _SSSD_DBUS_PRIVATE_H_ */

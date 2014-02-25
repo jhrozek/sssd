@@ -346,10 +346,6 @@ void sbus_disconnect (struct sbus_connection *conn)
     DEBUG(SSSDBG_TRACE_FUNC ,"Disconnected %p\n", conn->dbus.conn);
 }
 
-/* Looks up a vtable func, in a struct derived from struct sbus_vtable */
-#define VTABLE_FUNC(vtable, offset) \
-    (*((void **)((char *)(vtable) + (offset))))
-
 /* messsage_handler
  * Receive messages and process them
  */
@@ -384,6 +380,10 @@ DBusHandlerResult sbus_message_handler(DBusConnection *dbus_conn,
     /* Validate the D-BUS path */
     if (strcmp(path, intf_p->intf->path) != 0)
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+    /* Handle the properties interface */
+    if (strcmp(msg_interface, DBUS_PROPERTIES_INTERFACE) == 0)
+        return sbus_properties_dispatch(intf_p->conn, intf_p->intf, message);
 
     result = DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 

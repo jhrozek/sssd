@@ -77,6 +77,9 @@ struct sbus_vtable {
 #define DBUS_INTROSPECT_INTERFACE "org.freedesktop.DBus.Introspectable"
 #define DBUS_INTROSPECT_METHOD "Introspect"
 
+/* Special interface and method for D-BUS properties */
+#define DBUS_PROPERTIES_INTERFACE "org.freedesktop.DBus.Properties"
+
 struct sbus_interface {
     const char *path;
     struct sbus_vtable *vtable;
@@ -243,6 +246,7 @@ int sbus_request_return_and_finish(struct sbus_request *dbus_req,
                                    ...);
 
 /*
+
  * Return an error for a DBus method call request. The @error is a normal
  * DBusError.
  *
