@@ -50,6 +50,9 @@ simple_check_users(struct simple_ctx *ctx, const char *username,
     /* First, check whether the user is in the allowed users list */
     if (ctx->allow_users != NULL) {
         for(i = 0; ctx->allow_users[i] != NULL; i++) {
+            DEBUG(SSSDBG_TRACE_INTERNAL,
+                  ("Comparing [%s] to [%s]\n", username, ctx->allow_users[i]));
+
             if (sss_string_equal(cs, username, ctx->allow_users[i])) {
                 DEBUG(SSSDBG_TRACE_LIBS,
                       ("User [%s] found in allow list, access granted.\n",
@@ -74,6 +77,9 @@ simple_check_users(struct simple_ctx *ctx, const char *username,
     /* Next check whether this user has been specifically denied */
     if (ctx->deny_users != NULL) {
         for(i = 0; ctx->deny_users[i] != NULL; i++) {
+            DEBUG(SSSDBG_TRACE_INTERNAL,
+                  ("Comparing [%s] to [%s]\n", username, ctx->deny_users[i]));
+
             if (sss_string_equal(cs, username, ctx->deny_users[i])) {
                 DEBUG(SSSDBG_TRACE_LIBS,
                       ("User [%s] found in deny list, access denied.\n",
