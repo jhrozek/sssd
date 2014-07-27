@@ -19,6 +19,16 @@ if HAVE_MANPAGES
 SUBDIRS += src/man
 endif
 
+# The cwrap tests require the wrapper libraries and are written
+# using cmocka
+if HAVE_CMOCKA
+if HAVE_NSS_WRAPPER
+if HAVE_UID_WRAPPER
+SUBDIRS += src/tests/cwrap
+endif # HAVE_UID_WRAPPER
+endif # HAVE_NSS_WRAPPER
+endif # HAVE_CMOCKA
+
 # Some old versions of automake don't define builddir
 builddir ?= .
 
@@ -2829,6 +2839,7 @@ endif
 CLEANFILES = *.X */*.X */*/*.X
 
 tests: all $(check_PROGRAMS)
+	(cd src/tests/cwrap && $(MAKE) $(AM_MAKEFLAGS) $@) || exit 1;
 
 
 # RPM-related tasks

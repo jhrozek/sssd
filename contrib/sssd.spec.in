@@ -113,6 +113,8 @@ BuildRequires: glib2-devel
 BuildRequires: selinux-policy-targeted
 %if 0%{?fedora}
 BuildRequires: libcmocka-devel
+BuildRequires: uid_wrapper
+BuildRequires: nss_wrapper
 %endif
 %if (0%{?fedora} || 0%{?rhel} >= 7)
 BuildRequires: libnl3-devel

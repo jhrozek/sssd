@@ -218,3 +218,5 @@ uninstall-local-yes:
 				man_MANS="$$manpages"; \
 		fi \
 	done
+
+tests:
