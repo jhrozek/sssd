@@ -173,6 +173,7 @@ m4_include([src/external/sasl.m4])
 m4_include([src/external/configlib.m4])
 m4_include([src/external/libnfsidmap.m4])
 m4_include([src/external/cwrap.m4])
+m4_include([src/external/libcapng.m4])
 
 if test x$build_config_lib = xyes; then
     m4_include([src/external/libaugeas.m4])
@@ -282,6 +283,7 @@ if test x$cryptolib = xlibcrypto; then
 fi
 
 AM_CHECK_INOTIFY
+AM_CHECK_LIBCAP_NG
 
 AC_CACHE_CHECK([whether compiler supports __attribute__((destructor))],
                sss_client_cv_attribute_destructor,

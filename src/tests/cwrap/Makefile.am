@@ -57,6 +57,7 @@ become_user_tests_CFLAGS = \
 become_user_tests_LDADD = \
     $(POPT_LIBS) \
     $(CMOCKA_LIBS) \
+    $(LIBCAPNG_LIBS) \
     $(abs_top_builddir)/libsss_debug.la \
     libsss_test_common.la \
     $(NULL)
@@ -95,6 +96,7 @@ server_tests_LDADD = \
     $(CMOCKA_LIBS) \
     $(LIBCAPNG_LIBS) \
     $(UNICODE_LIBS) \
+    $(LIBCAPNG_LIBS) \
     $(SSSD_LIBS) \
     $(abs_top_builddir)/libsss_debug.la \
     $(abs_top_builddir)/libsss_crypt.la \

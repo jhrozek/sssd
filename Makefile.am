@@ -394,6 +394,7 @@ AM_CPPFLAGS = \
     $(OPENLDAP_CFLAGS) \
     $(GLIB2_CFLAGS) \
     $(JOURNALD_CFLAGS) \
+    $(LIBCAPNG_CFLAGS) \
     -DLIBDIR=\"$(libdir)\" \
     -DVARDIR=\"$(localstatedir)\" \
     -DSHLIBEXT=\"$(SHLIBEXT)\" \
@@ -461,7 +462,9 @@ SSSD_LIBS = \
     $(DHASH_LIBS) \
     $(SSS_CRYPT_LIBS) \
     $(OPENLDAP_LIBS) \
-    $(TDB_LIBS)
+    $(TDB_LIBS) \
+    $(LIBCAPNG_LIBS) \
+    $(NULL)
 
 PYTHON_BINDINGS_LIBS = \
     $(TALLOC_LIBS) \
@@ -730,6 +733,7 @@ libsss_util_la_SOURCES = \
     $(NULL)
 libsss_util_la_CFLAGS = \
     $(AM_CFLAGS) \
+    $(LIBCAPNG_CFLAGS) \
     $(SYSTEMD_LOGIN_CFLAGS) \
     $(NULL)
 libsss_util_la_LIBADD = \
@@ -1319,14 +1323,16 @@ krb5_utils_tests_SOURCES = \
 krb5_utils_tests_CFLAGS = \
     $(AM_CFLAGS) \
     $(KRB5_CFLAGS) \
-    $(CHECK_CFLAGS)
+    $(CHECK_CFLAGS) \
+    $(NULL)
 krb5_utils_tests_LDADD = \
     $(SSSD_LIBS)\
     $(CARES_LIBS) \
     $(KRB5_LIBS) \
     $(CHECK_LIBS) \
     $(SSSD_INTERNAL_LTLIBS) \
-    libsss_test_common.la
+    libsss_test_common.la \
+    $(NULL)
 
 
 check_and_open_tests_SOURCES = \
@@ -1602,14 +1608,16 @@ krb5_child_test_CFLAGS = \
     $(AM_CFLAGS) \
     -DKRB5_CHILD_DIR=\"$(builddir)\" \
     $(KRB5_CFLAGS) \
-    $(CHECK_CFLAGS)
+    $(CHECK_CFLAGS) \
+    $(NULL)
 krb5_child_test_LDADD = \
     $(SSSD_LIBS) \
     $(CARES_LIBS) \
     $(KRB5_LIBS) \
     $(CHECK_LIBS) \
     $(SSSD_INTERNAL_LTLIBS) \
-    libsss_test_common.la
+    libsss_test_common.la \
+    $(NULL)
 
 if BUILD_DBUS_TESTS
 
@@ -2279,11 +2287,15 @@ libsss_krb5_common_la_SOURCES = \
     src/util/become_user.c \
     $(NULL)
 libsss_krb5_common_la_CFLAGS = \
-    $(KRB5_CFLAGS)
+    $(KRB5_CFLAGS) \
+    $(LIBCAPNG_CFLAGS) \
+    $(NULL)
 libsss_krb5_common_la_LIBADD = \
     $(KEYUTILS_LIBS) \
     $(DHASH_LIBS) \
-    $(KRB5_LIBS)
+    $(KRB5_LIBS) \
+    $(LIBCAPNG_LIBS) \
+    $(NULL)
 libsss_krb5_common_la_LDFLAGS = \
     -avoid-version
 
@@ -2471,14 +2483,18 @@ krb5_child_SOURCES = \
 krb5_child_CFLAGS = \
     $(AM_CFLAGS) \
     $(POPT_CFLAGS) \
-    $(KRB5_CFLAGS)
+    $(KRB5_CFLAGS) \
+    $(LIBCAPNG_CFLAGS) \
+    $(NULL)
 krb5_child_LDADD = \
     libsss_debug.la \
     $(TALLOC_LIBS) \
     $(POPT_LIBS) \
     $(DHASH_LIBS) \
     $(KRB5_LIBS) \
-    $(CLIENT_LIBS)
+    $(CLIENT_LIBS) \
+    $(LIBCAPNG_LIBS) \
+    $(NULL)
 
 ldap_child_SOURCES = \
     src/providers/ldap/ldap_child.c \

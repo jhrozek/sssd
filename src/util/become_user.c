@@ -25,7 +25,11 @@
 #include "util/util.h"
 #include <grp.h>
 
-errno_t become_user(uid_t uid, gid_t gid)
+#ifdef HAVE_LIBCAPNG
+#include <cap-ng.h>
+#endif
+
+static errno_t become_user_int(uid_t uid, gid_t gid)
 {
     uid_t cuid;
     int ret;
@@ -40,7 +44,7 @@ errno_t become_user(uid_t uid, gid_t gid)
         return EOK;
     }
 
-    /* drop supplmentary groups first */
+    /* drop supplementary groups first */
     ret = setgroups(0, NULL);
     if (ret == -1) {
         ret = errno;
@@ -69,6 +73,30 @@ errno_t become_user(uid_t uid, gid_t gid)
     }
 
     return EOK;
+}
+
+#ifdef HAVE_LIBCAPNG
+static errno_t become_user_libcap(uid_t uid, gid_t gid)
+{
+    int ret;
+
+    capng_clear(0);
+    ret = capng_change_id(uid, gid, CAPNG_DROP_SUPP_GRP);
+    if (ret != 0) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Cannot change UID: %d errno: %d\n", ret, errno);
+    }
+
+    return ret;
+}
+#endif
+
+errno_t become_user(uid_t uid, gid_t gid)
+{
+#ifdef HAVE_LIBCAPNG
+    return become_user_libcap(uid, gid);
+#endif
+
+    return become_user_int(uid, gid);
 }
 
 struct sss_creds {

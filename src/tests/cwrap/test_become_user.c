@@ -27,7 +27,7 @@
 #include "util/util.h"
 #include "tests/cmocka/common_mock.h"
 
-void test_become_user(void **state)
+void test_become_user_int(void **state)
 {
     struct passwd *sssd;
     errno_t ret;
@@ -43,7 +43,7 @@ void test_become_user(void **state)
     pid = fork();
     if (pid == 0) {
         /* Change the UID in a child */
-        ret = become_user(sssd->pw_uid, sssd->pw_gid);
+        ret = become_user_int(sssd->pw_uid, sssd->pw_gid);
         assert_int_equal(ret, EOK);
 
         /* Make sure we have the requested UID and GID now and there
@@ -55,7 +55,7 @@ void test_become_user(void **state)
         assert_int_equal(getgid(), sssd->pw_gid);
 
         /* Another become_user is a no-op */
-        ret = become_user(sssd->pw_uid, sssd->pw_gid);
+        ret = become_user_int(sssd->pw_uid, sssd->pw_gid);
         assert_int_equal(ret, EOK);
 
         assert_int_equal(getgroups(0, NULL), 0);
@@ -127,7 +127,7 @@ int main(int argc, const char *argv[])
     };
 
     const UnitTest tests[] = {
-        unit_test(test_become_user),
+        unit_test(test_become_user_int),
         unit_test(test_switch_user),
     };
 
