@@ -170,6 +170,10 @@ struct mt_ctx {
     struct sss_sigchild_ctx *sigchld_ctx;
     bool is_daemon;
     pid_t parent_pid;
+
+    /* For running unprivileged services */
+    uid_t uid;
+    gid_t gid;
 };
 
 static int start_service(struct mt_svc *mt_svc);
@@ -511,7 +515,11 @@ static int monitor_dbus_init(struct mt_ctx *ctx)
         return ret;
     }
 
-    ret = sbus_new_server(ctx, ctx->ev, monitor_address, 0, 0,
+    /* If a service is running as unprivileged user, we need to make sure this
+     * user can access the monitor sbus server. root is still king, so we don't
+     * lose any access
+     */
+    ret = sbus_new_server(ctx, ctx->ev, monitor_address, ctx->uid, ctx->gid,
                           false, &ctx->sbus_srv, monitor_service_init, ctx);
 
     talloc_free(monitor_address);
@@ -910,6 +918,45 @@ static char *check_services(char **services)
     return NULL;
 }
 
+static int get_service_user(struct mt_ctx *ctx)
+{
+    errno_t ret;
+    char *user_str;
+    char *group_str;
+
+    ret = confdb_get_string(ctx->cdb, ctx, CONFDB_MONITOR_CONF_ENTRY,
+                            CONFDB_MONITOR_USER_RUNAS,
+                            SSSD_USER, &user_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to get the user to run as");
+        return ret;
+    }
+
+    ret = sss_user_from_string(user_str, &ctx->uid);
+    talloc_free(user_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to set allowed UIDs.\n");
+        return ret;
+    }
+
+    ret = confdb_get_string(ctx->cdb, ctx, CONFDB_MONITOR_CONF_ENTRY,
+                            CONFDB_MONITOR_GROUP_RUNAS,
+                            SSSD_GROUP, &group_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to get the group to run as");
+        return ret;
+    }
+
+    ret = sss_group_from_string(group_str, &ctx->gid);
+    talloc_free(group_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to set allowed UIDs.\n");
+        return ret;
+    }
+
+    return EOK;
+}
+
 static int get_monitor_config(struct mt_ctx *ctx)
 {
     int ret;
@@ -953,6 +1000,12 @@ static int get_monitor_config(struct mt_ctx *ctx)
     ctx->num_services = 0;
     for (i = 0; ctx->services[i] != NULL; i++) {
         ctx->num_services++;
+    }
+
+    ret = get_service_user(ctx);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to get the unprivileged user\n");
+        return ret;
     }
 
     ret = confdb_get_domains(ctx->cdb, &ctx->domains);
@@ -1020,6 +1073,14 @@ static errno_t get_ping_config(struct mt_ctx *ctx, const char *path,
     return EOK;
 }
 
+/* This is a temporary function that returns false if the service
+ * being started was only tested when running as root.
+ */
+static bool svc_supported_as_nonroot(const char *svc_name)
+{
+    return false;
+}
+
 static int get_service_config(struct mt_ctx *ctx, const char *name,
                               struct mt_svc **svc_cfg)
 {
@@ -1027,6 +1088,8 @@ static int get_service_config(struct mt_ctx *ctx, const char *name,
     char *path;
     struct mt_svc *svc;
     time_t now = time(NULL);
+    uid_t uid = 0;
+    gid_t gid = 0;
 
     *svc_cfg = NULL;
 
@@ -1066,10 +1129,23 @@ static int get_service_config(struct mt_ctx *ctx, const char *name,
         return ret;
     }
 
+    if (svc_supported_as_nonroot(svc->name)) {
+        uid = ctx->uid;
+        gid = ctx->gid;
+    }
+
     if (!svc->command) {
         svc->command = talloc_asprintf(
             svc, "%s/sssd_%s", SSSD_LIBEXEC_PATH, svc->name
         );
+        if (!svc->command) {
+            talloc_free(svc);
+            return ENOMEM;
+        }
+
+        svc->command = talloc_asprintf_append(svc->command,
+                " --uid %"SPRIuid" --gid %"SPRIgid,
+                uid, gid);
         if (!svc->command) {
             talloc_free(svc);
             return ENOMEM;
