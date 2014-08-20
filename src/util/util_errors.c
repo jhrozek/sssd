@@ -53,6 +53,7 @@ struct err_string error_to_str[] = {
     { "Missing configuration file" }, /* ERR_MISSING_CONF */
     { "Malformed search filter" }, /* ERR_INVALID_FILTER, */
     { "No POSIX attributes detected" }, /* ERR_NO_POSIX */
+    { "LDAP search returned a referral" }, /* ERR_REFERRAL */
 };
 
 

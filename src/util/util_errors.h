@@ -75,6 +75,8 @@ enum sssd_errors {
     ERR_MISSING_CONF,
     ERR_INVALID_FILTER,
     ERR_NO_POSIX,
+    ERR_NO_SYSBUS,
+    ERR_REFERRAL,
     ERR_LAST            /* ALWAYS LAST */
 };
 
