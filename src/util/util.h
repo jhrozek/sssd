@@ -403,6 +403,9 @@ bool check_ipv6_addr(struct in6_addr *addr, uint8_t check);
 
 const char * const * get_known_services(void);
 
+errno_t sss_user_from_string(const char *input, uid_t *_uid);
+errno_t sss_group_from_string(const char *input, gid_t *_gid);
+
 int split_on_separator(TALLOC_CTX *mem_ctx, const char *str,
                        const char sep, bool trim, bool skip_empty,
                        char ***_list, int *size);

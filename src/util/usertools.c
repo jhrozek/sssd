@@ -23,8 +23,11 @@
 #include <pcre.h>
 #include <errno.h>
 #include <talloc.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include "confdb/confdb.h"
+#include "util/strtonum.h"
 #include "util/util.h"
 #include "util/safe-format-string.h"
 #include "responder/common/responder.h"
@@ -646,4 +649,65 @@ sss_get_domain_name(TALLOC_CTX *mem_ctx,
     }
 
     return user_name;
+}
+
+static errno_t sss_user_or_group_from_string(const char *input,
+                                             bool is_user,
+                                             id_t *_id)
+{
+    id_t id;
+    errno_t ret;
+    char *endptr;
+    struct passwd *pwd;
+    struct group *grp;
+
+    /* Try if it's an ID first */
+    id = strtouint32(input, &endptr, 10);
+    if (errno != 0 || *endptr != '\0') {
+        ret = errno;
+        if (ret == ERANGE) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "List item [%s] is out of range.\n", input);
+            return ret;
+        }
+
+        if (is_user) {
+            /* Nope, maybe a username? */
+            pwd = getpwnam(input);
+            if (pwd == NULL) {
+                DEBUG(SSSDBG_OP_FAILURE,
+                      "List item [%s] is neither a valid "
+                      "UID nor a user name which cloud be "
+                      "resolved by getpwnam().\n", input);
+                return EINVAL;
+            }
+
+            id = pwd->pw_uid;
+        } else {
+            /* Nope, maybe a username? */
+            grp = getgrnam(input);
+            if (grp == NULL) {
+                DEBUG(SSSDBG_OP_FAILURE,
+                      "List item [%s] is neither a valid "
+                      "UID nor a user name which cloud be "
+                      "resolved by getpwnam().\n", input);
+                return EINVAL;
+            }
+            id = grp->gr_gid;
+        }
+
+    }
+
+    *_id = id;
+    return EOK;
+}
+
+errno_t sss_user_from_string(const char *input, uid_t *_uid)
+{
+    return sss_user_or_group_from_string(input, true, _uid);
+}
+
+errno_t sss_group_from_string(const char *input, gid_t *_gid)
+{
+    return sss_user_or_group_from_string(input, false, _gid);
 }

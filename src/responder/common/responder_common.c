@@ -169,7 +169,6 @@ errno_t csv_string_to_uid_array(TALLOC_CTX *mem_ctx, const char *cvs_string,
     int list_size;
     uid_t *uids = NULL;
     char *endptr;
-    struct passwd *pwd;
 
     ret = split_on_separator(mem_ctx, cvs_string, ',', true, false,
                              &list, &list_size);
@@ -211,17 +210,13 @@ errno_t csv_string_to_uid_array(TALLOC_CTX *mem_ctx, const char *cvs_string,
                 goto done;
             }
 
-            errno = 0;
-            pwd = getpwnam(list[c]);
-            if (pwd == NULL) {
+            ret = sss_user_from_string(list[c], &uids[c]);
+            if (ret != EOK) {
                 DEBUG(SSSDBG_OP_FAILURE, "List item [%s] is neither a valid "
                                           "UID nor a user name which cloud be "
                                           "resolved by getpwnam().\n", list[c]);
-                ret = EINVAL;
                 goto done;
             }
-
-            uids[c] = pwd->pw_uid;
         }
     }
 
