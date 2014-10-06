@@ -469,7 +469,8 @@ int main(int argc, const char *argv[])
     /* set up things like debug, signals, daemonization, etc... */
     debug_log_file = "sssd_ifp";
 
-    ret = server_setup("sssd[ifp]", 0, CONFDB_IFP_CONF_ENTRY, &main_ctx);
+    ret = server_setup("sssd[ifp]", 0, 0, 0,
+                       CONFDB_IFP_CONF_ENTRY, &main_ctx);
     if (ret != EOK) return 2;
 
     ret = die_if_parent_died();
