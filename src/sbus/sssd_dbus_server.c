@@ -181,6 +181,7 @@ remove_socket_symlink(const char *symlink_name)
 int sbus_new_server(TALLOC_CTX *mem_ctx,
                     struct tevent_context *ev,
                     const char *address,
+                    uid_t uid, gid_t gid,
                     bool use_symlink,
                     struct sbus_connection **_server,
                     sbus_server_conn_init_fn init_fn,
@@ -255,6 +256,17 @@ int sbus_new_server(TALLOC_CTX *mem_ctx,
         DEBUG(SSSDBG_CRIT_FAILURE, "check_file failed for [%s].\n", filename);
         ret = EIO;
         goto done;
+    }
+
+    if (stat_buf.st_uid != uid || stat_buf.st_gid != gid) {
+        ret = chown(filename, uid, gid);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "chown failed for [%s]: [%d][%s].\n", filename, errno,
+                                                        strerror(errno));
+            ret = EIO;
+            goto done;
+        }
     }
 
     if ((stat_buf.st_mode & ~S_IFMT) != (S_IRUSR|S_IWUSR)) {
