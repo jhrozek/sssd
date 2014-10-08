@@ -34,10 +34,16 @@ check_PROGRAMS = \
 	usertools-tests \
 	$(NULL)
 
+PYTHON_TESTS = \
+	test_krb5_child.py \
+	$(NULL)
+
 check_LTLIBRARIES = \
     libsss_test_common.la
 
-TESTS = $(check_PROGRAMS)
+TESTS = \
+	$(check_PROGRAMS) \
+	$(NULL)
 
 libsss_test_common_la_SOURCES = \
     ../common_tev.c \
