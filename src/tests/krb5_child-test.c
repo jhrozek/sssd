@@ -50,6 +50,8 @@ static krb5_context krb5_error_ctx;
     }                                           \
 } while(0)                                      \
 
+#define KRB5_CHILD_TEST_DOM_NAME    "domname"
+
 struct krb5_child_test_ctx {
     struct tevent_context *ev;
     struct krb5child_req *kr;
@@ -192,6 +194,7 @@ create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
     struct krb5child_req *kr;
     struct passwd *pwd;
     errno_t ret;
+    struct sss_domain_info *dom;
 
     /* The top level child request */
     kr = talloc_zero(mem_ctx, struct krb5child_req);
@@ -212,7 +215,21 @@ create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
     /* PAM Data structure */
     kr->pd = create_dummy_pam_data(kr, user, password);
 
-    ret = krb5_get_simple_upn(kr, kr->krb5_ctx, NULL, kr->pd->user, NULL,
+    /* Create a mock domain */
+    dom = talloc_zero(kr, struct sss_domain_info);
+    if (!dom) goto fail;
+    dom->name = discard_const(KRB5_CHILD_TEST_DOM_NAME);
+
+    ret = sss_names_init_from_args(dom,
+                                   "(?P<name>[^@]+)@?(?P<domain>[^@]*$)",
+                                   CONFDB_DEFAULT_FULL_NAME_FORMAT,
+                                   &dom->names);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "krb5_get_simple_upn failed.\n");
+        goto fail;
+    }
+
+    ret = krb5_get_simple_upn(kr, kr->krb5_ctx, dom, kr->pd->user, NULL,
                               &kr->upn);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "krb5_get_simple_upn failed.\n");
