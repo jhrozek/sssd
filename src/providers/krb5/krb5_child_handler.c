@@ -301,8 +301,9 @@ static errno_t fork_child(struct tevent_req *req)
                          pipefd_to_child, pipefd_from_child,
                          KRB5_CHILD, state->kr->krb5_ctx->child_debug_fd);
         if (err != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "Could not exec KRB5 child: [%d][%s].\n",
-                      err, strerror(err));
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "Could not exec KRB5 child [%s]: [%d][%s].\n",
+                  KRB5_CHILD, err, strerror(err));
             return err;
         }
     } else if (pid > 0) { /* parent */

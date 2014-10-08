@@ -1616,7 +1616,7 @@ krb5_child_test_SOURCES = \
     $(NULL)
 krb5_child_test_CFLAGS = \
     $(AM_CFLAGS) \
-    -DKRB5_CHILD_DIR=\"$(builddir)\" \
+    -DKRB5_CHILD_DIR=\"$(abs_top_builddir)\" \
     $(KRB5_CFLAGS) \
     $(CHECK_CFLAGS)
 krb5_child_test_LDADD = \

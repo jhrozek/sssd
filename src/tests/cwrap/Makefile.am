@@ -17,6 +17,7 @@ TESTS_ENVIRONMENT = \
 
 dist_noinst_SCRIPTS = \
     cwrap_test_setup.sh \
+    test_krb5_child.py \
     $(NULL)
 
 SSSD_LIBS = \
@@ -39,6 +40,7 @@ dist_noinst_DATA = \
     $(NULL)
 
 check_PROGRAMS =
+PYTHON_TESTS =
 if HAVE_CMOCKA
 if HAVE_NSS_WRAPPER
 if HAVE_UID_WRAPPER
@@ -48,11 +50,23 @@ check_PROGRAMS += \
     usertools-tests \
     responder_common-tests \
     $(NULL)
+
+EXTRA_DIST = \
+	fake_kdc.py \
+	$(NULL)
+
+PYTHON_TESTS += \
+	test_krb5_child.py \
+	$(NULL)
+
 endif # HAVE_UID_WRAPPER
 endif # HAVE_NSS_WRAPPER
 endif # HAVE_CMOCKA
 
-TESTS = $(check_PROGRAMS)
+TESTS = \
+	$(check_PROGRAMS) \
+	$(PYTHON_TESTS) \
+	$(NULL)
 
 become_user_tests_SOURCES = \
     test_become_user.c \
