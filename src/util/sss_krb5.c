@@ -97,7 +97,9 @@ errno_t select_principal_from_keytab(TALLOC_CTX *mem_ctx,
                                       NULL,     NULL};
 
     DEBUG(SSSDBG_FUNC_DATA,
-          "trying to select the most appropriate principal from keytab\n");
+          "trying to select the most appropriate principal from "
+          "list of principals\n");
+
     tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
         DEBUG(SSSDBG_CRIT_FAILURE, "talloc_new failed\n");
@@ -400,6 +402,118 @@ static bool match_principal(krb5_context ctx,
 
 done:
     free(primary);
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+errno_t sss_read_keytab(TALLOC_CTX *mem_ctx,
+                        const char *keytab_name,
+                        char **_list_princs)
+{
+    krb5_context ctx = NULL;
+    krb5_keytab keytab = NULL;
+    TALLOC_CTX *tmp_ctx = NULL;
+    krb5_kt_cursor cursor;
+    krb5_error_code kerr;
+    krb5_keytab_entry entry;
+    errno_t ret;
+    char *str_princ;
+    size_t num_princs;
+    size_t pindex;
+    char **list_princs;
+
+    tmp_ctx = talloc_new(NULL);
+    if (!tmp_ctx) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_new failed\n");
+        return ENOMEM;
+    }
+
+    kerr = krb5_init_context(&ctx);
+    if (kerr) {
+        DEBUG(SSSDBG_OP_FAILURE, "Failed to init kerberos context\n");
+        ret = EFAULT;
+        goto done;
+    }
+
+    if (keytab_name != NULL) {
+        kerr = krb5_kt_resolve(ctx, keytab_name, &keytab);
+    } else {
+        kerr = krb5_kt_default(ctx, &keytab);
+    }
+    if (kerr) {
+        DEBUG(SSSDBG_FATAL_FAILURE,
+              "Failed to read keytab [%s]: %s\n",
+               KEYTAB_CLEAN_NAME,
+               sss_krb5_get_error_message(ctx, kerr));
+        ret = EFAULT;
+        goto done;
+    }
+
+    memset(&cursor, 0, sizeof(cursor));
+    kerr = krb5_kt_start_seq_get(ctx, keytab, &cursor);
+    if (kerr != 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "krb5_kt_start_seq_get failed.\n");
+        ret = EFAULT;
+        goto done;
+    }
+
+    /* Get the number of entries first */
+    num_princs = 0;
+    while ((kerr = krb5_kt_next_entry(ctx, keytab, &entry, &cursor)) == 0) {
+        num_princs++;
+    }
+    memset(&entry, 0, sizeof(entry));
+
+    kerr = krb5_kt_end_seq_get(ctx, keytab, &cursor);
+    if (kerr != 0) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "krb5_kt_end_seq_get failed.\n");
+        /* Non-critical, just a memleak */
+    }
+
+    list_princs = talloc_zero_array(tmp_ctx, char *, num_princs + 1);
+    if (list_princs == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    /* Got the number of entries, let's read them */
+    memset(&cursor, 0, sizeof(cursor));
+    kerr = krb5_kt_start_seq_get(ctx, keytab, &cursor);
+    if (kerr != 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "krb5_kt_start_seq_get failed.\n");
+        ret = EFAULT;
+        goto done;
+    }
+
+    pindex = 0;
+    memset(&entry, 0, sizeof(entry));
+    while ((kerr = krb5_kt_next_entry(ctx, keytab, &entry, &cursor)) == 0) {
+        sss_krb5_unparse_name_flags(ctx, entry.principal, 0, &str_princ);
+        kerr = sss_krb5_free_keytab_entry_contents(ctx, &entry);
+        if (kerr != 0) {
+            DEBUG(SSSDBG_CRIT_FAILURE, "Failed to free keytab entry.\n");
+        }
+        memset(&entry, 0, sizeof(entry));
+
+        list_princs[pindex] = talloc_strdup(list_princs, str_princ);
+        krb5_free_unparsed_name(ctx, str_princ);
+        if (list_princs[pindex] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+        pindex++;
+    }
+
+    kerr = krb5_kt_end_seq_get(ctx, keytab, &cursor);
+    if (kerr != 0) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "krb5_kt_end_seq_get failed.\n");
+        /* Non-critical, just a memleak */
+    }
+
+    ret = 0;
+done:
+    if (keytab) krb5_kt_close(ctx, keytab);
+    if (ctx) krb5_free_context(ctx);
     talloc_free(tmp_ctx);
     return ret;
 }
