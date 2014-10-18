@@ -566,6 +566,7 @@ dist_noinst_HEADERS = \
     src/providers/krb5/krb5_utils.h \
     src/providers/krb5/krb5_init_shared.h \
     src/providers/krb5/krb5_opts.h \
+    src/providers/krb5/krb5_ccache.h \
     src/providers/ldap/ldap_common.h \
     src/providers/ldap/sdap.h \
     src/providers/ldap/sdap_access.h \
@@ -1320,6 +1321,7 @@ strtonum_tests_LDADD = \
 krb5_utils_tests_SOURCES = \
     src/tests/krb5_utils-tests.c \
     src/providers/krb5/krb5_utils.c \
+    src/providers/krb5/krb5_ccache.c \
     src/providers/krb5/krb5_common.c \
     src/util/sss_krb5.c \
     src/providers/data_provider_fo.c \
@@ -1601,6 +1603,7 @@ stress_tests_LDADD = \
 krb5_child_test_SOURCES = \
     src/tests/krb5_child-test.c \
     src/providers/krb5/krb5_utils.c \
+    src/providers/krb5/krb5_ccache.c \
     src/providers/krb5/krb5_child_handler.c \
     src/providers/krb5/krb5_common.c \
     src/util/sss_krb5.c \
@@ -2287,6 +2290,7 @@ libsss_krb5_common_la_SOURCES = \
     src/providers/krb5/krb5_access.c \
     src/providers/krb5/krb5_child_handler.c \
     src/providers/krb5/krb5_init_shared.c \
+    src/providers/krb5/krb5_ccache.c \
     src/util/sss_krb5.c \
     src/util/become_user.c \
     $(NULL)
