@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <limits.h>
 
+#include "src/sss_client/sss_cli.h"
 #include "util/util.h"
 #include "src/tools/tools_util.h"
 
@@ -157,8 +158,8 @@ fail:
 }
 
 static struct pam_data *
-create_dummy_pam_data(TALLOC_CTX *mem_ctx, const char *user,
-                      const char *password)
+create_dummy_pam_data(TALLOC_CTX *mem_ctx, int action, const char *user,
+                      const char *password, const char *new_password)
 {
     struct pam_data *pd;
     const char *authtok;
@@ -168,12 +169,21 @@ create_dummy_pam_data(TALLOC_CTX *mem_ctx, const char *user,
     pd = create_pam_data(mem_ctx);
     if (!pd) goto fail;
 
-    pd->cmd = SSS_PAM_AUTHENTICATE;
+    pd->cmd = action;
     pd->user = talloc_strdup(pd, user);
     if (!pd->user) goto fail;
 
     ret = sss_authtok_set_password(pd->authtok, password, 0);
     if (ret) goto fail;
+
+    if (action == SSS_PAM_CHAUTHTOK) {
+        if (new_password == NULL) {
+            DEBUG(SSSDBG_OP_FAILURE, "No new password during authtok!\n");
+            goto fail;
+        }
+        ret = sss_authtok_set_password(pd->newauthtok, new_password, 0);
+        if (ret) goto fail;
+    }
 
     (void)sss_authtok_get_password(pd->authtok, &authtok, &authtok_len);
     DEBUG(SSSDBG_FUNC_DATA, "Authtok [%s] len [%d]\n",
@@ -187,9 +197,10 @@ fail:
 }
 
 static struct krb5child_req *
-create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
-                 const char *password, const char *realm,
-                 const char *ccname, const char *ccname_template,
+create_dummy_req(TALLOC_CTX *mem_ctx, int action, const char *user,
+                 const char *password, const char *new_password,
+                 const char *realm, const char *ccname,
+                 const char *ccname_template,
                  int timeout)
 {
     struct krb5child_req *kr;
@@ -214,7 +225,7 @@ create_dummy_req(TALLOC_CTX *mem_ctx, const char *user,
     /* The Kerberos context */
     kr->krb5_ctx = create_dummy_krb5_ctx(kr, realm);
     /* PAM Data structure */
-    kr->pd = create_dummy_pam_data(kr, user, password);
+    kr->pd = create_dummy_pam_data(kr, action, user, password, new_password);
 
     /* Create a mock domain */
     dom = talloc_zero(kr, struct sss_domain_info);
@@ -409,11 +420,13 @@ main(int argc, const char *argv[])
     int pc_timeout = 0;
     const char *pc_user = NULL;;
     const char *pc_passwd = NULL;;
+    const char *pc_new_passwd = NULL;
     const char *pc_realm = NULL;;
     const char *pc_ccname = NULL;;
     const char *pc_ccname_tp = NULL;;
     char *password = NULL;
     bool rm_ccache = true;
+    int action = SSS_PAM_AUTHENTICATE;
 
     poptContext pc;
     struct poptOption long_options[] = {
@@ -424,6 +437,8 @@ main(int argc, const char *argv[])
           "The user to log in as", NULL },
         { "password", 'w', POPT_ARG_STRING, &pc_passwd, 0,
           "The authtok to use", NULL },
+        { "new-password", '\0', POPT_ARG_STRING, &pc_new_passwd, 0,
+          "The new authtok to use if changing passwords", NULL },
         { "ask-password", 'W', POPT_ARG_NONE, NULL, 'W',
           "Ask interactively for authtok", NULL },
         { "ccname", 'c', POPT_ARG_STRING, &pc_ccname, 0,
@@ -436,6 +451,10 @@ main(int argc, const char *argv[])
           "Do not delete the ccache when the tool finishes", NULL },
         { "timeout", '\0', POPT_ARG_INT, &pc_timeout, 0,
           "The timeout for the child, in seconds", NULL },
+        { "auth", '\0', POPT_ARG_NONE, NULL, 'a',
+          "Authenticate (default)", NULL },
+        { "chpass", '\0', POPT_ARG_NONE, NULL, 'c',
+          "Change password", NULL },
         POPT_TABLEEND
     };
 
@@ -453,6 +472,12 @@ main(int argc, const char *argv[])
             break;
         case 'k':
             rm_ccache = false;
+            break;
+        case 'a':
+            action = SSS_PAM_AUTHENTICATE;
+            break;
+        case 'c':
+            action = SSS_PAM_CHAUTHTOK;
             break;
         default:
             DEBUG(SSSDBG_FATAL_FAILURE, "Unexpected option\n");
@@ -500,8 +525,9 @@ main(int argc, const char *argv[])
         return 3;
     }
 
-    ctx->kr = create_dummy_req(ctx, pc_user, password ? password : pc_passwd,
-                               pc_realm, pc_ccname, pc_ccname_tp, pc_timeout);
+    ctx->kr = create_dummy_req(ctx, action, pc_user, password ? password : pc_passwd,
+                               pc_new_passwd, pc_realm, pc_ccname,
+                               pc_ccname_tp, pc_timeout);
     if (!ctx->kr) {
         DEBUG(SSSDBG_FATAL_FAILURE, "Cannot create Kerberos request\n");
         ret = 4;

@@ -63,6 +63,25 @@ class Krb5ChildTest(unittest.TestCase):
         child_test.communicate()
         self.assertEqual(child_test.returncode, 6)
 
+    #def testChpass(self):
+    #    username = 'foobar'
+
+    #    oldpass = self.users[username]
+    #    self.users[username] = 'ThisIsANewPassword'
+
+    #    child_test = subprocess.Popen([test_bin, '--chpass', '-u', username,
+    #                                 '-w', oldpass,
+    #                                 '--new-password', self.users[username],
+    #                                 '-r', self.realm,
+    #                                 '--debug', '10',
+    #                                 '-c', 'FILE:%s' % self.ccache_path(username),
+    #                                 '-k'],
+    #                                 env = self.env)
+    #    child_test.communicate()
+    #    self.assertEqual(child_test.returncode, 0)
+    #    self.assertPrincipalInCcache(self.principal(username, self.realm),
+    #                                 self.ccache_path(username))
+
     def assertPrincipalInCcache(self, principal, ccache):
         klist = subprocess.Popen(['klist', ccache], stdout=subprocess.PIPE)
         klist.communicate()
