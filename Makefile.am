@@ -146,6 +146,9 @@ endif
 if BUILD_SAMBA
 sssdlibexec_PROGRAMS += gpo_child
 endif
+if BUILD_SEMANAGE
+sssdlibexec_PROGRAMS += selinux_child
+endif
 
 
 if BUILD_PAC_RESPONDER
@@ -2512,6 +2515,26 @@ ldap_child_LDADD = \
     $(DHASH_LIBS) \
     $(KRB5_LIBS)
 
+if BUILD_SEMANAGE
+selinux_child_SOURCES = \
+    src/providers/ipa/selinux_child.c \
+    src/util/sss_semanage.c \
+    src/util/atomic_io.c \
+    src/util/util.c \
+    $(NULL)
+selinux_child_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(POPT_CFLAGS) \
+    $(NULL)
+selinux_child_LDADD = \
+    libsss_debug.la \
+    $(TALLOC_LIBS) \
+    $(POPT_LIBS) \
+    $(DHASH_LIBS) \
+    $(SEMANAGE_LIBS) \
+    $(NULL)
+endif
+
 gpo_child_SOURCES = \
     src/providers/ad/ad_gpo_child.c \
     src/util/atomic_io.c \
@@ -2829,7 +2852,9 @@ endif
 
 if SSSD_USER
 	chgrp $(SSSD_USER) $(sssdlibexecdir)/ldap_child
+	chgrp $(SSSD_USER) $(sssdlibexecdir)/selinux_child
 	chmod 4750 $(sssdlibexecdir)/ldap_child
+	chmod 4750 $(sssdlibexecdir)/selinux_child
 endif
 
 install-data-hook:
