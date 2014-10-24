@@ -2853,8 +2853,10 @@ endif
 if SSSD_USER
 	chgrp $(SSSD_USER) $(sssdlibexecdir)/ldap_child
 	chgrp $(SSSD_USER) $(sssdlibexecdir)/selinux_child
+	chgrp $(SSSD_USER) $(sssdlibexecdir)/krb5_child
 	chmod 4750 $(sssdlibexecdir)/ldap_child
 	chmod 4750 $(sssdlibexecdir)/selinux_child
+	chmod 4750 $(sssdlibexecdir)/krb5_child
 endif
 
 install-data-hook:
