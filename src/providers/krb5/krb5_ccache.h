@@ -53,4 +53,7 @@ errno_t safe_remove_old_ccache_file(const char *old_ccache,
                                     const char *new_ccache,
                                     uid_t uid, gid_t gid);
 
+krb5_error_code copy_ccache_into_memory(TALLOC_CTX *mem_ctx, krb5_context kctx,
+                                        const char *ccache_file,
+                                        char **_mem_name);
 #endif /* __KRB5_CCACHE_H__ */
