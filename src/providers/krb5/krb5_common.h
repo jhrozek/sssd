@@ -189,4 +189,8 @@ int sssm_krb5_auth_init(struct be_ctx *bectx,
                         struct bet_ops **ops,
                         void **pvt_auth_data);
 
+/* from krb5_keytab.c */
+krb5_error_code copy_keytab_into_memory(TALLOC_CTX *mem_ctx, krb5_context kctx,
+                                        const char *keytab_file,
+                                        char **_mem_name);
 #endif /* __KRB5_COMMON_H__ */
