@@ -33,6 +33,7 @@
 #include "util/sss_krb5.h"
 #include "util/child_common.h"
 #include "providers/dp_backend.h"
+#include "providers/krb5/krb5_common.h"
 
 static krb5_context krb5_error_ctx;
 #define LDAP_CHILD_DEBUG(level, error) KRB5_DEBUG(level, krb5_error_ctx, error)
@@ -248,7 +249,7 @@ static int lc_verify_keytab_ex(const char *principal,
 static krb5_error_code ldap_child_get_tgt_sync(TALLOC_CTX *memctx,
                                                const char *realm_str,
                                                const char *princ_str,
-                                               const char *keytab_name,
+                                               const char *inp_keytab_name,
                                                const krb5_deltat lifetime,
                                                uid_t uid,
                                                gid_t gid,
@@ -277,6 +278,8 @@ static krb5_error_code ldap_child_get_tgt_sync(TALLOC_CTX *memctx,
     char *ccname_file_dummy;
     char *ccname_file;
     mode_t old_umask;
+    char *keytab_name;
+    char default_keytab_name[MAX_KEYTAB_NAME_LEN];
 
     krberr = krb5_init_context(&context);
     if (krberr) {
@@ -290,6 +293,32 @@ static krb5_error_code ldap_child_get_tgt_sync(TALLOC_CTX *memctx,
         krberr = KRB5KRB_ERR_GENERIC;
         goto done;
     }
+
+    if (inp_keytab_name != NULL) {
+        krberr = copy_keytab_into_memory(tmp_ctx, context, inp_keytab_name,
+                                       &keytab_name);
+    } else {
+        krberr = krb5_kt_default_name(context, default_keytab_name,
+                                     sizeof(default_keytab_name));
+        if (krberr != 0) {
+            DEBUG(SSSDBG_OP_FAILURE, "krb5_kt_default_name failed.\n");
+            goto done;
+        }
+
+        krberr = copy_keytab_into_memory(tmp_ctx, context, default_keytab_name,
+                                       &keytab_name);
+    }
+    if (krberr != 0) {
+        DEBUG(SSSDBG_OP_FAILURE, "copy_keytab_into_memory failed.\n");
+        goto done;
+    }
+
+    krberr = become_user(uid, gid);
+    if (krberr != 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
+        goto done;
+    }
+
 
     krberr = set_child_debugging(context);
     if (krberr != EOK) {
@@ -439,12 +468,6 @@ static krb5_error_code ldap_child_get_tgt_sync(TALLOC_CTX *memctx,
         goto done;
     }
     DEBUG(SSSDBG_TRACE_INTERNAL, "credentials initialized\n");
-
-    krberr = become_user(uid, gid);
-    if (krberr != 0) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
-        goto done;
-    }
 
     ccname_dummy = talloc_asprintf(tmp_ctx, "FILE:%s", ccname_file_dummy);
     ccname = talloc_asprintf(tmp_ctx, "FILE:%s", ccname_file);

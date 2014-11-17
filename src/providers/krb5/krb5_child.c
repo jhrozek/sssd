@@ -1846,6 +1846,7 @@ static int k5c_setup_fast(struct krb5_req *kr, bool demand)
     char *fast_principal;
     krb5_error_code kerr;
     char *tmp_str;
+    char *new_ccname;
 
     tmp_str = getenv(SSSD_KRB5_FAST_PRINCIPAL);
     if (tmp_str) {
@@ -1887,6 +1888,15 @@ static int k5c_setup_fast(struct krb5_req *kr, bool demand)
         KRB5_CHILD_DEBUG(SSSDBG_CRIT_FAILURE, kerr);
         return kerr;
     }
+
+    kerr = copy_ccache_into_memory(kr, kr->ctx, kr->fast_ccname, &new_ccname);
+    if (kerr != 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "copy_ccache_into_memory failed.\n");
+        return kerr;
+    }
+
+    talloc_free(kr->fast_ccname);
+    kr->fast_ccname = new_ccname;
 
     kerr = sss_krb5_get_init_creds_opt_set_fast_ccache_name(kr->ctx,
                                                             kr->options,
@@ -2070,6 +2080,7 @@ static int k5c_setup(struct krb5_req *kr, uint32_t offline)
     krb5_error_code kerr;
     int parse_flags;
     enum k5c_fast_opt fast_val;
+    char *mem_keytab;
 
     kerr = check_use_fast(&fast_val);
     if (kerr != EOK) {
@@ -2189,6 +2200,28 @@ static int k5c_setup(struct krb5_req *kr, uint32_t offline)
             }
         }
     }
+
+    if (!(offline || (fast_val == K5C_FAST_NEVER && kr->validate == false))) {
+        if (kr->keytab != NULL) {
+            kerr = copy_keytab_into_memory(kr, kr->ctx, kr->keytab,
+                                           &mem_keytab);
+            if (kerr != 0) {
+                DEBUG(SSSDBG_OP_FAILURE, "copy_keytab_into_memory failed.\n");
+                return kerr;
+            }
+
+            talloc_free(kr->keytab);
+            kr->keytab = mem_keytab;
+        }
+
+        kerr = become_user(kr->uid, kr->gid);
+        if (kerr != 0) {
+            DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
+            return kerr;
+        }
+    }
+    DEBUG(SSSDBG_TRACE_INTERNAL,
+          "Running as [%"SPRIuid"][%"SPRIgid"].\n", geteuid(), getegid());
 
 /* TODO: set options, e.g.
  *  krb5_get_init_creds_opt_set_forwardable
