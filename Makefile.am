@@ -2505,6 +2505,7 @@ krb5_child_SOURCES = \
     src/util/signal.c \
     src/util/strtonum.c \
     src/util/become_user.c \
+    src/util/util_errors.c \
     src/sss_client/common.c \
     $(NULL)
 krb5_child_CFLAGS = \
