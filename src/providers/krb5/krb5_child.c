@@ -1005,17 +1005,6 @@ static krb5_error_code get_and_save_tgt(struct krb5_req *kr,
         DEBUG(SSSDBG_CONF_SETTINGS, "TGT validation is disabled.\n");
     }
 
-    if (kr->validate || kr->fast_ccname != NULL) {
-        /* We drop root privileges which were needed to read the keytab file
-         * for the validation of the credentials or for FAST here to run the
-         * ccache I/O operations with user privileges. */
-        kerr = become_user(kr->uid, kr->gid);
-        if (kerr != 0) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
-            return kerr;
-        }
-    }
-
     /* If kr->ccname is cache collection (DIR:/...), we want to work
      * directly with file ccache (DIR::/...), but cache collection
      * should be returned back to back end.
@@ -1436,17 +1425,6 @@ static errno_t renew_tgt_child(struct krb5_req *kr)
         DEBUG(SSSDBG_CONF_SETTINGS, "TGT validation is disabled.\n");
     }
 
-    if (kr->validate || kr->fast_ccname != NULL) {
-        /* We drop root privileges which were needed to read the keytab file
-         * for the validation of the credentials or for FAST here to run the
-         * ccache I/O operations with user privileges. */
-        kerr = become_user(kr->uid, kr->gid);
-        if (kerr != 0) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
-            goto done;
-        }
-    }
-
     kerr = krb5_cc_initialize(kr->ctx, ccache, kr->princ);
     if (kerr != 0) {
         KRB5_CHILD_DEBUG(SSSDBG_CRIT_FAILURE, kerr);
@@ -1808,6 +1786,8 @@ static krb5_error_code check_fast_ccache(TALLOC_CTX *mem_ctx,
                 DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
                 return kerr;
             }
+            DEBUG(SSSDBG_TRACE_INTERNAL,
+                  "Running as [%"SPRIuid"][%"SPRIgid"].\n", geteuid(), getegid());
 
             kerr = get_and_save_tgt_with_keytab(ctx, client_princ, keytab, ccname);
             if (kerr != 0) {
