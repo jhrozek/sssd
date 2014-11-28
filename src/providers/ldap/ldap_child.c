@@ -596,6 +596,8 @@ int main(int argc, const char *argv[])
     struct input_buffer *ibuf = NULL;
     struct response *resp = NULL;
     size_t written;
+    uid_t uid;
+    gid_t gid;
 
     struct poptOption long_options[] = {
         POPT_AUTOHELP
@@ -609,6 +611,7 @@ int main(int argc, const char *argv[])
          _("An open file descriptor for the debug logs"), NULL},
         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN, &debug_to_stderr, 0, \
          _("Send the debug output to stderr directly."), NULL }, \
+        SSSD_SERVER_OPTS(uid, gid)
         POPT_TABLEEND
     };
 

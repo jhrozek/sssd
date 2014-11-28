@@ -66,6 +66,10 @@ struct krb5_req {
     char *old_ccname;
     bool old_cc_valid;
     bool old_cc_active;
+
+    /* The IDs the backend runs as. Used for creating the fast ccache */
+    uid_t be_uid;
+    gid_t be_gid;
 };
 
 static krb5_context krb5_error_ctx;
@@ -2245,6 +2249,8 @@ int main(int argc, const char *argv[])
     poptContext pc;
     int debug_fd = -1;
     errno_t ret;
+    uid_t be_uid;
+    gid_t be_gid;
 
     struct poptOption long_options[] = {
         POPT_AUTOHELP
@@ -2259,6 +2265,7 @@ int main(int argc, const char *argv[])
         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN,
          &debug_to_stderr, 0,
          _("Send the debug output to stderr directly."), NULL },
+        SSSD_SERVER_OPTS(be_uid, be_gid)
         POPT_TABLEEND
     };
 
@@ -2304,6 +2311,8 @@ int main(int argc, const char *argv[])
         goto done;
     }
     talloc_steal(kr, debug_prg_name);
+    kr->be_uid = be_uid;
+    kr->be_gid = be_gid;
 
     ret = k5c_recv_data(kr, STDIN_FILENO, &offline);
     if (ret != EOK) {

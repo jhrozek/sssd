@@ -626,10 +626,10 @@ static errno_t prepare_child_argv(TALLOC_CTX *mem_ctx,
                                   char ***_argv)
 {
     /*
-     * program name, debug_level, debug_timestamps,
-     * debug_microseconds and NULL
+     * program name, debug_level, debug_to_file, debug_timestamps,
+     * debug_microseconds, uid, gid and NULL
      */
-    uint_t argc = 5;
+    uint_t argc = 7;
     char ** argv;
     errno_t ret = EINVAL;
 
@@ -644,7 +644,7 @@ static errno_t prepare_child_argv(TALLOC_CTX *mem_ctx,
 
     /*
      * program name, debug_level, debug_to_file, debug_timestamps,
-     * debug_microseconds and NULL
+     * debug_microseconds, uid, gid and NULL
      */
     argv  = talloc_array(mem_ctx, char *, argc);
     if (argv == NULL) {
@@ -687,6 +687,18 @@ static errno_t prepare_child_argv(TALLOC_CTX *mem_ctx,
 
     argv[--argc] = talloc_asprintf(argv, "--debug-microseconds=%d",
                                        child_debug_microseconds);
+    if (argv[argc] == NULL) {
+        ret = ENOMEM;
+        goto fail;
+    }
+
+    argv[--argc] = talloc_asprintf(argv, "--uid=%"SPRIuid, getuid());
+    if (argv[argc] == NULL) {
+        ret = ENOMEM;
+        goto fail;
+    }
+
+    argv[--argc] = talloc_asprintf(argv, "--gid=%"SPRIgid, getgid());
     if (argv[argc] == NULL) {
         ret = ENOMEM;
         goto fail;

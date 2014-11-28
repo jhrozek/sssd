@@ -147,9 +147,12 @@ int main(int argc, const char *argv[])
     struct input_buffer *ibuf = NULL;
     struct response *resp = NULL;
     size_t written;
+    uid_t uid;
+    gid_t gid;
 
     struct poptOption long_options[] = {
         POPT_AUTOHELP
+        SSSD_SERVER_OPTS(uid, gid)
         {"debug-level", 'd', POPT_ARG_INT, &debug_level, 0,
          _("Debug level"), NULL},
         {"debug-timestamps", 0, POPT_ARG_INT, &debug_timestamps, 0,
