@@ -1720,6 +1720,8 @@ done:
 
 static krb5_error_code check_fast_ccache(TALLOC_CTX *mem_ctx,
                                          krb5_context ctx,
+                                         uid_t be_uid,
+                                         gid_t be_gid,
                                          const char *primary,
                                          const char *realm,
                                          const char *keytab_name,
@@ -1733,6 +1735,8 @@ static krb5_error_code check_fast_ccache(TALLOC_CTX *mem_ctx,
     krb5_keytab keytab = NULL;
     krb5_principal client_princ = NULL;
     krb5_principal server_princ = NULL;
+    pid_t fchild_pid;
+    int status;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -1790,10 +1794,57 @@ static krb5_error_code check_fast_ccache(TALLOC_CTX *mem_ctx,
         }
     }
 
-    kerr = get_and_save_tgt_with_keytab(ctx, client_princ, keytab, ccname);
-    if (kerr != 0) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "get_and_save_tgt_with_keytab failed.\n");
-        goto done;
+    /* Need to recreate the FAST ccache */
+    fchild_pid = fork();
+    switch (fchild_pid) {
+        case -1:
+            DEBUG(SSSDBG_CRIT_FAILURE, "fork failed\n");
+            kerr = EIO;
+            goto done;
+        case 0:
+            /* Child */
+            kerr = become_user(be_uid, be_gid);
+            if (kerr != 0) {
+                DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
+                return kerr;
+            }
+
+            kerr = get_and_save_tgt_with_keytab(ctx, client_princ, keytab, ccname);
+            if (kerr != 0) {
+                DEBUG(SSSDBG_CRIT_FAILURE, "get_and_save_tgt_with_keytab failed.\n");
+                exit(1);
+            }
+            exit(0);
+        default:
+            /* Parent */
+            do {
+                errno = 0;
+                kerr = waitpid(fchild_pid, &status, 0);
+            } while (kerr == -1 && errno == EINTR);
+            if (kerr > 0) {
+                if (WIFEXITED(status)) {
+                    kerr = WEXITSTATUS(status);
+                    /* Don't blindly fail if the child fails, but check
+                     * the ccache again */
+                }
+            } else {
+                DEBUG(SSSDBG_FUNC_DATA,
+                    "Failed to wait for children %d\n", fchild_pid);
+                kerr = EIO;
+            }
+    }
+
+    /* Check the ccache times again. Should be updated ... */
+    memset(&tgtt, 0, sizeof(tgtt));
+    kerr = get_tgt_times(ctx, ccname, server_princ, client_princ, &tgtt);
+    if (kerr == 0) {
+        if (tgtt.endtime > time(NULL)) {
+            DEBUG(SSSDBG_FUNC_DATA, "FAST TGT is still valid.\n");
+            goto done;
+        } else {
+            kerr = ERR_CREDS_EXPIRED;
+            goto done;
+        }
     }
 
     kerr = 0;
@@ -1885,7 +1936,8 @@ static int k5c_setup_fast(struct krb5_req *kr, bool demand)
         fast_principal = NULL;
     }
 
-    kerr = check_fast_ccache(kr, kr->ctx, fast_principal, fast_principal_realm,
+    kerr = check_fast_ccache(kr, kr->ctx, kr->be_uid, kr->be_gid,
+                             fast_principal, fast_principal_realm,
                              kr->keytab, &kr->fast_ccname);
     if (kerr != 0) {
         DEBUG(SSSDBG_CRIT_FAILURE, "check_fast_ccache failed.\n");
@@ -2193,6 +2245,19 @@ static int k5c_setup(struct krb5_req *kr, uint32_t offline)
         return kerr;
     }
 
+    if (kr->validate == true && kr->keytab != NULL \
+            && fast_val != K5C_FAST_NEVER) {
+        kerr = copy_keytab_into_memory(kr, kr->ctx, kr->keytab,
+                                        &mem_keytab);
+        if (kerr != 0) {
+            DEBUG(SSSDBG_OP_FAILURE, "copy_keytab_into_memory failed.\n");
+            return kerr;
+        }
+
+        talloc_free(kr->keytab);
+        kr->keytab = mem_keytab;
+    }
+
     if (!offline) {
         set_canonicalize_option(kr->options);
 
@@ -2205,24 +2270,10 @@ static int k5c_setup(struct krb5_req *kr, uint32_t offline)
         }
     }
 
-    if (!(offline || (fast_val == K5C_FAST_NEVER && kr->validate == false))) {
-        if (kr->keytab != NULL) {
-            kerr = copy_keytab_into_memory(kr, kr->ctx, kr->keytab,
-                                           &mem_keytab);
-            if (kerr != 0) {
-                DEBUG(SSSDBG_OP_FAILURE, "copy_keytab_into_memory failed.\n");
-                return kerr;
-            }
-
-            talloc_free(kr->keytab);
-            kr->keytab = mem_keytab;
-        }
-
-        kerr = become_user(kr->uid, kr->gid);
-        if (kerr != 0) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
-            return kerr;
-        }
+    kerr = become_user(kr->uid, kr->gid);
+    if (kerr != 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "become_user failed.\n");
+        return kerr;
     }
     DEBUG(SSSDBG_TRACE_INTERNAL,
           "Running as [%"SPRIuid"][%"SPRIgid"].\n", geteuid(), getegid());
@@ -2249,8 +2300,8 @@ int main(int argc, const char *argv[])
     poptContext pc;
     int debug_fd = -1;
     errno_t ret;
-    uid_t be_uid;
-    gid_t be_gid;
+    uid_t be_uid = 0;
+    gid_t be_gid = 0;
 
     struct poptOption long_options[] = {
         POPT_AUTOHELP
