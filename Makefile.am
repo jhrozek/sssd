@@ -216,6 +216,7 @@ if HAVE_CMOCKA
         test_sysdb_views \
         test_copy_ccache \
         test_copy_keytab \
+        test_child_common \
         $(NULL)
 
 if BUILD_IFP
@@ -233,6 +234,7 @@ endif   # HAVE_CMOCKA
 check_PROGRAMS = \
     stress-tests \
     krb5-child-test \
+    test-child \
     $(non_interactive_cmocka_based_tests) \
     $(non_interactive_check_based_tests)
 
@@ -2111,6 +2113,29 @@ test_copy_keytab_LDADD = \
     $(POPT_LIBS) \
     $(TALLOC_LIBS) \
     $(KRB5_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    libsss_test_common.la \
+    $(NULL)
+
+test_child_SOURCES = \
+    src/tests/cmocka/test_child.c \
+    $(NULL)
+test_child_LDADD = \
+    $(POPT_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    $(NULL)
+
+test_child_common_SOURCES = \
+    src/tests/cmocka/test_child_common.c \
+    $(NULL)
+test_child_common_CFLAGS = \
+    $(AM_CFLAGS) \
+    -DCHILD_DIR=\"$(builddir)\" \
+    $(NULL)
+test_child_common_LDADD = \
+    $(CMOCKA_LIBS) \
+    $(POPT_LIBS) \
+    $(TALLOC_LIBS) \
     $(SSSD_INTERNAL_LTLIBS) \
     libsss_test_common.la \
     $(NULL)
