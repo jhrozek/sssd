@@ -558,6 +558,13 @@ done:
     return ret;
 }
 
+static const char *
+sss_ldap_escape_ip_address(TALLOC_CTX *mem_ctx, int family, const char *addr)
+{
+    return family == AF_INET6 ? talloc_asprintf(mem_ctx, "[%s]", addr) :
+                                talloc_strdup(mem_ctx, addr);
+}
+
 static void ipa_resolve_callback(void *private_data, struct fo_server *server)
 {
     TALLOC_CTX *tmp_ctx = NULL;

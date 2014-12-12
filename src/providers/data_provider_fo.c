@@ -71,7 +71,7 @@ static int be_fo_get_options(TALLOC_CTX *mem_ctx, struct be_ctx *ctx,
 
     /* todo get timeout from configuration */
     opts->retry_timeout = 30;
-    opts->srv_retry_timeout = 14400;
+    opts->srv_retry_neg_timeout = 15;
 
     ret = confdb_get_string(ctx->cdb, mem_ctx, ctx->conf_path,
                             CONFDB_DOMAIN_FAMILY_ORDER,

@@ -106,6 +106,7 @@ struct srv_data {
     struct fo_server *meta;
 
     int srv_lookup_status;
+    int ttl;
     struct timeval last_status_change;
 };
 
@@ -138,7 +139,7 @@ fo_context_init(TALLOC_CTX *mem_ctx, struct fo_options *opts)
         return NULL;
     }
 
-    ctx->opts->srv_retry_timeout = opts->srv_retry_timeout;
+    ctx->opts->srv_retry_neg_timeout = opts->srv_retry_neg_timeout;
     ctx->opts->retry_timeout = opts->retry_timeout;
     ctx->opts->family_order  = opts->family_order;
 
@@ -263,8 +264,14 @@ get_srv_data_status(struct srv_data *data)
     struct timeval tv;
     time_t timeout;
 
-    timeout = data->meta->service->ctx->opts->srv_retry_timeout;
     gettimeofday(&tv, NULL);
+
+    /* Determine timeout value based on state of previous lookup. */
+    if (data->srv_lookup_status == SRV_RESOLVE_ERROR) {
+        timeout = data->meta->service->ctx->opts->srv_retry_neg_timeout;
+    } else {
+        timeout = data->ttl;
+    }
 
     if (STATUS_DIFF(data, tv) > timeout) {
         switch(data->srv_lookup_status) {
@@ -1080,9 +1087,10 @@ resolve_srv_done(struct tevent_req *subreq)
     struct fo_server *srv_list = NULL;
     int ret;
     int resolv_status;
+    uint32_t ttl;
 
     ret = resolv_getsrv_recv(state, subreq,
-                             &resolv_status, NULL, &reply_list, NULL);
+                             &resolv_status, NULL, &reply_list, &ttl);
     talloc_free(subreq);
     if (ret != EOK) {
         DEBUG(1, ("SRV query failed: [%s]\n",
@@ -1137,6 +1145,7 @@ resolve_srv_done(struct tevent_req *subreq)
             goto fail;
         }
         server->srv_data = state->meta->srv_data;
+        server->srv_data->ttl = ttl;
 
         DLIST_ADD_END(srv_list, server, struct fo_server *);
         DEBUG(6, ("Inserted server '%s:%d' for service %s\n",
