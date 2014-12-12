@@ -1082,7 +1082,7 @@ resolve_srv_done(struct tevent_req *subreq)
     int resolv_status;
 
     ret = resolv_getsrv_recv(state, subreq,
-                             &resolv_status, NULL, &reply_list);
+                             &resolv_status, NULL, &reply_list, NULL);
     talloc_free(subreq);
     if (ret != EOK) {
         DEBUG(1, ("SRV query failed: [%s]\n",

@@ -128,7 +128,8 @@ int resolv_getsrv_recv(TALLOC_CTX *mem_ctx,
                        struct tevent_req *req,
                        int *status,
                        int *timeouts,
-                       struct ares_srv_reply **reply_list);
+                       struct ares_srv_reply **reply_list,
+                       uint32_t *ttl);
 
 /* This is an implementation of section "Usage rules" of RFC 2782 */
 int
