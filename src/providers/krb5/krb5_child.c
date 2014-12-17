@@ -2151,12 +2151,6 @@ static int k5c_setup(struct krb5_req *kr, uint32_t offline)
     DEBUG(SSSDBG_TRACE_INTERNAL,
           "Running as [%"SPRIuid"][%"SPRIgid"].\n", geteuid(), getegid());
 
-    kr->realm = getenv(SSSD_KRB5_REALM);
-    if (kr->realm == NULL) {
-        DEBUG(SSSDBG_MINOR_FAILURE,
-              "Cannot read [%s] from environment.\n", SSSD_KRB5_REALM);
-    }
-
     /* Set the global error context */
     krb5_error_ctx = kr->ctx;
 
@@ -2245,6 +2239,12 @@ static krb5_error_code privileged_krb5_setup(struct krb5_req *kr,
     krb5_error_code kerr;
     int ret;
     char *mem_keytab;
+
+    kr->realm = getenv(SSSD_KRB5_REALM);
+    if (kr->realm == NULL) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Cannot read [%s] from environment.\n", SSSD_KRB5_REALM);
+    }
 
     kerr = krb5_init_context(&kr->ctx);
     if (kerr != 0) {
