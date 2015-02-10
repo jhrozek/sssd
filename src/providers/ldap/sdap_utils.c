@@ -77,10 +77,11 @@ errno_t
 sdap_save_all_names(const char *name,
                     struct sysdb_attrs *ldap_attrs,
                     struct sss_domain_info *dom,
+                    bool use_internal_fqname,
                     struct sysdb_attrs *attrs)
 {
     const char **aliases = NULL;
-    const char *domname;
+    const char *sysdb_alias;
     errno_t ret;
     TALLOC_CTX *tmp_ctx;
     int i;
@@ -100,14 +101,20 @@ sdap_save_all_names(const char *name,
     }
 
     for (i = 0; aliases[i]; i++) {
-        domname = sss_get_domain_name(tmp_ctx, aliases[i], dom);
-        if (domname == NULL) {
+        if (use_internal_fqname) {
+            sysdb_alias = sss_create_internal_fqname(tmp_ctx, aliases[i],
+                                                 dom->name);
+        } else {
+            sysdb_alias = sss_get_domain_name(tmp_ctx, aliases[i], dom);
+        }
+
+        if (sysdb_alias == NULL) {
             ret = ENOMEM;
             goto done;
         }
 
         if (lowercase) {
-            ret = sysdb_attrs_add_lc_name_alias(attrs, domname);
+            ret = sysdb_attrs_add_lc_name_alias(attrs, sysdb_alias);
             if (ret) {
                 DEBUG(SSSDBG_OP_FAILURE, "Failed to add lower-cased version "
                                           "of alias [%s] into the "
@@ -115,7 +122,7 @@ sdap_save_all_names(const char *name,
                 goto done;
             }
         } else {
-            ret = sysdb_attrs_add_string(attrs, SYSDB_NAME_ALIAS, domname);
+            ret = sysdb_attrs_add_string(attrs, SYSDB_NAME_ALIAS, sysdb_alias);
             if (ret) {
                 DEBUG(SSSDBG_OP_FAILURE, "Failed to add alias [%s] into the "
                                           "attribute list\n", aliases[i]);

@@ -1634,6 +1634,80 @@ done:
     return ret;
 }
 
+/* For all users and groups:
+ *  - Change ldb fqdn to contain shortname only
+ *  - add fqname attribute
+ *  - change all nameAlias to internal fqname format
+ *
+ * For groups only:
+ *  - Change all memberUid and ghost attributes to internal fqname format
+ *  - member attributes should contain shortname only in ldb fqdn
+ *
+ * General:
+ *  - start indexing fqname attribute
+ *  - start indexing ----------------
+ **/
+/*
+int sysdb_upgrade_17(struct sysdb_ctx *sysdb, const char **ver)
+{
+    struct ldb_message_element *el;
+    struct ldb_result *res;
+    struct ldb_dn *basedn;
+    struct ldb_dn *mem_dn;
+    struct ldb_message *msg;
+    const struct ldb_val *val;
+    const char *filter = "(|(objectclass=user)(objectclass=group))";
+    const char *attrs[] = { "memberUid", NULL };
+    const char *mdn;
+    char *domain;
+    int ret, i, j;
+    TALLOC_CTX *tmp_ctx;
+    struct upgrade_ctx *ctx;
+
+    struct upgrade_ctx *ctx;
+    errno_t ret;
+
+    ret = commence_upgrade(sysdb, sysdb->ldb, SYSDB_VERSION_0_15, &ctx);
+    if (ret) {
+        return ret;
+    }
+*/
+    /* DO STUFF HERE (use ctx, as the local temporary memory context) */
+/*
+    basedn = ldb_dn_new(tmp_ctx, ldb, SYSDB_BASE);
+    if (!basedn) {
+        ret = EIO;
+        goto done;
+    }
+
+    ret = ldb_search(ldb, tmp_ctx, &res,
+                     basedn, LDB_SCOPE_SUBTREE,
+                     attrs, "%s", filter);
+    if (ret != LDB_SUCCESS) {
+        ret = EIO;
+        goto done;
+    }
+
+
+    for (i = 0; i < res->count; i++) {
+        el = ldb_msg_find_element(res->msgs[i], "memberUid");
+        if (!el) {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "memberUid is missing from message [%s], skipping\n",
+                      ldb_dn_get_linearized(res->msgs[i]->dn));
+            continue;
+        }
+    }
+*/
+    /* conversion done, update version number */
+/*    ret = update_version(ctx);
+
+done:
+    ret = finish_upgrade(ret, &ctx, ver);
+    return ret;
+
+*/
+
 /*
  * Example template for future upgrades.
  * Copy and change version numbers as appropriate.

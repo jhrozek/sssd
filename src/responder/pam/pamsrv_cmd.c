@@ -45,10 +45,10 @@ enum pam_verbosity {
 
 static errno_t
 pam_null_last_online_auth_with_curr_token(struct sss_domain_info *domain,
-                                          const char *username);
+                                          const char *pd_username);
 static errno_t
 pam_get_last_online_auth_with_curr_token(struct sss_domain_info *domain,
-                                         const char *name,
+                                         const char *pd_name,
                                          uint64_t *_value);
 
 static void pam_reply(struct pam_auth_req *preq);
@@ -430,44 +430,61 @@ static errno_t set_last_login(struct pam_auth_req *preq)
 {
     struct sysdb_attrs *attrs;
     errno_t ret;
+    char *name;
+    TALLOC_CTX *tmpctx;
+
+    tmpctx = talloc_new(NULL);
+    if (tmpctx == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
 
     attrs = sysdb_new_attrs(preq);
     if (!attrs) {
         ret = ENOMEM;
-        goto fail;
+        goto done;
     }
 
     ret = sysdb_attrs_add_time_t(attrs, SYSDB_LAST_ONLINE_AUTH, time(NULL));
     if (ret != EOK) {
-        goto fail;
+        goto done;
     }
 
     ret = sysdb_attrs_add_time_t(attrs,
                                  SYSDB_LAST_ONLINE_AUTH_WITH_CURR_TOKEN,
                                  time(NULL));
     if (ret != EOK) {
-        goto fail;
+        goto done;
     }
 
     ret = sysdb_attrs_add_time_t(attrs, SYSDB_LAST_LOGIN, time(NULL));
     if (ret != EOK) {
-        goto fail;
+        goto done;
     }
 
-    ret = sysdb_set_user_attr(preq->domain, preq->pd->user, attrs,
+    name = sss_ioname2internal(tmpctx, preq->domain, preq->pd->user);
+    if (name == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "failed to parse name '%s'.\n",
+              preq->pd->user);
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = sysdb_set_user_attr(preq->domain, name, attrs,
                               SYSDB_MOD_REP);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "set_last_login failed.\n");
         preq->pd->pam_status = PAM_SYSTEM_ERR;
-        goto fail;
+        goto done;
     } else {
         preq->pd->last_auth_saved = true;
     }
     preq->callback(preq);
 
-    return EOK;
+    ret = EOK;
 
-fail:
+done:
+    talloc_free(tmpctx);
     return ret;
 }
 
@@ -1678,7 +1695,7 @@ static void pam_check_user_dp_callback(uint16_t err_maj, uint32_t err_min,
 }
 
 static errno_t pam_is_last_online_login_fresh(struct sss_domain_info *domain,
-                                              const char* user,
+                                              const char* pd_user,
                                               int cached_auth_timeout,
                                               bool *_result)
 {
@@ -1686,7 +1703,7 @@ static errno_t pam_is_last_online_login_fresh(struct sss_domain_info *domain,
     bool result;
     uint64_t last_login;
 
-    ret = pam_get_last_online_auth_with_curr_token(domain, user, &last_login);
+    ret = pam_get_last_online_auth_with_curr_token(domain, pd_user, &last_login);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               "sysdb_get_last_online_auth_with_curr_token failed: %s:[%d]\n",
@@ -1737,7 +1754,7 @@ static bool pam_is_authtok_cachable(struct sss_auth_token *authtok)
 static bool pam_can_user_cache_auth(struct sss_domain_info *domain,
                                     int pam_cmd,
                                     struct sss_auth_token *authtok,
-                                    const char* user,
+                                    const char* pd_user,
                                     bool cached_auth_failed)
 {
     errno_t ret;
@@ -1749,7 +1766,7 @@ static bool pam_can_user_cache_auth(struct sss_domain_info *domain,
             && pam_is_authtok_cachable(authtok)
             && pam_is_cmd_cachable(pam_cmd)) {
 
-        ret = pam_is_last_online_login_fresh(domain, user,
+        ret = pam_is_last_online_login_fresh(domain, pd_user,
                                              domain->cached_auth_timeout,
                                              &result);
         if (ret != EOK) {
@@ -1939,12 +1956,13 @@ struct sss_cmd_table *get_pam_cmds(void)
 
 errno_t
 pam_set_last_online_auth_with_curr_token(struct sss_domain_info *domain,
-                                         const char *username,
+                                         const char *pd_username,
                                          uint64_t value)
 {
     TALLOC_CTX *tmp_ctx;
     struct sysdb_attrs *attrs;
     int ret;
+    char *name;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -1963,7 +1981,13 @@ pam_set_last_online_auth_with_curr_token(struct sss_domain_info *domain,
                                  value);
     if (ret != EOK) { goto done; }
 
-    ret = sysdb_set_user_attr(domain, username, attrs, SYSDB_MOD_REP);
+    name = sss_ioname2internal(tmp_ctx, domain, pd_username);
+    if (name == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = sysdb_set_user_attr(domain, name, attrs, SYSDB_MOD_REP);
     if (ret != EOK) { goto done; }
 
 done:
@@ -1977,14 +2001,14 @@ done:
 
 static errno_t
 pam_null_last_online_auth_with_curr_token(struct sss_domain_info *domain,
-                                          const char *username)
+                                          const char *pd_username)
 {
-    return pam_set_last_online_auth_with_curr_token(domain, username, 0);
+    return pam_set_last_online_auth_with_curr_token(domain, pd_username, 0);
 }
 
 static errno_t
 pam_get_last_online_auth_with_curr_token(struct sss_domain_info *domain,
-                                         const char *name,
+                                         const char *pd_name,
                                          uint64_t *_value)
 {
     TALLOC_CTX *tmp_ctx = NULL;
@@ -1992,8 +2016,9 @@ pam_get_last_online_auth_with_curr_token(struct sss_domain_info *domain,
     struct ldb_message *ldb_msg;
     uint64_t value;
     errno_t ret;
+    char *name;
 
-    if (name == NULL || *name == '\0') {
+    if (pd_name == NULL || *pd_name == '\0') {
         DEBUG(SSSDBG_CRIT_FAILURE, "Missing user name.\n");
         ret = EINVAL;
         goto done;
@@ -2007,6 +2032,12 @@ pam_get_last_online_auth_with_curr_token(struct sss_domain_info *domain,
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    name = sss_ioname2internal(tmp_ctx, domain, pd_name);
+    if (name == NULL) {
         ret = ENOMEM;
         goto done;
     }

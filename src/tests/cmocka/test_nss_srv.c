@@ -368,7 +368,7 @@ void test_nss_getpwnam(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuser", 123, 456, "test user",
+                         "testuser@"TEST_DOM_NAME, 123, 456, "test user",
                          "/home/testuser", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -430,10 +430,14 @@ void test_nss_getpwnam_neg(void **state)
 static int test_nss_getpwnam_search_acct_cb(void *pvt)
 {
     errno_t ret;
+    char *fqname;
     struct nss_test_ctx *ctx = talloc_get_type(pvt, struct nss_test_ctx);
 
+    fqname = sss_create_internal_fqname(ctx->tctx, "testuser_search",
+                                        ctx->tctx->dom->name);
+    assert_non_null(fqname);
     ret = sysdb_add_user(ctx->tctx->dom,
-                         "testuser_search", 567, 890, "test search",
+                         fqname, 567, 890, "test search",
                          "/home/testsearch", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -501,7 +505,8 @@ static int test_nss_getpwnam_update_acct_cb(void *pvt)
     struct nss_test_ctx *ctx = talloc_get_type(pvt, struct nss_test_ctx);
 
     ret = sysdb_store_user(ctx->tctx->dom,
-                           "testuser_update", NULL, 10, 11, "test user",
+                           "testuser_update@"TEST_DOM_NAME,
+                           NULL, 10, 11, "test user",
                            "/home/testuser", "/bin/ksh", NULL,
                            NULL, NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -532,10 +537,15 @@ void test_nss_getpwnam_update(void **state)
     errno_t ret;
     struct ldb_result *res;
     const char *shell;
+    char *username;
 
+    username = sss_create_internal_fqname(nss_test_ctx,
+                                          "testuser_update",
+                                          nss_test_ctx->tctx->dom->name);
+    assert_non_null(username);
     /* Prime the cache with a valid but expired user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuser_update", 10, 11, "test user",
+                         username, 10, 11, "test user",
                          "/home/testuser", "/bin/sh", NULL,
                          NULL, 1, 1);
     assert_int_equal(ret, EOK);
@@ -562,7 +572,7 @@ void test_nss_getpwnam_update(void **state)
 
     /* Check the user was updated in the cache */
     ret = sysdb_getpwnam(nss_test_ctx, nss_test_ctx->tctx->dom,
-                         "testuser_update", &res);
+                         username , &res);
     assert_int_equal(ret, EOK);
     assert_int_equal(res->count, 1);
 
@@ -599,7 +609,8 @@ void test_nss_getpwnam_fqdn(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuser_fqdn", 124, 457, "test user",
+                         "testuser_fqdn@"TEST_DOM_NAME,
+                         124, 457, "test user",
                          "/home/testuser", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -646,7 +657,7 @@ void test_nss_getpwnam_space(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "space user", 225, 558, "space user",
+                         "space user@"TEST_DOM_NAME, 225, 558, "space user",
                          "/home/testuser", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -761,7 +772,8 @@ void test_nss_getpwnam_fqdn_fancy(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuser_fqdn_fancy", 125, 458, "test user",
+                         "testuser_fqdn_fancy@"TEST_DOM_NAME,
+                         125, 458, "test user",
                          "/home/testuser", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -810,7 +822,8 @@ void test_nss_getpwuid(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuser1", 101, 401, "test user1",
+                         "testuser1@"TEST_DOM_NAME,
+                         101, 401, "test user1",
                          "/home/testuser1", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -877,7 +890,8 @@ static int test_nss_getpwuid_search_acct_cb(void *pvt)
     struct nss_test_ctx *ctx = talloc_get_type(pvt, struct nss_test_ctx);
 
     ret = sysdb_add_user(ctx->tctx->dom,
-                         "exampleuser_search", 107, 987, "example search",
+                         "exampleuser_search@"TEST_DOM_NAME,
+                         107, 987, "example search",
                          "/home/examplesearch", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -946,7 +960,8 @@ static int test_nss_getpwuid_update_acct_cb(void *pvt)
     struct nss_test_ctx *ctx = talloc_get_type(pvt, struct nss_test_ctx);
 
     ret = sysdb_store_user(ctx->tctx->dom,
-                           "exampleuser_update", NULL, 109, 11000, "example user",
+                           "exampleuser_update@"TEST_DOM_NAME,
+                           NULL, 109, 11000, "example user",
                            "/home/exampleuser", "/bin/ksh", NULL,
                            NULL, NULL, 300, 0);
     assert_int_equal(ret, EOK);
@@ -980,7 +995,8 @@ void test_nss_getpwuid_update(void **state)
 
     /* Prime the cache with a valid but expired user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "exampleuser_update", 109, 11000, "example user",
+                         "exampleuser_update@"TEST_DOM_NAME,
+                         109, 11000, "example user",
                          "/home/exampleuser", "/bin/sh", NULL,
                          NULL, 1, 1);
     assert_int_equal(ret, EOK);
@@ -1110,7 +1126,7 @@ void test_nss_getgrnam_no_members(void **state)
 
     /* Prime the cache with a valid group */
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testgroup", 1123,
+                          "testgroup@"TEST_DOM_NAME, 1123,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
@@ -1164,29 +1180,33 @@ void test_nss_getgrnam_members(void **state)
 
     /* Prime the cache with a valid group and some members */
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testgroup_members", 1124,
+                          "testgroup_members@"TEST_DOM_NAME, 1124,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testmember1", 2001, 456, "test member1",
+                         "testmember1@"TEST_DOM_NAME,
+                         2001, 456, "test member1",
                          "/home/testmember2", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testmember2", 2002, 456, "test member2",
+                         "testmember2@"TEST_DOM_NAME,
+                         2002, 456, "test member2",
                          "/home/testmember2", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testgroup_members", "testmember1",
+                                 "testgroup_members@"TEST_DOM_NAME,
+                                 "testmember1@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testgroup_members", "testmember2",
+                                 "testgroup_members@"TEST_DOM_NAME,
+                                 "testmember2@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -1292,44 +1312,58 @@ static int test_nss_getgrnam_members_check_subdom(uint32_t status,
 void test_nss_getgrnam_members_subdom(void **state)
 {
     errno_t ret;
+    char *submember1;
+    char *submember2;
+    char *testsubdomgroup;
+
+    submember1 = sss_create_internal_fqname(nss_test_ctx, "submember1",
+                                            nss_test_ctx->subdom->name);
+    submember2 = sss_create_internal_fqname(nss_test_ctx, "submember2",
+                                            nss_test_ctx->subdom->name);
+    testsubdomgroup = sss_create_internal_fqname(nss_test_ctx,
+                                                 "testsubdomgroup",
+                                                 nss_test_ctx->subdom->name);
+    assert_non_null(submember1);
+    assert_non_null(submember2);
+    assert_non_null(testsubdomgroup);
 
     nss_test_ctx->tctx->dom->fqnames = true;
 
     /* Add a group from a subdomain and two members from the same subdomain
      */
     ret = sysdb_add_group(nss_test_ctx->subdom,
-                          "testsubdomgroup@"TEST_SUBDOM_NAME,
+                          testsubdomgroup,
                           2124, NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->subdom,
-                         "submember1@"TEST_SUBDOM_NAME,
+                         submember1,
                          4001, 456, "test subdomain member1",
                          "/home/submember1", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->subdom,
-                         "submember2@"TEST_SUBDOM_NAME,
+                         submember2,
                          2002, 456, "test subdomain member2",
                          "/home/submember2", "/bin/sh", NULL,
                          NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->subdom,
-                                 "testsubdomgroup@"TEST_SUBDOM_NAME,
-                                 "submember1@"TEST_SUBDOM_NAME,
+                                 testsubdomgroup,
+                                 submember1,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->subdom,
-                                 "testsubdomgroup@"TEST_SUBDOM_NAME,
-                                 "submember2@"TEST_SUBDOM_NAME,
+                                 testsubdomgroup,
+                                 submember2,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
 
-    mock_input_user_or_group("testsubdomgroup@"TEST_SUBDOM_NAME);
+    mock_input_user_or_group(testsubdomgroup);
     will_return(__wrap_sss_packet_get_cmd, SSS_NSS_GETGRNAM);
     mock_fill_group_with_members(2);
 
@@ -1494,16 +1528,19 @@ void test_nss_getgrnam_mix_subdom(void **state)
     errno_t ret;
     const char *group_strdn = NULL;
     const char *add_groups[] = { NULL, NULL };
+    char *testmember1_fqname = sss_create_internal_fqname(nss_test_ctx,
+                                                          "testmember1",
+                                                          TEST_DOM_NAME);
 
-    /* Add a subdomain user to a parent domain group */
+    /* Add a parent domain user to a subdomain group */
     group_strdn = sysdb_group_strdn(nss_test_ctx,
                                     nss_test_ctx->subdom->name,
-                                    "testsubdomgroup@"TEST_SUBDOM_NAME);
+                                    "testsubdomgroup");
     assert_non_null(group_strdn);
     add_groups[0] = group_strdn;
 
     ret = sysdb_update_members_dn(nss_test_ctx->tctx->dom,
-                                  "testmember1",
+                                  testmember1_fqname,
                                   SYSDB_MEMBER_USER,
                                   add_groups, NULL);
     assert_int_equal(ret, EOK);
@@ -1557,7 +1594,7 @@ void test_nss_getgrnam_space(void **state)
 
     /* Prime the cache with a valid group */
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "space group", 2123,
+                          "space group@"TEST_DOM_NAME, 2123,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
@@ -1860,7 +1897,11 @@ void test_nss_getorigbyname(void **state)
 {
     errno_t ret;
     struct sysdb_attrs *attrs;
+    char *fqname;
 
+    fqname = sss_create_internal_fqname(nss_test_ctx, "testuserorig",
+                                        nss_test_ctx->tctx->dom->name);
+    assert_non_null(fqname);
     attrs = sysdb_new_attrs(nss_test_ctx);
     assert_non_null(attrs);
 
@@ -1876,7 +1917,7 @@ void test_nss_getorigbyname(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuserorig", 1234, 5689, "test user orig",
+                         fqname, 1234, 5689, "test user orig",
                          "/home/testuserorig", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
@@ -1966,6 +2007,11 @@ void test_nss_getorigbyname_extra_attrs(void **state)
 {
     errno_t ret;
     struct sysdb_attrs *attrs;
+    char *fqname;
+
+    fqname = sss_create_internal_fqname(nss_test_ctx, "testuserorigextra",
+                                        nss_test_ctx->tctx->dom->name);
+    assert_non_null(fqname);
 
     attrs = sysdb_new_attrs(nss_test_ctx);
     assert_non_null(attrs);
@@ -1991,7 +2037,7 @@ void test_nss_getorigbyname_extra_attrs(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuserorigextra", 2345, 6789,
+                         fqname, 2345, 6789,
                          "test user orig extra",
                          "/home/testuserorigextra", "/bin/sh", NULL,
                          attrs, 300, 0);
@@ -2092,6 +2138,11 @@ void test_nss_getorigbyname_multi_value_attrs(void **state)
 {
     errno_t ret;
     struct sysdb_attrs *attrs;
+    char *fqname;
+
+    fqname = sss_create_internal_fqname(nss_test_ctx, "testuserorigmulti",
+                                        nss_test_ctx->tctx->dom->name);
+    assert_non_null(fqname);
 
     attrs = sysdb_new_attrs(nss_test_ctx);
     assert_non_null(attrs);
@@ -2117,7 +2168,7 @@ void test_nss_getorigbyname_multi_value_attrs(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testuserorigmulti", 3456, 7890,
+                         fqname, 3456, 7890,
                          "test user orig multi value",
                          "/home/testuserorigextra", "/bin/sh", NULL,
                          attrs, 300, 0);
@@ -2162,6 +2213,11 @@ void test_nss_getpwnam_upn(void **state)
 {
     errno_t ret;
     struct sysdb_attrs *attrs;
+    char *upnuser;
+
+    upnuser = sss_create_internal_fqname(nss_test_ctx, "upnuser",
+                                         nss_test_ctx->tctx->dom->name);
+    assert_non_null(upnuser);
 
     attrs = sysdb_new_attrs(nss_test_ctx);
     assert_non_null(attrs);
@@ -2171,7 +2227,7 @@ void test_nss_getpwnam_upn(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "upnuser", 34567, 45678, "up user",
+                         upnuser, 34567, 45678, "up user",
                          "/home/upnuser", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
@@ -2256,28 +2312,31 @@ void test_nss_initgroups(void **state)
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testinitgr", 321, 654, "test initgroups",
+                         "testinitgr@"TEST_DOM_NAME,
+                         321, 654, "test initgroups",
                          "/home/testinitgr", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_gr1", 3211,
+                          "testinitgr_gr1@"TEST_DOM_NAME, 3211,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_gr2", 3212,
+                          "testinitgr_gr2@"TEST_DOM_NAME, 3212,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_gr1", "testinitgr",
+                                 "testinitgr_gr1@"TEST_DOM_NAME,
+                                 "testinitgr@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_gr2", "testinitgr",
+                                 "testinitgr_gr2@"TEST_DOM_NAME,
+                                 "testinitgr@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -2355,28 +2414,31 @@ static int test_nss_initgr_search_acct_cb(void *pvt)
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testinitgr_srch", 421, 654, "test initgroups",
+                         "testinitgr_srch@"TEST_DOM_NAME,
+                         421, 654, "test initgroups",
                          "/home/testinitgr", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_srch_gr1", 4211,
+                          "testinitgr_srch_gr1@"TEST_DOM_NAME, 4211,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_srch_gr2", 4212,
+                          "testinitgr_srch_gr2@"TEST_DOM_NAME, 4212,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_srch_gr1", "testinitgr_srch",
+                                 "testinitgr_srch_gr1@"TEST_DOM_NAME,
+                                 "testinitgr_srch@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_srch_gr2", "testinitgr_srch",
+                                 "testinitgr_srch_gr2@"TEST_DOM_NAME,
+                                 "testinitgr_srch@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -2438,18 +2500,18 @@ static int test_nss_initgr_update_acct_cb(void *pvt)
     assert_int_equal(ret, EOK);
 
     ret = sysdb_set_user_attr(nss_test_ctx->tctx->dom,
-                              "testinitgr_update",
+                              "testinitgr_update@"TEST_DOM_NAME,
                               attrs, SYSDB_MOD_REP);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_check_gr2", 5212,
+                          "testinitgr_check_gr2@"TEST_DOM_NAME, 5212,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_check_gr2",
-                                 "testinitgr_update",
+                                 "testinitgr_check_gr2@"TEST_DOM_NAME,
+                                 "testinitgr_update@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -2478,18 +2540,20 @@ void test_nss_initgr_update(void **state)
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testinitgr_update", 521, 654, "test initgroups",
+                         "testinitgr_update@"TEST_DOM_NAME,
+                         521, 654, "test initgroups",
                          "/home/testinitgr", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_update_gr1", 5211,
+                          "testinitgr_update_gr1@"TEST_DOM_NAME, 5211,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_update_gr1", "testinitgr_update",
+                                 "testinitgr_update_gr1@"TEST_DOM_NAME,
+                                 "testinitgr_update@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -2523,18 +2587,18 @@ static int test_nss_initgr_update_acct_2expire_attributes_cb(void *pvt)
     assert_int_equal(ret, EOK);
 
     ret = sysdb_set_user_attr(nss_test_ctx->tctx->dom,
-                              "testinitgr_2attr",
+                              "testinitgr_2attr@"TEST_DOM_NAME,
                               attrs, SYSDB_MOD_REP);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_2attr_gr12", 5222,
+                          "testinitgr_2attr_gr12@"TEST_DOM_NAME, 5222,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_2attr_gr12",
-                                 "testinitgr_2attr",
+                                 "testinitgr_2attr_gr12@"TEST_DOM_NAME,
+                                 "testinitgr_2attr@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -2575,18 +2639,20 @@ void test_nss_initgr_update_two_expire_attributes(void **state)
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testinitgr_2attr", 522, 655, "test initgroups2",
+                         "testinitgr_2attr@"TEST_DOM_NAME,
+                         522, 655, "test initgroups2",
                          "/home/testinitgr_2attr", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group(nss_test_ctx->tctx->dom,
-                          "testinitgr_2attr_gr11", 5221,
+                          "testinitgr_2attr_gr11@"TEST_DOM_NAME, 5221,
                           NULL, 300, 0);
     assert_int_equal(ret, EOK);
 
     ret = sysdb_add_group_member(nss_test_ctx->tctx->dom,
-                                 "testinitgr_2attr_gr11", "testinitgr_2attr",
+                                 "testinitgr_2attr_gr11@"TEST_DOM_NAME,
+                                 "testinitgr_2attr@"TEST_DOM_NAME,
                                  SYSDB_MEMBER_USER, false);
     assert_int_equal(ret, EOK);
 
@@ -2749,7 +2815,8 @@ static void test_nss_getnamebysid(void **state)
 
     /* Prime the cache with a valid user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testsiduser", 12345, 6890, "test sid user",
+                         "testsiduser@"TEST_DOM_NAME,
+                         12345, 6890, "test sid user",
                          "/home/testsiduser", "/bin/sh", NULL,
                          attrs, 300, 0);
     assert_int_equal(ret, EOK);
@@ -2838,7 +2905,8 @@ static int test_nss_getnamebysid_update_acct_cb(void *pvt)
     errno_t ret;
     struct nss_test_ctx *ctx = talloc_get_type(pvt, struct nss_test_ctx);
 
-    ret = sysdb_store_user(ctx->tctx->dom, "testsidbyname_update", NULL,
+    ret = sysdb_store_user(ctx->tctx->dom,
+                           "testsidbyname_update@"TEST_DOM_NAME, NULL,
                            123456, 789, "test user",
                            "/home/testsidbyname_update", "/bin/ksh", NULL,
                            NULL, NULL, 300, 0);
@@ -2867,7 +2935,8 @@ void test_nss_getnamebysid_update(void **state)
 
     /* Prime the cache with a valid but expired user */
     ret = sysdb_add_user(nss_test_ctx->tctx->dom,
-                         "testsidbyname_update", 123456, 789, "test user",
+                         "testsidbyname_update@"TEST_DOM_NAME,
+                         123456, 789, "test user",
                          "/home/testsidbyname_update", "/bin/sh", NULL,
                          attrs, 1, 1);
     assert_int_equal(ret, EOK);

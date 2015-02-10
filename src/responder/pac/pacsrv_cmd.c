@@ -583,6 +583,8 @@ static errno_t save_pac_user(struct pac_req_ctx *pr_ctx)
     ret = sysdb_search_user_by_uid(tmp_ctx, pr_ctx->dom, pwd->pw_uid, attrs,
                                    &msg);
     if (ret == ENOENT) {
+        char *name;
+
         if (pwd->pw_gid == 0 && !pr_ctx->dom->mpg) {
             DEBUG(SSSDBG_CRIT_FAILURE, "Primary group RID from the PAC "
                                        "cannot be translated into a GID for "
@@ -598,6 +600,12 @@ static errno_t save_pac_user(struct pac_req_ctx *pr_ctx)
             goto done;
         }
 
+        name = sss_ioname2internal(tmp_ctx, pr_ctx->dom, pwd->pw_name);
+        if (name == NULL) {
+            DEBUG(SSSDBG_OP_FAILURE, "failed to format name for '%s'.\n",
+                  pwd->pw_name);
+            goto done;
+        }
         ret = sysdb_store_user(pr_ctx->dom, pwd->pw_name, NULL,
                                pwd->pw_uid, pwd->pw_gid, pwd->pw_gecos,
                                pwd->pw_dir,
@@ -636,7 +644,7 @@ struct tevent_req *pac_save_memberships_send(struct pac_req_ctx *pr_ctx)
     struct sss_domain_info *dom = pr_ctx->dom;
     struct tevent_req *req;
     errno_t ret;
-    char *dom_name = NULL;
+    char *sysdb_name = NULL;
     struct ldb_message *msg;
 
     req = tevent_req_create(pr_ctx, &state, struct pac_save_memberships_state);
@@ -646,14 +654,14 @@ struct tevent_req *pac_save_memberships_send(struct pac_req_ctx *pr_ctx)
 
     state->sid_iter = 0;
 
-    dom_name = sss_get_domain_name(state, pr_ctx->user_name, dom);
-    if (dom_name == NULL) {
+    sysdb_name = sss_ioname2internal(state, dom, pr_ctx->user_name);
+    if (sysdb_name == NULL) {
         DEBUG(SSSDBG_OP_FAILURE, "talloc_sprintf failed.\n");
         ret = ENOMEM;
         goto done;
     }
 
-    ret = sysdb_search_user_by_name(state, dom, dom_name, NULL, &msg);
+    ret = sysdb_search_user_by_name(state, dom, sysdb_name, NULL, &msg);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "sysdb_search_user_by_name failed " \
                                   "[%d][%s].\n", ret, strerror(ret));
@@ -676,7 +684,7 @@ struct tevent_req *pac_save_memberships_send(struct pac_req_ctx *pr_ctx)
     }
 
 done:
-    talloc_free(dom_name);
+    talloc_free(sysdb_name);
     if (ret != EOK && ret != EAGAIN) {
         tevent_req_error(req, ret);
         tevent_req_post(req, pr_ctx->cctx->ev);

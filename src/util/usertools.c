@@ -797,7 +797,7 @@ done:
 
 char *sss_ioname2internal(TALLOC_CTX *mem_ctx,
                           struct sss_domain_info *dom,
-                          char *ioname)
+                          const char *ioname)
 {
     char *shortname;
     char *domname;

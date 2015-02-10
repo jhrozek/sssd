@@ -1361,7 +1361,7 @@ done:
 
 static errno_t get_group_dn_list(TALLOC_CTX *mem_ctx,
                                  struct sss_domain_info *dom,
-                                 size_t ngroups, char **groups,
+                                 size_t ngroups, char **fq_groups,
                                  struct ldb_dn ***_dn_list,
                                  char ***_missing_groups)
 {
@@ -1393,14 +1393,14 @@ static errno_t get_group_dn_list(TALLOC_CTX *mem_ctx,
     parent_domain = (dom->parent == NULL) ? dom : dom->parent;
 
     for (c = 0; c < ngroups; c++) {
-        obj_domain = find_domain_by_object_name(parent_domain, groups[c]);
+        obj_domain = find_domain_by_object_name(parent_domain, fq_groups[c]);
         if (obj_domain == NULL) {
             DEBUG(SSSDBG_OP_FAILURE, "find_domain_by_object_name failed.\n");
             ret = ENOMEM;
             goto done;
         }
 
-        ret = sysdb_search_group_by_name(tmp_ctx, obj_domain, groups[c], NULL,
+        ret = sysdb_search_group_by_name(tmp_ctx, obj_domain, fq_groups[c], NULL,
                                          &msg);
         if (ret == EOK) {
             dn_list[n_dns] = ldb_dn_copy(dn_list, msg->dn);
@@ -1412,7 +1412,7 @@ static errno_t get_group_dn_list(TALLOC_CTX *mem_ctx,
             n_dns++;
         } else if (ret == ENOENT) {
             missing_groups[n_missing] = talloc_strdup(missing_groups,
-                                                      groups[c]);
+                                                      fq_groups[c]);
             if (missing_groups[n_missing] == NULL) {
                 DEBUG(SSSDBG_OP_FAILURE, "talloc_strdup failed.\n");
                 ret = ENOMEM;
@@ -1868,9 +1868,19 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
             }
 
             if (name == NULL) {
-                /* we always use the fully qualified name for subdomain users */
-                name = sss_tc_fqname(tmp_ctx, dom->names, dom,
-                                     attrs->a.user.pw_name);
+                char *domname;
+                char *shortname;
+                ret = sss_parse_name(tmp_ctx, dom->names,
+                                     attrs->a.user.pw_name,
+                                     &domname, &shortname);
+                if (ret != EOK) {
+                    DEBUG(SSSDBG_OP_FAILURE, "failed to parse user name.\n");
+                    goto done;
+                }
+
+                name = sss_create_internal_fqname(tmp_ctx, shortname,
+                                                  domname ? domname
+                                                          : dom->name);
                 if (!name) {
                     DEBUG(SSSDBG_OP_FAILURE, "failed to format user name.\n");
                     ret = ENOMEM;
@@ -2129,18 +2139,27 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
             type = SYSDB_MEMBER_GROUP;
 
             if (name == NULL) {
-                name = attrs->a.group.gr_name;
-            }
+                char *domname;
+                char *shortname;
+                ret = sss_parse_name(tmp_ctx, dom->names,
+                                     attrs->a.group.gr_name,
+                                     &domname, &shortname);
+                if (ret != EOK) {
+                    DEBUG(SSSDBG_OP_FAILURE, "failed to parse group name.\n");
+                    goto done;
+                }
 
-            if (IS_SUBDOMAIN(dom)) {
-                /* we always use the fully qualified name for subdomain users */
-                name = sss_get_domain_name(tmp_ctx, name, dom);
-                if (!name) {
-                    DEBUG(SSSDBG_OP_FAILURE, "failed to format user name,\n");
+                name = sss_create_internal_fqname(tmp_ctx, shortname,
+                                                  domname ? domname
+                                                          : dom->name);
+                if (name == NULL) {
+                    DEBUG(SSSDBG_OP_FAILURE,
+                          "Failed to format group name.\n");
                     ret = ENOMEM;
                     goto done;
                 }
             }
+
             DEBUG(SSSDBG_TRACE_FUNC, "Processing group %s\n", name);
 
             ret = sysdb_attrs_add_lc_name_alias_safe(attrs->sysdb_attrs, name);

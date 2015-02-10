@@ -159,38 +159,65 @@ void setup_simple_group(void)
 
     setup_simple();
 
+    char *u1;
+    char *u2;
+    char *u3;
+    char *g1;
+    char *g2;
+    char *pvt;
+
+    u1 = sss_create_internal_fqname(test_ctx, "u1",
+                                    test_ctx->ctx->domain->name);
+    u2 = sss_create_internal_fqname(test_ctx, "u2",
+                                    test_ctx->ctx->domain->name);
+    u3 = sss_create_internal_fqname(test_ctx, "u3",
+                                    test_ctx->ctx->domain->name);
+    g1 = sss_create_internal_fqname(test_ctx, "g1",
+                                    test_ctx->ctx->domain->name);
+    g2 = sss_create_internal_fqname(test_ctx, "g2",
+                                    test_ctx->ctx->domain->name);
+    pvt = sss_create_internal_fqname(test_ctx, "pvt",
+                                     test_ctx->ctx->domain->name);
+
+    fail_if(u1 == NULL, "sss_create_internal_fqname failed");
+    fail_if(u2 == NULL, "sss_create_internal_fqname failed");
+    fail_if(u3 == NULL, "sss_create_internal_fqname failed");
+    fail_if(g1 == NULL, "sss_create_internal_fqname failed");
+    fail_if(g2 == NULL, "sss_create_internal_fqname failed");
+    fail_if(pvt == NULL, "sss_create_internal_fqname failed");
+
     /* Add test users u1 and u2 that would be members of test groups
      * g1 and g2 respectively */
-    ret = sysdb_add_group(test_ctx->ctx->domain, "pvt", 999, NULL, 0, 0);
+    ret = sysdb_add_group(test_ctx->ctx->domain, pvt, 999, NULL, 0, 0);
     fail_if(ret != EOK, "Could not add private group %s", strerror(ret));
 
     ret = sysdb_store_user(test_ctx->ctx->domain,
-                           "u1", NULL, 123, 999, "u1", "/home/u1",
+                           u1, NULL, 123, 999, "u1", "/home/u1",
                            "/bin/bash", NULL, NULL, NULL, -1, 0);
     fail_if(ret != EOK, "Could not add u1");
 
     ret = sysdb_store_user(test_ctx->ctx->domain,
-                           "u2", NULL, 456, 999, "u1", "/home/u1",
+                           u2, NULL, 456, 999, "u1", "/home/u1",
                            "/bin/bash", NULL, NULL, NULL, -1, 0);
     fail_if(ret != EOK, "Could not add u2");
 
     ret = sysdb_store_user(test_ctx->ctx->domain,
-                           "u3", NULL, 789, 999, "u1", "/home/u1",
+                           u3, NULL, 789, 999, "u1", "/home/u1",
                            "/bin/bash", NULL, NULL, NULL, -1, 0);
     fail_if(ret != EOK, "Could not add u3");
 
-    ret = sysdb_add_group(test_ctx->ctx->domain, "g1", 321, NULL, 0, 0);
+    ret = sysdb_add_group(test_ctx->ctx->domain, g1, 321, NULL, 0, 0);
     fail_if(ret != EOK, "Could not add g1");
 
-    ret = sysdb_add_group(test_ctx->ctx->domain, "g2", 654, NULL, 0, 0);
+    ret = sysdb_add_group(test_ctx->ctx->domain, g2, 654, NULL, 0, 0);
     fail_if(ret != EOK, "Could not add g2");
 
     ret = sysdb_add_group_member(test_ctx->ctx->domain,
-                                 "g1", "u1", SYSDB_MEMBER_USER, false);
+                                 g1, u1, SYSDB_MEMBER_USER, false);
     fail_if(ret != EOK, "Could not add u1 to g1");
 
     ret = sysdb_add_group_member(test_ctx->ctx->domain,
-                                 "g2", "u2", SYSDB_MEMBER_USER, false);
+                                 g2, u2, SYSDB_MEMBER_USER, false);
     fail_if(ret != EOK, "Could not add u2 to g2");
 }
 
@@ -198,17 +225,45 @@ void teardown_simple_group(void)
 {
     errno_t ret;
 
-    ret = sysdb_delete_user(test_ctx->ctx->domain, "u1", 0);
+    char *u1;
+    char *u2;
+    char *u3;
+    char *g1;
+    char *g2;
+    char *pvt;
+
+    u1 = sss_create_internal_fqname(test_ctx, "u1",
+                                    test_ctx->ctx->domain->name);
+    u2 = sss_create_internal_fqname(test_ctx, "u2",
+                                    test_ctx->ctx->domain->name);
+    u3 = sss_create_internal_fqname(test_ctx, "u3",
+                                    test_ctx->ctx->domain->name);
+    g1 = sss_create_internal_fqname(test_ctx, "g1",
+                                    test_ctx->ctx->domain->name);
+    g2 = sss_create_internal_fqname(test_ctx, "g2",
+                                    test_ctx->ctx->domain->name);
+    pvt = sss_create_internal_fqname(test_ctx, "pvt",
+                                     test_ctx->ctx->domain->name);
+
+    fail_if(u1 == NULL, "sss_create_internal_fqname failed");
+    fail_if(u2 == NULL, "sss_create_internal_fqname failed");
+    fail_if(u3 == NULL, "sss_create_internal_fqname failed");
+    fail_if(g1 == NULL, "sss_create_internal_fqname failed");
+    fail_if(g2 == NULL, "sss_create_internal_fqname failed");
+    fail_if(pvt == NULL, "sss_create_internal_fqname failed");
+
+
+    ret = sysdb_delete_user(test_ctx->ctx->domain, u1, 0);
     fail_if(ret != EOK, "Could not delete u1");
-    ret = sysdb_delete_user(test_ctx->ctx->domain, "u2", 0);
+    ret = sysdb_delete_user(test_ctx->ctx->domain, u2, 0);
     fail_if(ret != EOK, "Could not delete u2");
-    ret = sysdb_delete_user(test_ctx->ctx->domain, "u3", 0);
+    ret = sysdb_delete_user(test_ctx->ctx->domain, u3, 0);
     fail_if(ret != EOK, "Could not delete u3");
-    ret = sysdb_delete_group(test_ctx->ctx->domain, "g1", 0);
+    ret = sysdb_delete_group(test_ctx->ctx->domain, g1, 0);
     fail_if(ret != EOK, "Could not delete g1");
-    ret = sysdb_delete_group(test_ctx->ctx->domain, "g2", 0);
+    ret = sysdb_delete_group(test_ctx->ctx->domain, g2, 0);
     fail_if(ret != EOK, "Could not delete g2");
-    ret = sysdb_delete_group(test_ctx->ctx->domain, "pvt", 0);
+    ret = sysdb_delete_group(test_ctx->ctx->domain, pvt, 0);
     fail_if(ret != EOK, "Could not delete pvt");
 
     teardown_simple();

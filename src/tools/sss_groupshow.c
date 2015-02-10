@@ -318,7 +318,7 @@ int group_show(TALLOC_CTX *mem_ctx,
                struct sysdb_ctx *sysdb,
                struct sss_domain_info *domain,
                bool   recursive,
-               const char *name,
+               const char *internal_fqname,
                struct group_info **res)
 {
     struct group_info *root;
@@ -330,7 +330,8 @@ int group_show(TALLOC_CTX *mem_ctx,
     int i;
 
     /* First, search for the root group */
-    ret = sysdb_search_group_by_name(mem_ctx, domain, name, attrs, &msg);
+    ret = sysdb_search_group_by_name(mem_ctx, domain, internal_fqname,
+                                     attrs, &msg);
     if (ret) {
         DEBUG(SSSDBG_OP_FAILURE,
               "Search failed: %s (%d)\n", strerror(ret), ret);
@@ -408,7 +409,7 @@ done:
 
 static int group_show_trim_memberof(TALLOC_CTX *mem_ctx,
                                     struct sss_domain_info *domain,
-                                    const char *name,
+                                    const char *name, /* internal fqname */
                                     const char **memberofs,
                                     const char ***_direct)
 {
@@ -478,7 +479,7 @@ int group_show_recurse(TALLOC_CTX *mem_ctx,
                        struct sss_domain_info *domain,
                        struct group_info *root,
                        struct group_info *parent,
-                       const char **group_members,
+                       const char **group_members, /* internal fq format */
                        const int  nmembers,
                        struct group_info ***up_members)
 {

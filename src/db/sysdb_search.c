@@ -38,7 +38,8 @@ int sysdb_getpwnam(TALLOC_CTX *mem_ctx,
     struct ldb_result *res;
     char *sanitized_name;
     char *lc_sanitized_name;
-    const char *src_name;
+    char *fqname;
+    char *lc_fqname;
     int ret;
 
     tmp_ctx = talloc_new(NULL);
@@ -52,24 +53,24 @@ int sysdb_getpwnam(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    /* If this is a subdomain we need to use fully qualified names for the
-     * search as well by default */
-    src_name = sss_get_domain_name(tmp_ctx, name, domain);
-    if (!src_name) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    ret = sss_filter_sanitize_for_dom(tmp_ctx, src_name, domain,
+    ret = sss_filter_sanitize_for_dom(tmp_ctx, name, domain,
                                       &sanitized_name, &lc_sanitized_name);
     if (ret != EOK) {
         goto done;
     }
 
+    fqname = sss_create_internal_fqname(tmp_ctx, sanitized_name,
+                                        domain->name);
+    lc_fqname = sss_create_internal_fqname(tmp_ctx, lc_sanitized_name,
+                                           domain->name);
+    if (fqname == NULL || lc_fqname == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
     ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
                      LDB_SCOPE_SUBTREE, attrs, SYSDB_PWNAM_FILTER,
-                     lc_sanitized_name,
-                     sanitized_name, sanitized_name);
+                     lc_fqname, fqname, fqname);
     if (ret) {
         ret = sysdb_error_to_errno(ret);
         goto done;
@@ -569,8 +570,9 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
     char *sanitized_name;
     struct ldb_dn *base_dn;
     struct ldb_result *res;
-    const char *src_name;
     char *lc_sanitized_name;
+    char *fqname;
+    char *lc_fqname;
     int ret;
 
     tmp_ctx = talloc_new(NULL);
@@ -591,23 +593,24 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    /* If this is a subomain we need to use fully qualified names for the
-     * search as well by default */
-    src_name = sss_get_domain_name(tmp_ctx, name, domain);
-    if (!src_name) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    ret = sss_filter_sanitize_for_dom(tmp_ctx, src_name, domain,
+    ret = sss_filter_sanitize_for_dom(tmp_ctx, name, domain,
                                       &sanitized_name, &lc_sanitized_name);
     if (ret != EOK) {
         goto done;
     }
 
+    fqname = sss_create_internal_fqname(tmp_ctx, sanitized_name,
+                                        domain->name);
+    lc_fqname = sss_create_internal_fqname(tmp_ctx, lc_sanitized_name,
+                                           domain->name);
+    if (fqname == NULL || lc_fqname == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
     ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
                      LDB_SCOPE_SUBTREE, attrs, fmt_filter,
-                     lc_sanitized_name, sanitized_name, sanitized_name);
+                     lc_fqname, fqname, fqname);
     if (ret) {
         ret = sysdb_error_to_errno(ret);
         goto done;
@@ -1173,9 +1176,10 @@ int sysdb_get_user_attr(TALLOC_CTX *mem_ctx,
     TALLOC_CTX *tmp_ctx;
     struct ldb_dn *base_dn;
     struct ldb_result *res;
-    const char *src_name;
     char *sanitized_name;
     char *lc_sanitized_name;
+    char *fqname;
+    char *lc_fqname;
     int ret;
 
     tmp_ctx = talloc_new(NULL);
@@ -1189,24 +1193,23 @@ int sysdb_get_user_attr(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    /* If this is a subdomain we need to use fully qualified names for the
-     * search as well by default */
-    src_name = sss_get_domain_name(tmp_ctx, name, domain);
-    if (!src_name) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    ret = sss_filter_sanitize_for_dom(tmp_ctx, src_name, domain,
+    ret = sss_filter_sanitize_for_dom(tmp_ctx, name, domain,
                                       &sanitized_name, &lc_sanitized_name);
     if (ret != EOK) {
         goto done;
     }
 
+    fqname = sss_create_internal_fqname(tmp_ctx, sanitized_name, domain->name);
+    lc_fqname = sss_create_internal_fqname(tmp_ctx, lc_sanitized_name,
+                                           domain->name);
+    if (fqname == NULL || lc_fqname == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
     ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
                      LDB_SCOPE_SUBTREE, attributes,
-                     SYSDB_PWNAM_FILTER, lc_sanitized_name, sanitized_name,
-                     sanitized_name);
+                     SYSDB_PWNAM_FILTER, lc_fqname, fqname, fqname);
     if (ret) {
         ret = sysdb_error_to_errno(ret);
         goto done;

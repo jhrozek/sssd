@@ -342,7 +342,7 @@ done:
 
 static errno_t
 sdap_store_group_with_gid(struct sss_domain_info *domain,
-                          const char *name,
+                          const char *name, /* internal fqname */
                           gid_t gid,
                           struct sysdb_attrs *group_attrs,
                           uint64_t cache_timeout,
@@ -738,7 +738,7 @@ static int sdap_save_group(TALLOC_CTX *memctx,
         goto done;
     }
 
-    ret = sdap_save_all_names(group_name, attrs, dom, group_attrs);
+    ret = sdap_save_all_names(group_name, attrs, dom, true, group_attrs);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to save group names\n");
         goto done;
@@ -805,7 +805,7 @@ are_sids_from_same_dom(const char *sid1, const char *sid2, bool *_result)
 static errno_t
 retain_extern_members(TALLOC_CTX *mem_ctx,
                       struct sss_domain_info *dom,
-                      const char *group_name,
+                      const char *group_fqname,
                       const char *group_sid,
                       char ***_userdns,
                       size_t *_nuserdns)
@@ -823,7 +823,7 @@ retain_extern_members(TALLOC_CTX *mem_ctx,
         return ENOMEM;
     }
 
-    ret = sysdb_get_sids_of_members(tmp_ctx, dom, group_name, &sids, &dns, &n);
+    ret = sysdb_get_sids_of_members(tmp_ctx, dom, group_fqname, &sids, &dns, &n);
     if (ret != EOK) {
         if (ret != ENOENT) {
             DEBUG(SSSDBG_TRACE_ALL,
@@ -2414,6 +2414,7 @@ static errno_t sdap_nested_group_populate_users(TALLOC_CTX *mem_ctx,
     errno_t ret, sret;
     struct ldb_message_element *el;
     const char *username;
+    char *gh_name;
     char *clean_orig_dn;
     const char *original_dn;
     struct sss_domain_info *user_dom;
@@ -2488,6 +2489,13 @@ static errno_t sdap_nested_group_populate_users(TALLOC_CTX *mem_ctx,
             continue;
         }
 
+        /* We want ghost users in the format name@domain */
+        gh_name = talloc_asprintf(tmp_ctx, "%s@%s", username, user_dom->name);
+        if (gh_name == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+
         /* Check for the specified origDN in the sysdb */
         filter = talloc_asprintf(tmp_ctx, "(%s=%s)",
                                  SYSDB_ORIG_DN,
@@ -2533,7 +2541,7 @@ static errno_t sdap_nested_group_populate_users(TALLOC_CTX *mem_ctx,
             key.type = HASH_KEY_STRING;
             key.str = talloc_steal(ghosts, discard_const(original_dn));
             value.type = HASH_VALUE_PTR;
-            value.ptr = talloc_steal(ghosts, discard_const(username));
+            value.ptr = talloc_steal(ghosts, gh_name);
             ret = hash_enter(ghosts, &key, &value);
             if (ret != HASH_SUCCESS) {
                 talloc_free(key.str);

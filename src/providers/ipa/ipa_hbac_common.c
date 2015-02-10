@@ -402,7 +402,7 @@ done:
 static errno_t
 hbac_eval_user_element(TALLOC_CTX *mem_ctx,
                        struct sss_domain_info *domain,
-                       const char *username,
+                       const char *pd_username,
                        struct hbac_request_element **user_element);
 
 static errno_t
@@ -506,7 +506,7 @@ done:
 static errno_t
 hbac_eval_user_element(TALLOC_CTX *mem_ctx,
                        struct sss_domain_info *domain,
-                       const char *username,
+                       const char *pd_username,
                        struct hbac_request_element **user_element)
 {
     errno_t ret;
@@ -528,7 +528,11 @@ hbac_eval_user_element(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    users->name = username;
+    users->name = sss_ioname2internal(tmp_ctx, domain, pd_username);
+    if (users->name == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
 
     /* Read the originalMemberOf attribute
      * This will give us the list of both POSIX and

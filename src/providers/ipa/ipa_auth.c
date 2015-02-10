@@ -332,6 +332,14 @@ static void ipa_migration_flag_connect_done(struct tevent_req *req)
     int dp_err = DP_ERR_FATAL;
     int ret;
     int auth_timeout;
+    char *name;
+    TALLOC_CTX *tmpctx;
+
+    tmpctx = talloc_new(NULL);
+    if (tmpctx == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
 
     ret = sdap_cli_connect_recv(req, state, NULL, &state->sh, NULL);
     talloc_zfree(req);
@@ -355,7 +363,13 @@ static void ipa_migration_flag_connect_done(struct tevent_req *req)
     attrs[0] = SYSDB_ORIG_DN;
     attrs[1] = NULL;
 
-    ret = sysdb_search_user_by_name(state, be_ctx->domain, state->pd->user,
+    name = sss_ioname2internal(tmpctx, be_ctx->domain, state->pd->user);
+    if (name == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = sysdb_search_user_by_name(state, be_ctx->domain, name,
                                     attrs, &user_msg);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "sysdb_search_user_by_name failed.\n");

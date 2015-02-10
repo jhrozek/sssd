@@ -927,7 +927,12 @@ static void sdap_ad_tokengroups_initgr_mapping_done(struct tevent_req *subreq)
             /* This is a new group. For now, we will store it under the name
              * of its SID. When a direct lookup of the group or its GID occurs,
              * it will replace this temporary entry. */
-            name = sid;
+            name = sss_create_internal_fqname(tmp_ctx, sid, domain->name);
+            if (name == NULL) {
+                ret = ENOMEM;
+                goto done;
+            }
+
             ret = sysdb_add_incomplete_group(domain, name, gid,
                                              NULL, sid, NULL, false, now);
             if (ret != EOK) {

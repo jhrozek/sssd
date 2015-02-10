@@ -913,7 +913,7 @@ errno_t get_object_from_cache(TALLOC_CTX *mem_ctx,
                             SYSDB_GHOST,
                             SYSDB_HOMEDIR,
                             NULL };
-    char *name;
+    char *fq_name;
 
     if (ar->filter_type == BE_FILTER_SECID) {
         ret = sysdb_search_object_by_sid(mem_ctx, dom, ar->filter_value, attrs,
@@ -986,24 +986,24 @@ errno_t get_object_from_cache(TALLOC_CTX *mem_ctx,
             goto done;
         }
     } else if (ar->filter_type == BE_FILTER_NAME) {
-        name = sss_get_domain_name(mem_ctx, ar->filter_value, dom);
-        if (name == NULL) {
-            DEBUG(SSSDBG_OP_FAILURE, "sss_get_domain_name failed\n");
+        /* is ar->filter_value already internal fq name? */
+        fq_name = sss_ioname2internal(mem_ctx, dom, ar->filter_value);
+        if (fq_name == NULL) {
             ret = ENOMEM;
             goto done;
         }
 
         switch (ar->entry_type & BE_REQ_TYPE_MASK) {
         case BE_REQ_GROUP:
-            ret = sysdb_search_group_by_name(mem_ctx, dom, name, attrs, &msg);
+            ret = sysdb_search_group_by_name(mem_ctx, dom, fq_name, attrs, &msg);
             break;
         case BE_REQ_INITGROUPS:
         case BE_REQ_USER:
         case BE_REQ_USER_AND_GROUP:
-            ret = sysdb_search_user_by_name(mem_ctx, dom, name, attrs, &msg);
+            ret = sysdb_search_user_by_name(mem_ctx, dom, fq_name, attrs, &msg);
             if (ret == ENOENT && (ar->entry_type & BE_REQ_TYPE_MASK)
                                                      == BE_REQ_USER_AND_GROUP) {
-                ret = sysdb_search_group_by_name(mem_ctx, dom, name,
+                ret = sysdb_search_group_by_name(mem_ctx, dom, fq_name,
                                                  attrs, &msg);
             }
             break;

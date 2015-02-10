@@ -73,6 +73,12 @@ static void prepare_reply(struct LOCAL_request *lreq)
 static void do_successful_login(struct LOCAL_request *lreq)
 {
     int ret;
+    char *name;
+    TALLOC_CTX *tmpctx;
+
+    tmpctx = talloc_new(NULL);
+    NULL_CHECK_OR_JUMP(tmpctx, ("talloc_new failed.\n"),
+                       lreq->error, ENOMEM, done);
 
     lreq->mod_attrs = sysdb_new_attrs(lreq);
     NULL_CHECK_OR_JUMP(lreq->mod_attrs, ("sysdb_new_attrs failed.\n"),
@@ -87,13 +93,16 @@ static void do_successful_login(struct LOCAL_request *lreq)
     NEQ_CHECK_OR_JUMP(ret, EOK, ("sysdb_attrs_add_long failed.\n"),
                       lreq->error, ret, done);
 
-    ret = sysdb_set_user_attr(lreq->domain,
-                              lreq->preq->pd->user,
+    name = sss_ioname2internal(tmpctx, lreq->domain, lreq->preq->pd->user);
+    NULL_CHECK_OR_JUMP(name, ("sss_ioname2internal failed.\n"),
+                       lreq->error, ENOMEM, done);
+    ret = sysdb_set_user_attr(lreq->domain, name,
                               lreq->mod_attrs, SYSDB_MOD_REP);
     NEQ_CHECK_OR_JUMP(ret, EOK, ("sysdb_set_user_attr failed.\n"),
                       lreq->error, ret, done);
 
 done:
+    talloc_free(tmpctx);
     return;
 }
 
@@ -102,6 +111,12 @@ static void do_failed_login(struct LOCAL_request *lreq)
     int ret;
     int failedLoginAttempts;
     struct pam_data *pd;
+    char *name;
+    TALLOC_CTX *tmpctx;
+
+    tmpctx = talloc_new(NULL);
+    NULL_CHECK_OR_JUMP(tmpctx, ("talloc_new failed.\n"),
+                       lreq->error, ENOMEM, done);
 
     pd = lreq->preq->pd;
     pd->pam_status = PAM_AUTH_ERR;
@@ -128,13 +143,16 @@ static void do_failed_login(struct LOCAL_request *lreq)
     NEQ_CHECK_OR_JUMP(ret, EOK, ("sysdb_attrs_add_long failed.\n"),
                       lreq->error, ret, done);
 
-    ret = sysdb_set_user_attr(lreq->domain,
-                              lreq->preq->pd->user,
+    name = sss_ioname2internal(tmpctx, lreq->domain, lreq->preq->pd->user);
+    NULL_CHECK_OR_JUMP(name, ("sss_ioname2internal failed.\n"),
+                       lreq->error, ENOMEM, done);
+    ret = sysdb_set_user_attr(lreq->domain, name,
                               lreq->mod_attrs, SYSDB_MOD_REP);
     NEQ_CHECK_OR_JUMP(ret, EOK, ("sysdb_set_user_attr failed.\n"),
                       lreq->error, ret, done);
 
 done:
+    talloc_free(tmpctx);
     return;
 }
 
@@ -161,8 +179,14 @@ static void do_pam_chauthtok(struct LOCAL_request *lreq)
     char *salt;
     char *new_hash;
     struct pam_data *pd;
+    char *name;
+    TALLOC_CTX *tmpctx;
 
     pd = lreq->preq->pd;
+
+    tmpctx = talloc_new(NULL);
+    NULL_CHECK_OR_JUMP(tmpctx, ("talloc_new failed.\n"),
+                       lreq->error, ENOMEM, done);
 
     ret = sss_authtok_get_password(pd->newauthtok, &password, NULL);
     if (ret) {
@@ -197,13 +221,16 @@ static void do_pam_chauthtok(struct LOCAL_request *lreq)
     NEQ_CHECK_OR_JUMP(ret, EOK, ("sysdb_attrs_add_long failed.\n"),
                       lreq->error, ret, done);
 
-    ret = sysdb_set_user_attr(lreq->domain,
-                              lreq->preq->pd->user,
+    name = sss_ioname2internal(tmpctx, lreq->domain, lreq->preq->pd->user);
+    NULL_CHECK_OR_JUMP(name, ("sss_ioname2internal failed.\n"),
+                       lreq->error, ENOMEM, done);
+    ret = sysdb_set_user_attr(lreq->domain, name,
                               lreq->mod_attrs, SYSDB_MOD_REP);
     NEQ_CHECK_OR_JUMP(ret, EOK, ("sysdb_set_user_attr failed.\n"),
                       lreq->error, ret, done);
 
 done:
+    talloc_free(tmpctx);
     sss_authtok_set_empty(pd->newauthtok);
 }
 

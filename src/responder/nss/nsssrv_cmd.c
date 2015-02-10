@@ -350,7 +350,7 @@ static int fill_pwent(struct sss_packet *packet,
     size_t rsize, rp, blen;
     int fq_len = 0;
     int i, ret, num;
-    bool add_domain = (!IS_SUBDOMAIN(dom) && dom->fqnames);
+    bool add_domain = dom->fqnames;
     const char *domain = dom->name;
     bool packet_initialized = false;
     int ncret;
@@ -2734,6 +2734,8 @@ void nss_update_gr_memcache(struct nss_ctx *nctx)
 #define MNUM_ROFFSET sizeof(uint32_t)
 #define STRS_ROFFSET 2*sizeof(uint32_t)
 
+/* member can be from memberuid or ghost attribute. Both are stored
+ * in the internal fqname format (name@domain) */
 static int parse_member(TALLOC_CTX *mem_ctx, struct sss_domain_info *group_dom,
                         const char *member, struct sss_domain_info **_member_dom,
                         struct sized_string *_name, bool *_add_domain)
@@ -2744,40 +2746,51 @@ static int parse_member(TALLOC_CTX *mem_ctx, struct sss_domain_info *group_dom,
     const char *use_member;
     struct sss_domain_info *member_dom;
     bool add_domain;
+    TALLOC_CTX *tmp_ctx;
 
-    ret = sss_parse_name(mem_ctx, group_dom->names, member, &domname, &username);
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sss_parse_internal_fqname(tmp_ctx, member, &username, &domname);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE, "Could not parse [%s] into "
-              "name-value components.\n", member);
-        return ret;
+              "shortname and domain name components.\n", member);
+        goto done;
     }
 
-    add_domain = (!IS_SUBDOMAIN(group_dom) && group_dom->fqnames);
-    use_member = member;
-    member_dom = group_dom;
+    add_domain = group_dom->fqnames;
+    use_member = username;
+    member_dom = find_domain_by_name(group_dom, domname, true);
+    if (member_dom == NULL) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "Could not find domain '%s'\n", domname);
+        ret = ERR_DOMAIN_NOT_FOUND;
+        goto done;
+    }
 
-    if (IS_SUBDOMAIN(group_dom) == false && domname != NULL) {
+    if (IS_SUBDOMAIN(group_dom) == false && IS_SUBDOMAIN(member_dom) == true) {
         /* The group is stored in the parent domain, but the member comes from.
-         * a subdomain. No need to add the domain component, it's already
-         * present in the memberuid/ghost attribute
-         */
-        add_domain = false;
+         * a subdomain.  */
+        add_domain = true;
     }
 
-    if (IS_SUBDOMAIN(group_dom) == true && domname == NULL) {
+    if (IS_SUBDOMAIN(group_dom) == true && IS_SUBDOMAIN(member_dom) == false) {
         /* The group is stored in a subdomain, but the member comes
          * from the parent domain. Need to add the domain component
          * of the parent domain
          */
         add_domain = true;
-        use_member = username;
-        member_dom = group_dom->parent;
     }
 
     to_sized_string(_name, use_member);
     *_add_domain = add_domain;
     *_member_dom = member_dom;
-    return EOK;
+
+    ret = EOK;
+done:
+    talloc_free(tmp_ctx);
+    return ret;
 }
 
 static int fill_members(struct sss_packet *packet,
@@ -2842,7 +2855,8 @@ static int fill_members(struct sss_packet *packet,
             }
         }
 
-        ret = parse_member(tmp_ctx, dom, tmpstr, &member_dom, &name, &add_domain);
+        ret = parse_member(tmp_ctx, dom, tmpstr, &member_dom, &name,
+                           &add_domain);
         if (ret != EOK) {
             DEBUG(SSSDBG_MINOR_FAILURE,
                   "Could not process member %s, skipping\n", tmpstr);
@@ -2923,7 +2937,7 @@ static int fill_grent(struct sss_packet *packet,
     int i = 0;
     int ret, num, memnum;
     size_t rzero, rsize;
-    bool add_domain = (!IS_SUBDOMAIN(dom) && dom->fqnames);
+    bool add_domain = dom->fqnames;
     const char *domain = dom->name;
     TALLOC_CTX *tmp_ctx = NULL;
 
@@ -4594,26 +4608,21 @@ static errno_t nss_cmd_getsidby_search(struct nss_dom_ctx *dctx)
                 goto done;
             }
 
-            /* For subdomains a fully qualified name is needed for
-             * sysdb_search_user_by_name and sysdb_search_group_by_name. */
-            if (IS_SUBDOMAIN(dom)) {
-                sysdb_name = sss_tc_fqname(cmdctx, dom->names, dom, name);
-                if (sysdb_name == NULL) {
-                    DEBUG(SSSDBG_OP_FAILURE, "talloc_asprintf failed.\n");
-                    ret = ENOMEM;
-                    goto done;
-                }
+            sysdb_name = sss_ioname2internal(cmdctx, dom, name);
+            if (sysdb_name == NULL) {
+                DEBUG(SSSDBG_OP_FAILURE, "failed to parse name '%s'.\n", name);
+                ret = ENOMEM;
+                goto done;
             }
-
 
             /* verify this name has not yet been negatively cached, as user
              * and groupm, or has been permanently filtered */
             ret = sss_ncache_check_user(nctx->ncache, nctx->neg_timeout,
-                                        dom, name);
+                                        dom, sysdb_name);
 
             if (ret == EEXIST) {
                 ret = sss_ncache_check_group(nctx->ncache, nctx->neg_timeout,
-                                             dom, name);
+                                             dom, sysdb_name);
                 if (ret == EEXIST) {
                     /* if neg cached, return we didn't find it */
                     DEBUG(SSSDBG_TRACE_FUNC,
@@ -4685,9 +4694,8 @@ static errno_t nss_cmd_getsidby_search(struct nss_dom_ctx *dctx)
                 }
             }
         } else {
-            ret = sysdb_search_user_by_name(cmdctx, dom,
-                                            sysdb_name ? sysdb_name : name,
-                                            attrs, &msg);
+            ret = sysdb_search_user_by_name(cmdctx, dom, sysdb_name, attrs,
+                                            &msg);
             if (ret != EOK && ret != ENOENT) {
                 DEBUG(SSSDBG_CRIT_FAILURE,
                       "Failed to make request to our cache!\n");
@@ -4699,8 +4707,7 @@ static errno_t nss_cmd_getsidby_search(struct nss_dom_ctx *dctx)
                 user_found = true;
             } else {
                 talloc_free(msg);
-                ret = sysdb_search_group_by_name(cmdctx, dom,
-                                                 sysdb_name ? sysdb_name : name,
+                ret = sysdb_search_group_by_name(cmdctx, dom, sysdb_name,
                                                  attrs, &msg);
                 if (ret != EOK && ret != ENOENT) {
                     DEBUG(SSSDBG_CRIT_FAILURE,
@@ -4736,13 +4743,13 @@ static errno_t nss_cmd_getsidby_search(struct nss_dom_ctx *dctx)
         if (dctx->res->count == 0 && !dctx->check_provider) {
             if (cmdctx->cmd == SSS_NSS_GETSIDBYNAME
                     || cmdctx->cmd == SSS_NSS_GETORIGBYNAME) {
-                ret = sss_ncache_set_user(nctx->ncache, false, dom, name);
+                ret = sss_ncache_set_user(nctx->ncache, false, dom, sysdb_name);
                 if (ret != EOK) {
                     DEBUG(SSSDBG_MINOR_FAILURE,
                           "Cannot set negcache for %s@%s\n", name, dom->name);
                 }
 
-                ret = sss_ncache_set_group(nctx->ncache, false, dom, name);
+                ret = sss_ncache_set_group(nctx->ncache, false, dom, sysdb_name);
                 if (ret != EOK) {
                     DEBUG(SSSDBG_MINOR_FAILURE,
                           "Cannot set negcache for %s@%s\n", name, dom->name);
@@ -4766,7 +4773,7 @@ static errno_t nss_cmd_getsidby_search(struct nss_dom_ctx *dctx)
                 req_name = NULL;
                 req_id = cmdctx->id;
             } else {
-                req_name = name;
+                req_name = sysdb_name;
                 req_id = 0;
             }
             if (user_found) {

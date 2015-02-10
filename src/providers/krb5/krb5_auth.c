@@ -331,6 +331,8 @@ static void krb5_auth_store_creds(struct sss_domain_info *domain,
     size_t password_len;
     size_t fa2_len = 0;
     int ret = EOK;
+    TALLOC_CTX *tmp_ctx;
+    char *name;
 
     switch(pd->cmd) {
         case SSS_CMD_RENEW:
@@ -380,7 +382,22 @@ static void krb5_auth_store_creds(struct sss_domain_info *domain,
         return;
     }
 
-    ret = sysdb_cache_password_ex(domain, pd->user, password,
+    /* Fixme: tmp_ctx should not be used like this */
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Out of memory.\n");
+        return;
+    }
+    name = sss_ioname2internal(tmp_ctx, domain, pd->user);
+    if (name == NULL) {
+        DEBUG(SSSDBG_FATAL_FAILURE,
+              "failed to parse name while storing offline creds.\n");
+        talloc_free(tmp_ctx);
+        return;
+    }
+    talloc_free(tmp_ctx);
+
+    ret = sysdb_cache_password_ex(domain, name, password,
                                   sss_authtok_get_type(pd->authtok), fa2_len);
     if (ret) {
         DEBUG(SSSDBG_OP_FAILURE,

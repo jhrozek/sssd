@@ -68,7 +68,7 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
     mi = 0;
 
     for (i=0; groupnames[i]; i++) {
-        tmp_name = sss_get_domain_name(tmp_ctx, groupnames[i], domain);
+        tmp_name = sss_create_internal_fqname(tmp_ctx, groupnames[i], domain->name);
         if (tmp_name == NULL) {
             DEBUG(SSSDBG_OP_FAILURE,
                   "Failed to format original name [%s]\n", groupnames[i]);

@@ -333,6 +333,8 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
     size_t msgs_count = 0;
     char *sanitized_name;
     char *lc_sanitized_name;
+    char *fqname;
+    char *lc_fqname;
     char *filter;
     int ret;
 
@@ -369,8 +371,17 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    filter = talloc_asprintf(tmp_ctx, filter_tmpl, lc_sanitized_name,
-                             sanitized_name, sanitized_name);
+    fqname = sss_create_internal_fqname(tmp_ctx, sanitized_name,
+                                        domain->name);
+    lc_fqname = sss_create_internal_fqname(tmp_ctx, lc_sanitized_name,
+                                           domain->name);
+    if (fqname == NULL || lc_fqname == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    filter = talloc_asprintf(tmp_ctx, filter_tmpl, lc_fqname,
+                             fqname, fqname);
     if (!filter) {
         ret = ENOMEM;
         goto done;
@@ -1023,7 +1034,7 @@ done:
 /* =Add-Basic-User-NO-CHECKS============================================== */
 
 int sysdb_add_basic_user(struct sss_domain_info *domain,
-                         const char *name,
+                         const char *internal_fqname,
                          uid_t uid, gid_t gid,
                          const char *gecos,
                          const char *homedir,
@@ -1045,7 +1056,7 @@ int sysdb_add_basic_user(struct sss_domain_info *domain,
     }
 
     /* user dn */
-    msg->dn = sysdb_user_dn(msg, domain, name);
+    msg->dn = sysdb_user_dn(msg, domain, internal_fqname);
     if (!msg->dn) {
         ERROR_OUT(ret, ENOMEM, done);
     }
@@ -1053,7 +1064,13 @@ int sysdb_add_basic_user(struct sss_domain_info *domain,
     ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_OBJECTCLASS, SYSDB_USER_CLASS);
     if (ret) goto done;
 
-    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_NAME, name);
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_NAME, internal_fqname);
+    if (ret) goto done;
+
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_FQNAME, internal_fqname);
+    if (ret) goto done;
+
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_DOMNAME, domain->name);
     if (ret) goto done;
 
     ret = add_ulong(msg, LDB_FLAG_MOD_ADD, SYSDB_UIDNUM, (unsigned long)uid);
@@ -1291,7 +1308,7 @@ done:
 /* =Add-User-Function===================================================== */
 
 int sysdb_add_user(struct sss_domain_info *domain,
-                   const char *name,
+                   const char *internal_fqname,
                    uid_t uid, gid_t gid,
                    const char *gecos,
                    const char *homedir,
@@ -1350,7 +1367,8 @@ int sysdb_add_user(struct sss_domain_info *domain,
          * Don't worry about users, if we try to add a user with the same
          * name the operation will fail */
 
-        ret = sysdb_search_group_by_name(tmp_ctx, domain, name, NULL, &msg);
+        ret = sysdb_search_group_by_name(tmp_ctx, domain,
+                                         internal_fqname, NULL, &msg);
         if (ret != ENOENT) {
             if (ret == EOK) ret = EEXIST;
             goto done;
@@ -1367,7 +1385,8 @@ int sysdb_add_user(struct sss_domain_info *domain,
     }
 
     /* try to add the user */
-    ret = sysdb_add_basic_user(domain, name, uid, gid, gecos, homedir, shell);
+    ret = sysdb_add_basic_user(domain, internal_fqname, uid, gid, gecos,
+                               homedir, shell);
     if (ret) goto done;
 
     if (uid == 0) {
@@ -1387,7 +1406,8 @@ int sysdb_add_user(struct sss_domain_info *domain,
             if (ret) goto done;
         }
 
-        ret = sysdb_set_user_attr(domain, name, id_attrs, SYSDB_MOD_REP);
+        ret = sysdb_set_user_attr(domain, internal_fqname, id_attrs,
+                                  SYSDB_MOD_REP);
         /* continue on success, to commit additional attrs */
         if (ret) goto done;
     }
@@ -1412,7 +1432,7 @@ int sysdb_add_user(struct sss_domain_info *domain,
                                   (now + cache_timeout) : 0));
     if (ret) goto done;
 
-    ret = sysdb_set_user_attr(domain, name, attrs, SYSDB_MOD_REP);
+    ret = sysdb_set_user_attr(domain, internal_fqname, attrs, SYSDB_MOD_REP);
     if (ret) goto done;
 
     if (domain->enumerate == false) {
@@ -1421,7 +1441,7 @@ int sysdb_add_user(struct sss_domain_info *domain,
          * with the newly-created user entry
          */
         ret = sysdb_remove_ghostattr_from_groups(domain, orig_dn, attrs,
-                                                 name);
+                                                 internal_fqname);
         if (ret) goto done;
     }
 
@@ -1442,7 +1462,7 @@ done:
 /* =Add-Basic-Group-NO-CHECKS============================================= */
 
 int sysdb_add_basic_group(struct sss_domain_info *domain,
-                          const char *name, gid_t gid)
+                          const char *internal_fqname, gid_t gid)
 {
     struct ldb_message *msg;
     int ret;
@@ -1460,7 +1480,7 @@ int sysdb_add_basic_group(struct sss_domain_info *domain,
     }
 
     /* group dn */
-    msg->dn = sysdb_group_dn(msg, domain, name);
+    msg->dn = sysdb_group_dn(msg, domain, internal_fqname);
     if (!msg->dn) {
         ERROR_OUT(ret, ENOMEM, done);
     }
@@ -1468,7 +1488,13 @@ int sysdb_add_basic_group(struct sss_domain_info *domain,
     ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_OBJECTCLASS, SYSDB_GROUP_CLASS);
     if (ret) goto done;
 
-    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_NAME, name);
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_NAME, internal_fqname);
+    if (ret) goto done;
+
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_FQNAME, internal_fqname);
+    if (ret) goto done;
+
+    ret = add_string(msg, LDB_FLAG_MOD_ADD, SYSDB_DOMNAME, domain->name);
     if (ret) goto done;
 
     ret = add_ulong(msg, LDB_FLAG_MOD_ADD, SYSDB_GIDNUM, (unsigned long)gid);
@@ -2057,7 +2083,7 @@ fail:
 /* this function does not check that all user members are actually present */
 
 int sysdb_store_group(struct sss_domain_info *domain,
-                      const char *name,
+                      const char *name, /*internal fqname */
                       gid_t gid,
                       struct sysdb_attrs *attrs,
                       uint64_t cache_timeout,
@@ -2075,7 +2101,8 @@ int sysdb_store_group(struct sss_domain_info *domain,
         return ENOMEM;
     }
 
-    ret = sysdb_search_group_by_name(tmp_ctx, domain, name, src_attrs, &msg);
+    ret = sysdb_search_group_by_name(tmp_ctx, domain, name,
+                                     src_attrs, &msg);
     if (ret && ret != ENOENT) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               "sysdb_search_group_by_name failed for %s with: [%d][%s].\n",
@@ -2180,24 +2207,44 @@ done:
 /* =Add-User-to-Group(Native/Legacy)====================================== */
 static int
 sysdb_group_membership_mod(struct sss_domain_info *domain,
-                           const char *group,
-                           const char *member,
+                           const char *group_name, /* internal fq name*/
+                           const char *member_name, /* internal fq name */
                            enum sysdb_member_type type,
                            int modify_op,
                            bool is_dn)
 {
     struct ldb_dn *group_dn;
     struct ldb_dn *member_dn;
+    char *member_shortname;
+    char *member_domname;
+    struct sss_domain_info *member_dom;
     int ret;
     TALLOC_CTX *tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
         return ENOMEM;
     }
 
+    ret = sss_parse_internal_fqname(tmp_ctx, member_name,
+                                    &member_shortname, &member_domname);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Failed to parser internal fqname '%s' [%d]: %s\n",
+              member_name, ret, sss_strerror(ret));
+        goto done;
+    }
+
+    member_dom = find_domain_by_name(domain, member_domname, false);
+    if (member_dom == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Domain [%s] was not found\n", member_domname);
+        ret = EINVAL;
+        goto done;
+    }
+
     if (type == SYSDB_MEMBER_USER) {
-        member_dn = sysdb_user_dn(tmp_ctx, domain, member);
+        member_dn = sysdb_user_dn(tmp_ctx, member_dom, member_name);
     } else if (type == SYSDB_MEMBER_GROUP) {
-        member_dn = sysdb_group_dn(tmp_ctx, domain, member);
+        member_dn = sysdb_group_dn(tmp_ctx, member_dom, member_name);
     } else {
         ret = EINVAL;
         goto done;
@@ -2209,9 +2256,9 @@ sysdb_group_membership_mod(struct sss_domain_info *domain,
     }
 
     if (!is_dn) {
-        group_dn = sysdb_group_dn(tmp_ctx, domain, group);
+        group_dn = sysdb_group_dn(tmp_ctx, domain, group_name);
     } else {
-        group_dn = ldb_dn_new(tmp_ctx, domain->sysdb->ldb, group);
+        group_dn = ldb_dn_new(tmp_ctx, domain->sysdb->ldb, group_name);
     }
 
     if (!group_dn) {
@@ -2227,12 +2274,13 @@ done:
 }
 
 int sysdb_add_group_member(struct sss_domain_info *domain,
-                           const char *group,
-                           const char *member,
+                           const char *group_name, /* internal fqname */
+                           const char *member_name, /* intrenal fq name */
                            enum sysdb_member_type type,
                            bool is_dn)
 {
-    return sysdb_group_membership_mod(domain, group, member, type,
+    return sysdb_group_membership_mod(domain, group_name,
+                                      member_name, type,
                                       SYSDB_MOD_ADD, is_dn);
 }
 
@@ -2240,12 +2288,13 @@ int sysdb_add_group_member(struct sss_domain_info *domain,
 
 
 int sysdb_remove_group_member(struct sss_domain_info *domain,
-                              const char *group,
-                              const char *member,
+                              const char *group_name, /* internal fqname */
+                              const char *member_name, /* internal fqname */
                               enum sysdb_member_type type,
                               bool is_dn)
 {
-    return sysdb_group_membership_mod(domain, group, member, type,
+    return sysdb_group_membership_mod(domain, group_name,
+                                      member_name, type,
                                       SYSDB_MOD_DEL, is_dn);
 }
 
@@ -2253,7 +2302,7 @@ int sysdb_remove_group_member(struct sss_domain_info *domain,
 /* =Password-Caching====================================================== */
 
 int sysdb_cache_password_ex(struct sss_domain_info *domain,
-                            const char *username,
+                            const char *username, /* intrenal fqname */
                             const char *password,
                             enum sss_authtok_type authtok_type,
                             size_t second_factor_len)
@@ -2323,7 +2372,7 @@ fail:
 }
 
 int sysdb_cache_password(struct sss_domain_info *domain,
-                         const char *username,
+                         const char *username, /* internal fqname */
                          const char *password)
 {
     return sysdb_cache_password_ex(domain, username, password,
@@ -2899,7 +2948,7 @@ fail:
 /* =Delete-Group-by-Name-OR-gid=========================================== */
 
 int sysdb_delete_group(struct sss_domain_info *domain,
-                       const char *name, gid_t gid)
+                       const char *internal_fqname, gid_t gid)
 {
     TALLOC_CTX *tmp_ctx;
     struct ldb_message *msg;
@@ -2910,8 +2959,9 @@ int sysdb_delete_group(struct sss_domain_info *domain,
         return ENOMEM;
     }
 
-    if (name) {
-        ret = sysdb_search_group_by_name(tmp_ctx, domain, name, NULL, &msg);
+    if (internal_fqname) {
+        ret = sysdb_search_group_by_name(tmp_ctx, domain, internal_fqname,
+                                         NULL, &msg);
     } else {
         ret = sysdb_search_group_by_gid(tmp_ctx, domain, gid, NULL, &msg);
     }
@@ -2919,7 +2969,7 @@ int sysdb_delete_group(struct sss_domain_info *domain,
         goto fail;
     }
 
-    if (name && gid) {
+    if (internal_fqname && gid) {
         /* verify name/gid match */
         const char *c_name;
         uint64_t c_gid;
@@ -2932,7 +2982,7 @@ int sysdb_delete_group(struct sss_domain_info *domain,
             ret = EFAULT;
             goto fail;
         }
-        if (strcmp(name, c_name) || gid != c_gid) {
+        if (strcmp(internal_fqname, c_name) || gid != c_gid) {
             /* this is not the entry we are looking for */
             ret = EINVAL;
             goto fail;
@@ -3460,7 +3510,7 @@ done:
 }
 
 static errno_t sysdb_update_members_ex(struct sss_domain_info *domain,
-                                       const char *member,
+                                       const char *member_internal_fqname,
                                        enum sysdb_member_type type,
                                        const char *const *add_groups,
                                        const char *const *del_groups,
@@ -3488,11 +3538,13 @@ static errno_t sysdb_update_members_ex(struct sss_domain_info *domain,
         /* Add the user to all add_groups */
         for (i = 0; add_groups[i]; i++) {
             ret = sysdb_add_group_member(domain, add_groups[i],
-                                         member, type, is_dn);
+                                         member_internal_fqname,
+                                         type, is_dn);
             if (ret != EOK) {
                 DEBUG(SSSDBG_CRIT_FAILURE,
                       "Could not add member [%s] to group [%s]. "
-                          "Skipping.\n", member, add_groups[i]);
+                      "Skipping.\n", member_internal_fqname,
+                      add_groups[i]);
                 /* Continue on, we should try to finish the rest */
             }
         }
@@ -3502,11 +3554,13 @@ static errno_t sysdb_update_members_ex(struct sss_domain_info *domain,
         /* Remove the user from all del_groups */
         for (i = 0; del_groups[i]; i++) {
             ret = sysdb_remove_group_member(domain, del_groups[i],
-                                            member, type, is_dn);
+                                            member_internal_fqname,
+                                            type, is_dn);
             if (ret != EOK) {
                 DEBUG(SSSDBG_CRIT_FAILURE,
                       "Could not remove member [%s] from group [%s]. "
-                          "Skipping\n", member, del_groups[i]);
+                      "Skipping\n", member_internal_fqname,
+                      del_groups[i]);
                 /* Continue on, we should try to finish the rest */
             }
         }
@@ -3532,23 +3586,24 @@ done:
 }
 
 errno_t sysdb_update_members(struct sss_domain_info *domain,
-                             const char *member,
+                             const char *member_internal_fqname,
                              enum sysdb_member_type type,
                              const char *const *add_groups,
                              const char *const *del_groups)
 {
-    return sysdb_update_members_ex(domain, member, type,
+    return sysdb_update_members_ex(domain, member_internal_fqname, type,
                                    add_groups, del_groups, false);
 }
 
 errno_t sysdb_update_members_dn(struct sss_domain_info *member_domain,
-                                const char *member,
+                                const char *member_internal_fqname,
                                 enum sysdb_member_type type,
-                                const char *const *add_groups,
-                                const char *const *del_groups)
+                                const char *const *add_groups_dns,
+                                const char *const *del_groups_dns)
 {
-    return sysdb_update_members_ex(member_domain, member, type,
-                                   add_groups, del_groups, true);
+    return sysdb_update_members_ex(member_domain, member_internal_fqname,
+                                   type, add_groups_dns,
+                                   del_groups_dns, true);
 }
 
 errno_t sysdb_remove_attrs(struct sss_domain_info *domain,
@@ -3766,7 +3821,7 @@ errno_t sysdb_search_user_by_cert(TALLOC_CTX *mem_ctx,
 
 errno_t sysdb_get_sids_of_members(TALLOC_CTX *mem_ctx,
                                   struct sss_domain_info *dom,
-                                  const char *group_name,
+                                  const char *group_fqname,
                                   const char ***_sids,
                                   const char ***_dns,
                                   size_t *_n)
@@ -3785,7 +3840,7 @@ errno_t sysdb_get_sids_of_members(TALLOC_CTX *mem_ctx,
         return ENOMEM;
     }
 
-    ret = sysdb_search_group_by_name(tmp_ctx, dom, group_name, NULL, &msg);
+    ret = sysdb_search_group_by_name(tmp_ctx, dom, group_fqname, NULL, &msg);
     if (ret != EOK) {
         goto done;
     }

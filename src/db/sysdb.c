@@ -852,15 +852,17 @@ static char *build_dom_dn_str_escape(TALLOC_CTX *mem_ctx, const char *template,
 }
 
 char *sysdb_user_strdn(TALLOC_CTX *mem_ctx,
-                       const char *domain, const char *name)
+                       const char *domain, const char *internal_fqname)
 {
-    return build_dom_dn_str_escape(mem_ctx, SYSDB_TMPL_USER, domain, name);
+    return build_dom_dn_str_escape(mem_ctx, SYSDB_TMPL_USER, domain,
+                                   internal_fqname);
 }
 
 char *sysdb_group_strdn(TALLOC_CTX *mem_ctx,
-                        const char *domain, const char *name)
+                        const char *domain, const char *internal_fqname)
 {
-    return build_dom_dn_str_escape(mem_ctx, SYSDB_TMPL_GROUP, domain, name);
+    return build_dom_dn_str_escape(mem_ctx, SYSDB_TMPL_GROUP, domain,
+                                   internal_fqname);
 }
 
 /* TODO: make a more complete and precise mapping */

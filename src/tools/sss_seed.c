@@ -729,6 +729,19 @@ static int seed_cache_user(struct seed_ctx *sctx)
     bool in_transaction = false;
     int ret = EOK;
     errno_t sret;
+    char *name;
+    TALLOC_CTX *tmp_ctx;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    name = sss_ioname2internal(tmp_ctx, sctx->domain, sctx->uctx->name);
+    if (name == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
 
     ret = sysdb_transaction_start(sctx->sysdb);
     if (ret != EOK) {
@@ -777,6 +790,7 @@ done:
         }
     }
 
+    talloc_free(tmp_ctx);
     return ret;
 }
 

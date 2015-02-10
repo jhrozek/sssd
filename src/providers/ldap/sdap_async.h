@@ -305,6 +305,7 @@ errno_t
 sdap_save_all_names(const char *name,
                     struct sysdb_attrs *ldap_attrs,
                     struct sss_domain_info *dom,
+                    bool use_internal_fqname,
                     struct sysdb_attrs *attrs);
 
 struct tevent_req *

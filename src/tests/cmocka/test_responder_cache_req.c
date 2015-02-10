@@ -173,7 +173,7 @@ static void cache_req_group_by_id_test_done(struct tevent_req *req)
 
 static void prepare_concrete_user(TALLOC_CTX *mem_ctx,
                                   struct sss_domain_info *domain,
-                                  const char* user_name,
+                                  const char* user_shortname,
                                   int user_id,
                                   int group_id,
                                   uint64_t timeout,
@@ -181,6 +181,10 @@ static void prepare_concrete_user(TALLOC_CTX *mem_ctx,
 {
     struct sysdb_attrs *attrs;
     errno_t ret;
+    char *name;
+
+    name = sss_create_internal_fqname(mem_ctx, user_shortname, domain->name);
+    assert_non_null(name);
 
     attrs = sysdb_new_attrs(mem_ctx);
     assert_non_null(attrs);
@@ -188,7 +192,7 @@ static void prepare_concrete_user(TALLOC_CTX *mem_ctx,
     ret = sysdb_attrs_add_string(attrs, SYSDB_UPN, TEST_UPN);
     assert_int_equal(ret, EOK);
 
-    ret = sysdb_store_user(domain, user_name, "pwd",
+    ret = sysdb_store_user(domain, name, "pwd",
                            user_id, group_id, NULL, NULL, NULL,
                            "cn=test-user,dc=test", attrs, NULL,
                            timeout, transaction_time);
@@ -209,9 +213,12 @@ static void run_user_by_name(struct cache_req_test_ctx *test_ctx,
                              int cache_refresh_percent,
                              errno_t exp_ret)
 {
+    char *name;
+
+    name = sss_create_internal_fqname(test_ctx, TEST_USER_NAME, domain->name);
     run_cache_req(test_ctx, cache_req_user_by_name_send,
                   cache_req_user_by_name_test_done, domain,
-                  cache_refresh_percent, TEST_USER_NAME, exp_ret);
+                  cache_refresh_percent, name, exp_ret);
 }
 
 static void run_user_by_upn(struct cache_req_test_ctx *test_ctx,
@@ -270,8 +277,12 @@ static void prepare_group(TALLOC_CTX *mem_ctx,
                          time_t transaction_time)
 {
     errno_t ret;
+    char *name;
 
-    ret = sysdb_store_group(domain, TEST_GROUP_NAME, TEST_GROUP_ID, NULL,
+    name = sss_create_internal_fqname(mem_ctx, TEST_GROUP_NAME, domain->name);
+    assert_non_null(name);
+
+    ret = sysdb_store_group(domain, name, TEST_GROUP_ID, NULL,
                             timeout, transaction_time);
     assert_int_equal(ret, EOK);
 }
@@ -281,9 +292,13 @@ static void run_group_by_name(struct cache_req_test_ctx *test_ctx,
                               int cache_refresh_percent,
                               errno_t exp_ret)
 {
+    char *name;
+
+    name = sss_create_internal_fqname(test_ctx, TEST_GROUP_NAME,
+                                      domain->name);
     run_cache_req(test_ctx, cache_req_group_by_name_send,
                   cache_req_group_by_name_test_done, domain,
-                  cache_refresh_percent, TEST_GROUP_NAME, exp_ret);
+                  cache_refresh_percent, name, exp_ret);
 }
 
 static void run_group_by_id(struct cache_req_test_ctx *test_ctx,
@@ -469,7 +484,8 @@ void test_user_by_name_multiple_domains_parse(void **state)
     struct sss_domain_info *domain = NULL;
     TALLOC_CTX *req_mem_ctx = NULL;
     struct tevent_req *req = NULL;
-    const char *name = TEST_USER_NAME;
+    char *name_a;
+    char *name_d;
     const char *fqn = NULL;
     errno_t ret;
 
@@ -480,7 +496,11 @@ void test_user_by_name_multiple_domains_parse(void **state)
                                  "responder_cache_req_test_a", true);
     assert_non_null(domain);
 
-    ret = sysdb_store_user(domain, name, "pwd", 2000, 1000,
+    name_a = sss_create_internal_fqname(test_ctx, TEST_USER_NAME,
+                                        domain->name);
+    assert_non_null(name_a);
+
+    ret = sysdb_store_user(domain, name_a, "pwd", 1000, 1000,
                            NULL, NULL, NULL, "cn=test-user,dc=test", NULL,
                            NULL, 1000, time(NULL));
     assert_int_equal(ret, EOK);
@@ -494,12 +514,12 @@ void test_user_by_name_multiple_domains_parse(void **state)
     prepare_user(test_ctx, domain, 1000, time(NULL));
 
     /* Append domain name to the username. */
-    fqn = talloc_asprintf(test_ctx, "%s@%s", name,
+    fqn = talloc_asprintf(test_ctx, "%s@%s", TEST_USER_NAME,
                           "responder_cache_req_test_d");
     assert_non_null(fqn);
 
     /* Mock values. */
-    mock_parse_inp(name, "responder_cache_req_test_d", ERR_OK);
+    mock_parse_inp(TEST_USER_NAME, "responder_cache_req_test_d", ERR_OK);
 
 
     /* Test. */
@@ -520,7 +540,7 @@ void test_user_by_name_multiple_domains_parse(void **state)
     check_user(test_ctx, domain);
 
     assert_non_null(test_ctx->name);
-    assert_string_equal(name, test_ctx->name);
+    assert_string_equal(name_d, test_ctx->name);
 }
 
 void test_user_by_name_cache_valid(void **state)
@@ -540,7 +560,6 @@ void test_user_by_name_cache_valid(void **state)
 void test_user_by_name_cache_expired(void **state)
 {
     struct cache_req_test_ctx *test_ctx = NULL;
-
     test_ctx = talloc_get_type_abort(*state, struct cache_req_test_ctx);
 
     /* Setup user. */
@@ -970,7 +989,8 @@ void test_group_by_name_multiple_domains_parse(void **state)
     struct sss_domain_info *domain = NULL;
     TALLOC_CTX *req_mem_ctx = NULL;
     struct tevent_req *req = NULL;
-    const char *name = TEST_GROUP_NAME;
+    const char *shortname = TEST_GROUP_NAME;
+    char *name_a;
     const char *fqn = NULL;
     errno_t ret;
 
@@ -980,8 +1000,10 @@ void test_group_by_name_multiple_domains_parse(void **state)
     domain = find_domain_by_name(test_ctx->tctx->dom,
                                  "responder_cache_req_test_a", true);
     assert_non_null(domain);
+    name_a = sss_create_internal_fqname(test_ctx, shortname, domain->name);
+    assert_int_equal(ret, EOK);
 
-    ret = sysdb_store_group(domain, name, 2000, NULL,
+    ret = sysdb_store_group(domain, name_a, 2000, NULL,
                             1000, time(NULL));
     assert_int_equal(ret, EOK);
 
@@ -994,7 +1016,7 @@ void test_group_by_name_multiple_domains_parse(void **state)
     prepare_group(test_ctx, domain, 1000, time(NULL));
 
     /* Append domain name to the username. */
-    fqn = talloc_asprintf(test_ctx, "%s@%s", name,
+    fqn = talloc_asprintf(test_ctx, "%s@%s", shortname,
                           "responder_cache_req_test_d");
     assert_non_null(fqn);
 
@@ -1002,7 +1024,7 @@ void test_group_by_name_multiple_domains_parse(void **state)
     req_mem_ctx = talloc_new(global_talloc_context);
     check_leaks_push(req_mem_ctx);
 
-    mock_parse_inp(name, "responder_cache_req_test_d", ERR_OK);
+    mock_parse_inp(TEST_USER_NAME, "responder_cache_req_test_d", ERR_OK);
 
     req = cache_req_group_by_name_send(req_mem_ctx, test_ctx->tctx->ev,
                                        test_ctx->rctx, test_ctx->ncache, 10, 0,
@@ -1018,7 +1040,7 @@ void test_group_by_name_multiple_domains_parse(void **state)
     check_group(test_ctx, domain);
 
     assert_non_null(test_ctx->name);
-    assert_string_equal(name, test_ctx->name);
+    assert_string_equal(TEST_USER_NAME, test_ctx->name);
 }
 
 void test_group_by_name_cache_valid(void **state)
@@ -1402,7 +1424,8 @@ void test_users_by_filter_filter_old(void **state)
 
     /* This user was updated in distant past, so it wont't be reported by
      * the filter search */
-    ret = sysdb_store_user(test_ctx->tctx->dom, TEST_USER_NAME2, "pwd", 1001, 1001,
+    ret = sysdb_store_user(test_ctx->tctx->dom,
+                           TEST_USER_NAME2"@"TEST_DOM_NAME, "pwd", 1001, 1001,
                            NULL, NULL, NULL, "cn="TEST_USER_NAME2",dc=test", NULL,
                            NULL, 1000, 1);
     assert_int_equal(ret, EOK);
