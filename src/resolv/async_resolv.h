@@ -41,6 +41,12 @@
 #define RESOLV_DEFAULT_TTL 7200
 #endif  /* RESOLV_DEFAULT_TTL */
 
+#ifndef RESOLV_DEFAULT_SRV_TTL
+#define RESOLV_DEFAULT_SRV_TTL 14400
+#endif  /* RESOLV_DEFAULT_SRV_TTL */
+
+#include "util/util.h"
+
 /*
  * An opaque structure which holds context for a module using the async
  * resolver. Is should be used as a "local-global" variable - in sssd,

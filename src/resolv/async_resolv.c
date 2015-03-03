@@ -1590,8 +1590,10 @@ resolv_getsrv_done(void *arg, int status, int timeouts, unsigned char *abuf, int
     state->reply_list = reply_list;
     ok = resolv_get_ttl(abuf, alen, &state->ttl);
     if (ok == false) {
-        state->ttl = RESOLV_DEFAULT_TTL;
+        DEBUG(4, ("Could not read TTL, using the default..\n"));
+        state->ttl = RESOLV_DEFAULT_SRV_TTL;
     }
+    DEBUG(7, ("Using TTL [%lu]\n", (unsigned long) state->ttl));
 
     tevent_req_done(req);
     return;
