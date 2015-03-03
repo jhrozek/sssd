@@ -99,7 +99,7 @@ server_tests_CFLAGS = \
     $(LIBCAPNG_CFLAGS) \
     -DTEST_DB_PATH=\"server_tests\" \
     -DTEST_PID_PATH=\"server_tests\" \
-    -DUNIT_TESTING \
+    -DSSS_UNIT_TESTING \
     $(NULL)
 server_tests_LDADD = \
     $(CMOCKA_LIBS) \

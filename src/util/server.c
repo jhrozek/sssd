@@ -419,7 +419,7 @@ errno_t server_common_rotate_logs(struct confdb_ctx *confdb,
 
 static const char *get_db_path(void)
 {
-#ifdef UNIT_TESTING
+#ifdef SSS_UNIT_TESTING
 #ifdef TEST_DB_PATH
     return TEST_DB_PATH;
 #else
@@ -427,12 +427,12 @@ static const char *get_db_path(void)
 #endif /* TEST_DB_PATH */
 #else
     return DB_PATH;
-#endif /* UNIT_TESTING */
+#endif /* SSS_UNIT_TESTING */
 }
 
 static const char *get_pid_path(void)
 {
-#ifdef UNIT_TESTING
+#ifdef SSS_UNIT_TESTING
 #ifdef TEST_PID_PATH
     return TEST_PID_PATH;
 #else

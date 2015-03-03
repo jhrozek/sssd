@@ -205,6 +205,7 @@ if HAVE_CMOCKA
         nestedgroups-tests \
         test_sss_idmap \
         test_ipa_idmap \
+        test_ipa_selinux \
         test_utils \
         ad_common_tests \
         dp_opt_tests \
@@ -1305,7 +1306,7 @@ libdlopen_test_providers_la_SOURCES = \
 libdlopen_test_providers_la_CFLAGS = \
     $(AM_CFLAGS) \
     $(CHECK_CFLAGS) \
-    -DUNIT_TESTING
+    -DSSS_UNIT_TESTING
 libdlopen_test_providers_la_LIBADD = \
     $(PAM_LIBS) \
     $(SSSD_LIBS) \
@@ -1553,7 +1554,7 @@ simple_access_tests_SOURCES = \
 simple_access_tests_CFLAGS = \
     $(AM_CFLAGS) \
     $(CHECK_CFLAGS) \
-    -DUNIT_TESTING
+    -DSSS_UNIT_TESTING
 simple_access_tests_LDADD = \
     $(LIBADD_DL) \
     $(SSSD_LIBS) \
@@ -1949,6 +1950,25 @@ test_ipa_idmap_LDADD = \
     $(SSSD_INTERNAL_LTLIBS) \
     libsss_test_common.la
 
+test_ipa_selinux_SOURCES = \
+    src/tests/cmocka/test_ipa_selinux.c \
+    src/providers/ipa/ipa_selinux.c \
+    src/providers/ipa/ipa_hosts.c \
+    src/providers/ipa/ipa_access.c \
+    src/providers/data_provider_be.c \
+    src/providers/data_provider_opts.c \
+    src/providers/ldap/sdap_id_op.c \
+    $(NULL)
+test_ipa_selinux_CFLAGS = \
+    $(AM_CFLAGS) \
+    -DSSS_UNIT_TESTING \
+    $(NULL)
+test_ipa_selinux_LDADD = \
+    $(CMOCKA_LIBS) \
+    $(POPT_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    libsss_test_common.la
+
 test_utils_SOURCES = \
     src/tests/cmocka/test_utils.c \
     src/tests/cmocka/test_sss_ssh.c \
@@ -1967,7 +1987,7 @@ test_search_bases_SOURCES = \
     src/tests/cmocka/test_search_bases.c
 test_search_bases_CFLAGS = \
     $(AM_CFLAGS) \
-    -DUNIT_TESTING
+    -DSSS_UNIT_TESTING
 test_search_bases_LDADD = \
     $(PAM_LIBS) \
     $(CMOCKA_LIBS) \
@@ -2029,7 +2049,7 @@ ad_access_filter_tests_SOURCES = \
     src/tests/cmocka/test_ad_access_filter.c
 ad_access_filter_tests_CFLAGS = \
     $(AM_CFLAGS) \
-    -DUNIT_TESTING
+    -DSSS_UNIT_TESTING
 ad_access_filter_tests_LDADD = \
     $(PAM_LIBS) \
     $(CMOCKA_LIBS) \
@@ -2050,7 +2070,7 @@ ad_gpo_tests_SOURCES = \
 ad_gpo_tests_CFLAGS = \
     $(AM_CFLAGS) \
     $(NDR_NBT_CFLAGS) \
-    -DUNIT_TESTING
+    -DSSS_UNIT_TESTING
 ad_gpo_tests_LDADD = \
     $(PAM_LIBS) \
     $(CMOCKA_LIBS) \
@@ -2069,7 +2089,7 @@ ad_common_tests_SOURCES = \
     src/tests/cmocka/test_ad_common.c
 ad_common_tests_CFLAGS = \
     $(AM_CFLAGS) \
-    -DUNIT_TESTING
+    -DSSS_UNIT_TESTING
 ad_common_tests_LDFLAGS = \
     -Wl,-wrap,sdap_set_sasl_options
 ad_common_tests_LDADD = \

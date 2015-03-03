@@ -2805,7 +2805,7 @@ fail:
     return ret;
 }
 
-#ifndef UNIT_TESTING
+#ifndef SSS_UNIT_TESTING
 int main(int argc, const char *argv[])
 {
     int opt;
