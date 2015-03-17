@@ -1027,7 +1027,8 @@ static void ipa_s2n_get_fqlist_next(struct tevent_req *subreq)
         goto fail;
     }
 
-    if (strcmp(state->ipa_ctx->view_name, SYSDB_DEFAULT_VIEW_NAME) == 0) {
+    if (state->ipa_ctx->view_name == NULL ||
+            strcmp(state->ipa_ctx->view_name, SYSDB_DEFAULT_VIEW_NAME) == 0) {
         ret = ipa_s2n_get_fqlist_save_step(req);
         if (ret == EOK) {
             tevent_req_done(req);
@@ -1602,6 +1603,7 @@ static void ipa_s2n_get_user_done(struct tevent_req *subreq)
     }
 
     if (ret == ENOENT
+            || state->ipa_ctx->view_name == NULL
             || strcmp(state->ipa_ctx->view_name,
                       SYSDB_DEFAULT_VIEW_NAME) == 0) {
         ret = ipa_s2n_save_objects(state->dom, state->req_input, state->attrs,
@@ -2211,6 +2213,7 @@ static void ipa_s2n_get_fqlist_done(struct tevent_req  *subreq)
     }
 
     if (state->override_attrs == NULL
+            && state->ipa_ctx->view_name != NULL
             && strcmp(state->ipa_ctx->view_name,
                       SYSDB_DEFAULT_VIEW_NAME) != 0) {
         subreq = ipa_get_ad_override_send(state, state->ev,
