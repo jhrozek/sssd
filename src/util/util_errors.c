@@ -69,6 +69,7 @@ struct err_string error_to_str[] = {
     { "Error setting SELinux user context" }, /* ERR_SELINUX_CONTEXT */
     { "Username format not allowed by re_expression" }, /* ERR_REGEX_NOMATCH */
     { "Time specification not supported" }, /* ERR_TIMESPEC_NOT_SUPPORTED */
+    { "Failed to resolve one of user groups." }, /* ERR_SIMPLE_GROUPS_MISSING */
     { "ERR_LAST" } /* ERR_LAST */
 };
 
