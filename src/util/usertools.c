@@ -716,3 +716,55 @@ errno_t sss_user_by_name_or_uid(const char *input, uid_t *_uid, gid_t *_gid)
     }
     return EOK;
 }
+
+/* Accepts fqname in the format shortname@domname only. */
+errno_t sss_parse_internal_fqname(TALLOC_CTX *mem_ctx,
+                                  const char *fqname,
+                                  char **_shortname,
+                                  char **_dom_name)
+{
+    errno_t ret;
+    char *separator;
+    char *shortname = NULL;
+    char *dom_name = NULL;
+    size_t shortname_len;
+    TALLOC_CTX *tmp_ctx;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    separator = strrchr(fqname, '@');
+    if (separator == NULL) {
+        /*The name does not contain domain component. */
+        ret = EINVAL;
+        goto done;
+    }
+
+    dom_name = talloc_strdup(tmp_ctx, separator + 1);
+    if (dom_name == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    shortname_len = strlen(fqname) - strlen(separator);
+    shortname = talloc_strndup(tmp_ctx, fqname, shortname_len);
+    if (shortname == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    if (_dom_name != NULL) {
+        *_dom_name = talloc_steal(mem_ctx, dom_name);
+    }
+
+    if (_shortname != NULL) {
+        *_shortname = talloc_steal(mem_ctx, shortname);
+    }
+
+    ret = EOK;
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
