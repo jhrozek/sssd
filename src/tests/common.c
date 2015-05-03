@@ -30,8 +30,14 @@ void
 tests_set_cwd(void)
 {
     int ret;
+    const char *td;
 
-    ret = chdir(TEST_DIR);
+    td = getenv("SSS_TEST_DIR");
+    if (td == NULL) {
+        td = TEST_DIR;
+    }
+
+    ret = chdir(td);
     if (ret == -1) {
         fprintf(stderr, "Could not chdir to [%s].\n"
                 "Attempting to continue with current dir\n", TEST_DIR);
