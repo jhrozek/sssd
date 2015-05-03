@@ -35,6 +35,8 @@ errno_t sysdb_ldb_connect(TALLOC_CTX *mem_ctx, const char *filename,
     int ret;
     struct ldb_context *ldb;
     const char *mod_path;
+    const char *db;
+    const char *dbpath;
 
     if (_ldb == NULL) {
         return EINVAL;
@@ -56,7 +58,12 @@ errno_t sysdb_ldb_connect(TALLOC_CTX *mem_ctx, const char *filename,
         ldb_set_modules_dir(ldb, mod_path);
     }
 
-    ret = ldb_connect(ldb, filename, 0, NULL);
+    db = getenv("LDB_BACKEND");
+    if (db == NULL) db = "tdb";
+
+    dbpath = talloc_asprintf(ldb, "%s://%s", db, filename);
+
+    ret = ldb_connect(ldb, dbpath, 0, NULL);
     if (ret != LDB_SUCCESS) {
         return EIO;
     }
