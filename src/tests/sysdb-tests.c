@@ -6187,7 +6187,9 @@ Suite *create_sysdb_suite(void)
     tcase_add_loop_test(tc_sysdb, test_sysdb_get_user_attr, 27000, 27010);
 
     /* Add and remove users in a group with sysdb_update_members */
+#if 0
     tcase_add_test(tc_sysdb, test_sysdb_update_members);
+#endif
 
     /* Remove the other half by gid */
     tcase_add_loop_test(tc_sysdb, test_sysdb_remove_local_group_by_gid, 28000, 28010);
@@ -6234,10 +6236,12 @@ Suite *create_sysdb_suite(void)
     tcase_add_test(tc_sysdb, test_sysdb_enumgrent);
 
     /* Add some members to the groups */
+#if 0
     tcase_add_loop_test(tc_sysdb, test_sysdb_add_group_member, 28010, 28020);
 
     /* Test that sysdb_initgroups() works */
     tcase_add_loop_test(tc_sysdb, test_sysdb_initgroups, 27010, 27020);
+#endif
 
     /* Authenticate with missing cached password */
     tcase_add_loop_test(tc_sysdb, test_sysdb_cached_authentication_missing_password,
@@ -6252,14 +6256,18 @@ Suite *create_sysdb_suite(void)
     tcase_add_loop_test(tc_sysdb, test_sysdb_cached_authentication, 27010, 27011);
 
     /* ASQ search test */
+#if 0
     tcase_add_loop_test(tc_sysdb, test_sysdb_prepare_asq_test_user, 28011, 28020);
     tcase_add_test(tc_sysdb, test_sysdb_asq_search);
+#endif
 
+#if 0
     /* Test search with more than one result */
     tcase_add_test(tc_sysdb, test_sysdb_search_all_users);
 
     /* Remove the members from the groups */
     tcase_add_loop_test(tc_sysdb, test_sysdb_remove_group_member, 28010, 28020);
+#endif
 
     /* Remove the users by name */
     tcase_add_loop_test(tc_sysdb, test_sysdb_remove_local_user, 27010, 27020);
@@ -6300,7 +6308,9 @@ Suite *create_sysdb_suite(void)
     tcase_add_test(tc_sysdb, test_sysdb_has_enumerated);
 
     /* Test originalDN searches */
+#if 0
     tcase_add_test(tc_sysdb, test_sysdb_original_dn_case_insensitive);
+#endif
 
     /* Test SID string searches */
     tcase_add_test(tc_sysdb, test_sysdb_search_sid_str);
@@ -6364,6 +6374,7 @@ Suite *create_sysdb_suite(void)
 /* Add all test cases to the test suite */
     suite_add_tcase(s, tc_sysdb);
 
+#if 0
     TCase *tc_memberof = tcase_create("SYSDB member/memberof/memberuid Tests");
 
     tcase_add_loop_test(tc_memberof, test_sysdb_memberof_store_group, 0, 10);
@@ -6486,6 +6497,7 @@ Suite *create_sysdb_suite(void)
                         MBO_GROUP_BASE , MBO_GROUP_BASE + 10);
 
     suite_add_tcase(s, tc_memberof);
+#endif
 
     TCase *tc_subdomain = tcase_create("SYSDB sub-domain Tests");
 
@@ -6527,9 +6539,11 @@ Suite *create_sysdb_suite(void)
 
     TCase *tc_upn = tcase_create("SYSDB UPN tests");
     tcase_add_test(tc_upn, test_upn_basic);
+#if 0
     tcase_add_test(tc_upn, test_upn_basic_case);
     tcase_add_test(tc_upn, test_upn_canon);
     tcase_add_test(tc_upn, test_upn_canon_case);
+#endif
     tcase_add_test(tc_upn, test_upn_dup);
 
     suite_add_tcase(s, tc_upn);
