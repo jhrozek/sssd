@@ -31,7 +31,7 @@ tests_set_cwd(void)
 {
     int ret;
 
-    ret = chdir(TEST_DIR);
+    ret = chdir("/var/tmp/sssd");
     if (ret == -1) {
         fprintf(stderr, "Could not chdir to [%s].\n"
                 "Attempting to continue with current dir\n", TEST_DIR);
