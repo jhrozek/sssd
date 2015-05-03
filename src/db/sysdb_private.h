@@ -52,24 +52,6 @@
      "originalDN: CASE_INSENSITIVE\n" \
      "objectclass: CASE_INSENSITIVE\n" \
      "\n" \
-     "dn: @INDEXLIST\n" \
-     "@IDXATTR: cn\n" \
-     "@IDXATTR: objectclass\n" \
-     "@IDXATTR: member\n" \
-     "@IDXATTR: memberof\n" \
-     "@IDXATTR: name\n" \
-     "@IDXATTR: uidNumber\n" \
-     "@IDXATTR: gidNumber\n" \
-     "@IDXATTR: lastUpdate\n" \
-     "@IDXATTR: dataExpireTimestamp\n" \
-     "@IDXATTR: originalDN\n" \
-     "@IDXATTR: nameAlias\n" \
-     "@IDXATTR: servicePort\n" \
-     "@IDXATTR: serviceProtocol\n" \
-     "@IDXATTR: sudoUser\n" \
-     "@IDXATTR: sshKnownHostsExpire\n" \
-     "@IDXONE: 1\n" \
-     "\n" \
      "dn: @MODULES\n" \
      "@LIST: asq,memberof\n" \
      "\n" \
