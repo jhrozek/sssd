@@ -27,7 +27,7 @@
 #define DB_GHOST "ghost"
 #define DB_MEMBEROF "memberof"
 #define DB_MEMBERUID "memberuid"
-#define DB_NAME "name"
+#define DB_FQNAME "fqname"
 #define DB_USER_CLASS "user"
 #define DB_GROUP_CLASS "group"
 #define DB_CACHE_EXPIRE "dataExpireTimestamp"
@@ -231,7 +231,7 @@ static int mbof_append_muop(TALLOC_CTX *memctx,
                             int *_num_muops,
                             int flags,
                             struct ldb_dn *parent,
-                            const char *name,
+                            const char *element_value,
                             const char *element_name)
 {
     struct mbof_memberuid_op *muops = *_muops;
@@ -278,7 +278,7 @@ static int mbof_append_muop(TALLOC_CTX *memctx,
     }
 
     for (i = 0; i < op->el->num_values; i++) {
-        if (strcmp((char *)op->el->values[i].data, name) == 0) {
+        if (strcmp((char *)op->el->values[i].data, element_value) == 0) {
             /* we already have this value, get out*/
             return LDB_SUCCESS;
         }
@@ -289,11 +289,12 @@ static int mbof_append_muop(TALLOC_CTX *memctx,
     if (!val) {
         return LDB_ERR_OPERATIONS_ERROR;
     }
-    val[op->el->num_values].data = (uint8_t *)talloc_strdup(val, name);
+    val[op->el->num_values].data = (uint8_t *)talloc_strdup(val,
+                                                            element_value);
     if (!val[op->el->num_values].data) {
         return LDB_ERR_OPERATIONS_ERROR;
     }
-    val[op->el->num_values].length = strlen(name);
+    val[op->el->num_values].length = strlen(element_value);
 
     op->el->values = val;
     op->el->num_values++;
@@ -640,7 +641,8 @@ static int mbof_add_callback(struct ldb_request *req,
 
 static int mbof_next_add(struct mbof_add_operation *addop)
 {
-    static const char *attrs[] = { DB_OC, DB_NAME,
+    static const char *attrs[] = { DB_OC,
+                                   DB_FQNAME,
                                    DB_MEMBER, DB_GHOST,
                                    DB_MEMBEROF, NULL };
     struct ldb_context *ldb;
@@ -780,7 +782,7 @@ static int mbof_add_operation(struct mbof_add_operation *addop)
     struct mbof_dn_array *parents;
     int i, j, ret;
     const char *val;
-    const char *name;
+    const char *fqname;
 
     add_ctx = addop->add_ctx;
     ctx = add_ctx->ctx;
@@ -887,9 +889,9 @@ static int mbof_add_operation(struct mbof_add_operation *addop)
     ret = entry_is_user_object(addop->entry);
     switch (ret) {
     case LDB_SUCCESS:
-        /* it's a user object  */
-        name = ldb_msg_find_attr_as_string(addop->entry, DB_NAME, NULL);
-        if (!name) {
+        /* it's a user object. Use fully qualified name for memberUid value  */
+        fqname = ldb_msg_find_attr_as_string(addop->entry, DB_FQNAME, NULL);
+        if (!fqname) {
             return LDB_ERR_OPERATIONS_ERROR;
         }
 
@@ -897,7 +899,8 @@ static int mbof_add_operation(struct mbof_add_operation *addop)
             ret = mbof_append_muop(add_ctx, &add_ctx->muops,
                                    &add_ctx->num_muops,
                                    LDB_FLAG_MOD_ADD,
-                                   parents->dns[i], name,
+                                   parents->dns[i],
+                                   fqname,
                                    DB_MEMBERUID);
             if (ret != LDB_SUCCESS) {
                 return ret;
@@ -1315,7 +1318,8 @@ static void free_delop_contents(struct mbof_del_operation *delop);
 
 static int memberof_del(struct ldb_module *module, struct ldb_request *req)
 {
-    static const char *attrs[] = { DB_OC, DB_NAME,
+    static const char *attrs[] = { DB_OC,
+                                   DB_FQNAME,
                                    DB_MEMBER, DB_MEMBEROF,
                                    DB_GHOST, NULL };
     struct ldb_context *ldb = ldb_module_get_ctx(module);
@@ -1468,7 +1472,7 @@ static int mbof_del_search_callback(struct ldb_request *req,
         }
 
         /* now perform the requested delete, before proceeding further */
-        ret =  mbof_orig_del(del_ctx);
+        ret = mbof_orig_del(del_ctx);
         if (ret != LDB_SUCCESS) {
             talloc_zfree(ares);
             return ldb_module_done(ctx->req, NULL, NULL, ret);
@@ -1768,8 +1772,7 @@ static int mbof_del_execute_op(struct mbof_del_operation *delop)
     char *expression;
     const char *dn;
     char *clean_dn;
-    static const char *attrs[] = { DB_OC, DB_NAME,
-                                   DB_MEMBER, DB_MEMBEROF, NULL };
+    static const char *attrs[] = { DB_OC, DB_MEMBER, DB_MEMBEROF, NULL };
     int ret;
 
     del_ctx = delop->del_ctx;
@@ -2108,7 +2111,7 @@ static int mbof_del_mod_entry(struct mbof_del_operation *delop)
     struct ldb_message *msg;
     struct ldb_message_element *el;
     struct ldb_dn **diff = NULL;
-    const char *name;
+    const char *fqname;
     const char *val;
     int i, j, k;
     bool is_user;
@@ -2227,8 +2230,8 @@ static int mbof_del_mod_entry(struct mbof_del_operation *delop)
 
     if (is_user && diff[0]) {
         /* file memberuid removal operations */
-        name = ldb_msg_find_attr_as_string(delop->entry, DB_NAME, NULL);
-        if (!name) {
+        fqname = ldb_msg_find_attr_as_string(delop->entry, DB_FQNAME, NULL);
+        if (!fqname) {
             return LDB_ERR_OPERATIONS_ERROR;
         }
 
@@ -2236,7 +2239,7 @@ static int mbof_del_mod_entry(struct mbof_del_operation *delop)
             ret = mbof_append_muop(del_ctx, &del_ctx->muops,
                                    &del_ctx->num_muops,
                                    LDB_FLAG_MOD_DELETE,
-                                   diff[i], name,
+                                   diff[i], fqname,
                                    DB_MEMBERUID);
             if (ret != LDB_SUCCESS) {
                 return ret;
@@ -2436,7 +2439,7 @@ static int mbof_del_fill_muop(struct mbof_del_ctx *del_ctx,
                               struct ldb_message *entry)
 {
     struct ldb_message_element *el;
-    char *name;
+    char *fqname;
     int ret;
     int i;
 
@@ -2461,9 +2464,9 @@ static int mbof_del_fill_muop(struct mbof_del_ctx *del_ctx,
         return ret;
     }
 
-    name = talloc_strdup(del_ctx,
-                         ldb_msg_find_attr_as_string(entry, DB_NAME, NULL));
-    if (!name) {
+    fqname = talloc_strdup(del_ctx,
+                         ldb_msg_find_attr_as_string(entry, DB_FQNAME, NULL));
+    if (!fqname) {
         return LDB_ERR_OPERATIONS_ERROR;
     }
 
@@ -2483,7 +2486,7 @@ static int mbof_del_fill_muop(struct mbof_del_ctx *del_ctx,
         ret = mbof_append_muop(del_ctx, &del_ctx->muops,
                                &del_ctx->num_muops,
                                LDB_FLAG_MOD_DELETE,
-                               valdn, name,
+                               valdn, fqname,
                                DB_MEMBERUID);
         if (ret != LDB_SUCCESS) {
             return ret;
@@ -3848,7 +3851,7 @@ struct mbof_member {
     struct mbof_member *next;
 
     struct ldb_dn *dn;
-    const char *name;
+    const char *fqname;
     bool orig_has_memberof;
     bool orig_has_memberuid;
     struct ldb_message_element *orig_members;
@@ -3920,7 +3923,7 @@ static int memberof_recompute_task(struct ldb_module *module,
                                    struct ldb_request *req)
 {
     struct ldb_context *ldb = ldb_module_get_ctx(module);
-    static const char *attrs[] = { DB_NAME, DB_MEMBEROF, NULL };
+    static const char *attrs[] = { DB_FQNAME, DB_MEMBEROF, NULL };
     static const char *filter = "(objectclass=user)";
     struct mbof_rcmp_context *ctx;
     struct ldb_request *src_req;
@@ -3957,7 +3960,7 @@ static int mbof_rcmp_usr_callback(struct ldb_request *req,
     struct mbof_member *usr;
     hash_value_t value;
     hash_key_t key;
-    const char *name;
+    const char *fqname;
     int ret;
 
     ctx = talloc_get_type(req->context, struct mbof_rcmp_context);
@@ -3984,9 +3987,9 @@ static int mbof_rcmp_usr_callback(struct ldb_request *req,
 
         usr->status = MBOF_USER;
         usr->dn = talloc_steal(usr, ares->message->dn);
-        name = ldb_msg_find_attr_as_string(ares->message, DB_NAME, NULL);
-        if (name) {
-            usr->name = talloc_steal(usr, name);
+        fqname = ldb_msg_find_attr_as_string(ares->message, DB_FQNAME, NULL);
+        if (fqname) {
+            usr->fqname = talloc_steal(usr, fqname);
         }
 
         if (ldb_msg_find_element(ares->message, DB_MEMBEROF)) {
@@ -4027,7 +4030,7 @@ static int mbof_rcmp_search_groups(struct mbof_rcmp_context *ctx)
 {
     struct ldb_context *ldb = ldb_module_get_ctx(ctx->module);
     static const char *attrs[] = { DB_MEMBEROF, DB_MEMBERUID,
-                                   DB_NAME, DB_MEMBER, NULL };
+                                   DB_MEMBER, NULL };
     static const char *filter = "(objectclass=group)";
     struct ldb_request *req;
     int ret;
@@ -4060,7 +4063,7 @@ static int mbof_rcmp_grp_callback(struct ldb_request *req,
     struct mbof_member *grp;
     hash_value_t value;
     hash_key_t key;
-    const char *name;
+    const char *fqname;
     int i, j;
     int ret;
 
@@ -4089,10 +4092,11 @@ static int mbof_rcmp_grp_callback(struct ldb_request *req,
 
         grp->status = MBOF_GROUP_TO_DO;
         grp->dn = talloc_steal(grp, ares->message->dn);
-        grp->name = ldb_msg_find_attr_as_string(ares->message, DB_NAME, NULL);
-        name = ldb_msg_find_attr_as_string(ares->message, DB_NAME, NULL);
-        if (name) {
-            grp->name = talloc_steal(grp, name);
+        grp->fqname = ldb_msg_find_attr_as_string(ares->message,
+                                                  DB_FQNAME, NULL);
+        fqname = ldb_msg_find_attr_as_string(ares->message, DB_FQNAME, NULL);
+        if (fqname) {
+            grp->fqname = talloc_steal(grp, fqname);
         }
 
         if (ldb_msg_find_element(ares->message, DB_MEMBEROF)) {
@@ -4277,7 +4281,7 @@ static int mbof_member_update(struct mbof_rcmp_context *ctx,
 
         if (mem->status == MBOF_USER) {
             /* add corresponding memuid to the group */
-            ret = mbof_add_memuid(parent, mem->name);
+            ret = mbof_add_memuid(parent, mem->fqname);
             if (ret != LDB_SUCCESS) {
                 return ret;
             }
@@ -4344,7 +4348,7 @@ static bool mbof_member_iter(hash_entry_t *item, void *user_data)
         if (mem->status == MBOF_USER) {
             /* add corresponding memuid to the group */
             parent = (struct mbof_member *)item->value.ptr;
-            ret = mbof_add_memuid(parent, mem->name);
+            ret = mbof_add_memuid(parent, mem->fqname);
             if (ret != LDB_SUCCESS) {
                 mem->status = MBOF_ITER_ERROR;
                 return false;
