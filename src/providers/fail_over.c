@@ -266,7 +266,7 @@ get_srv_data_status(struct srv_data *data)
     timeout = data->meta->service->ctx->opts->srv_retry_timeout;
     gettimeofday(&tv, NULL);
 
-    if (timeout && STATUS_DIFF(data, tv) > timeout) {
+    if (STATUS_DIFF(data, tv) > timeout) {
         switch(data->srv_lookup_status) {
         case SRV_EXPIRED:
         case SRV_NEUTRAL:
