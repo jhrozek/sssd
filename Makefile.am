@@ -217,6 +217,7 @@ if HAVE_CMOCKA
         test_copy_ccache \
         test_copy_keytab \
         test_child_common \
+        test_krb5_wait_queue \
         $(NULL)
 
 if BUILD_IFP
@@ -2144,6 +2145,21 @@ test_child_common_LDADD = \
     libsss_test_common.la \
     $(NULL)
 
+test_krb5_wait_queue_SOURCES = \
+    src/tests/cmocka/common_mock_be.c \
+    src/tests/cmocka/test_krb5_wait_queue.c \
+    src/providers/krb5/krb5_wait_queue.c \
+    $(NULL)
+test_krb5_wait_queue_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(NULL)
+test_krb5_wait_queue_LDADD = \
+    $(CMOCKA_LIBS) \
+    $(POPT_LIBS) \
+    $(DHASH_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    libsss_test_common.la \
+    $(NULL)
 endif # HAVE_CMOCKA
 
 noinst_PROGRAMS = pam_test_client
