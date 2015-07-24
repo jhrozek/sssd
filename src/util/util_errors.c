@@ -80,6 +80,7 @@ struct err_string error_to_str[] = {
     { "Trusted forest root unknown" }, /* ERR_TRUST_FOREST_UNKNOWN */
     { "p11_child failed" }, /* ERR_P11_CHILD */
     { "Subdomain is inactive" }, /* ERR_SUBDOM_INACTIVE */
+    { "Address family not supported" }, /* ERR_ADDR_FAMILY_NOT_SUPPORTED */
     { "ERR_LAST" } /* ERR_LAST */
 };
 

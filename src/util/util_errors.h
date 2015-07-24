@@ -102,6 +102,7 @@ enum sssd_errors {
     ERR_TRUST_FOREST_UNKNOWN,
     ERR_P11_CHILD,
     ERR_SUBDOM_INACTIVE,
+    ERR_ADDR_FAMILY_NOT_SUPPORTED,
     ERR_LAST            /* ALWAYS LAST */
 };
 
