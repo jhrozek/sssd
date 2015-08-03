@@ -3903,14 +3903,6 @@ void nss_update_initgr_memcache(struct nss_ctx *nctx,
                   ret, strerror(ret));
         }
 
-        ret = sss_mmap_cache_initgr_invalidate(nctx->initgr_mc_ctx,
-                                               &delete_name);
-        if (ret != EOK && ret != ENOENT) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Internal failure in memory cache code: %d [%s]\n",
-                  ret, strerror(ret));
-        }
-
         /* Also invalidate his groups */
         changed = true;
     } else {
@@ -3957,6 +3949,15 @@ void nss_update_initgr_memcache(struct nss_ctx *nctx,
                       "Internal failure in memory cache code: %d [%s]\n",
                        ret, strerror(ret));
             }
+        }
+
+        to_sized_string(&delete_name, name);
+        ret = sss_mmap_cache_initgr_invalidate(nctx->initgr_mc_ctx,
+                                               &delete_name);
+        if (ret != EOK && ret != ENOENT) {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "Internal failure in memory cache code: %d [%s]\n",
+                  ret, strerror(ret));
         }
     }
 
