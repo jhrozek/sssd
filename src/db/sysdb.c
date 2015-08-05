@@ -28,6 +28,7 @@
 #include <time.h>
 
 #define LDB_MODULES_PATH "LDB_MODULES_PATH"
+#define SSS_CACHE_NO_SYNC "SSS_CACHE_NO_SYNC"
 
 errno_t sysdb_ldb_connect(TALLOC_CTX *mem_ctx, const char *filename,
                           struct ldb_context **_ldb)
@@ -35,6 +36,8 @@ errno_t sysdb_ldb_connect(TALLOC_CTX *mem_ctx, const char *filename,
     int ret;
     struct ldb_context *ldb;
     const char *mod_path;
+    const char *no_sync;
+    int flags = 0;
 
     if (_ldb == NULL) {
         return EINVAL;
@@ -56,7 +59,13 @@ errno_t sysdb_ldb_connect(TALLOC_CTX *mem_ctx, const char *filename,
         ldb_set_modules_dir(ldb, mod_path);
     }
 
-    ret = ldb_connect(ldb, filename, 0, NULL);
+    no_sync = getenv(SSS_CACHE_NO_SYNC);
+    if (no_sync != NULL) {
+        DEBUG(SSSDBG_IMPORTANT_INFO, "Setting the cache to nosync mode\n");
+        flags |= LDB_FLG_NOSYNC;
+    }
+
+    ret = ldb_connect(ldb, filename, flags, NULL);
     if (ret != LDB_SUCCESS) {
         return EIO;
     }
