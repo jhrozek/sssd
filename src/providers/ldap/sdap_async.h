@@ -94,6 +94,17 @@ struct tevent_req *sdap_get_users_send(TALLOC_CTX *memctx,
 int sdap_get_users_recv(struct tevent_req *req,
                         TALLOC_CTX *mem_ctx, char **timestamp);
 
+int sdap_save_groups(TALLOC_CTX *memctx,
+                            struct sysdb_ctx *sysdb,
+                            struct sss_domain_info *dom,
+                            struct sdap_options *opts,
+                            struct sysdb_attrs **groups,
+                            int num_groups,
+                            bool populate_members,
+                            hash_table_t *ghosts,
+                            bool save_orig_member,
+                            char **_usn_value);
+
 struct tevent_req *sdap_get_groups_send(TALLOC_CTX *memctx,
                                        struct tevent_context *ev,
                                        struct sdap_domain *sdom,

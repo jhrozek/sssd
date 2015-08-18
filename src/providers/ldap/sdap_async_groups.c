@@ -971,7 +971,7 @@ fail:
 
 /* ==Generic-Function-to-save-multiple-groups============================= */
 
-static int sdap_save_groups(TALLOC_CTX *memctx,
+int sdap_save_groups(TALLOC_CTX *memctx,
                             struct sysdb_ctx *sysdb,
                             struct sss_domain_info *dom,
                             struct sdap_options *opts,

@@ -647,12 +647,26 @@ sdap_nested_groups_store(struct sysdb_ctx *sysdb,
     }
     in_transaction = true;
 
-    ret = sdap_add_incomplete_groups(sysdb, domain, opts, groupnamelist,
-                                     groups, count);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_TRACE_FUNC, "Could not add incomplete groups [%d]: %s\n",
-                   ret, strerror(ret));
-        goto done;
+    if (domain->ignore_group_members == true && opts->schema_type == SDAP_SCHEMA_IPA_V1) {
+        /* If groupmembers are ignored, there's no point in saving the groups
+         * as incomplete, at least not for the IPA schema. We're able to dereference
+         * the objects, so let's be done with it
+         */
+        ret = sdap_save_groups(tmp_ctx, sysdb, domain, opts,
+                               groups, count, false, NULL, true,
+                               NULL);
+        if (ret != EOK) {
+            goto done;
+        }
+    } else {
+        ret = sdap_add_incomplete_groups(sysdb, domain, opts, groupnamelist,
+                                         groups, count);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_TRACE_FUNC,
+                  "Could not add incomplete groups [%d]: %s\n",
+                  ret, strerror(ret));
+            goto done;
+        }
     }
 
     ret = sysdb_transaction_commit(sysdb);
