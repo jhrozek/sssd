@@ -215,6 +215,12 @@
 struct confdb_ctx;
 struct config_file_ctx;
 
+enum sss_domain_state {
+    DOM_ENABLED,
+    DOM_DISABLED,
+    DOM_INACTIVE,
+};
+
 /**
  * Data structure storing all of the basic features
  * of a domain.
@@ -277,7 +283,7 @@ struct sss_domain_info {
     struct sss_domain_info *prev;
     struct sss_domain_info *next;
 
-    bool disabled;
+    enum sss_domain_state state;
     char **sd_inherit;
 
     /* Do not use the forest pointer directly in new code, but rather the
