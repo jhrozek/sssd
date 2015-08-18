@@ -79,6 +79,7 @@ struct err_string error_to_str[] = {
     { "Retrieving keytab failed" }, /* ERR_IPA_GETKEYTAB_FAILED */
     { "Trusted forest root unknown" }, /* ERR_TRUST_FOREST_UNKNOWN */
     { "p11_child failed" }, /* ERR_P11_CHILD */
+    { "Subdomain is inactive" }, /* ERR_SUBDOM_INACTIVE */
     { "ERR_LAST" } /* ERR_LAST */
 };
 
