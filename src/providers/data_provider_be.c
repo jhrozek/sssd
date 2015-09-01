@@ -478,6 +478,24 @@ try_to_go_online(TALLOC_CTX *mem_ctx,
     return EOK;
 }
 
+static int get_offline_timeout(struct be_ctx *ctx)
+{
+    errno_t ret;
+    int offline_timeout;
+
+    ret = confdb_get_int(ctx->cdb, ctx->conf_path,
+                         CONFDB_DOMAIN_OFFLINE_TIMEOUT, 60,
+                         &offline_timeout);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Failed to get offline_timeout from confdb. "
+              "Will use 60 seconds.\n");
+        offline_timeout = 60;
+    }
+
+    return offline_timeout;
+}
+
 void be_mark_offline(struct be_ctx *ctx)
 {
     int offline_timeout;
@@ -493,15 +511,8 @@ void be_mark_offline(struct be_ctx *ctx)
         /* This is the first time we go offline - create a periodic task
          * to check if we can switch to online. */
         DEBUG(SSSDBG_TRACE_INTERNAL, "Initialize check_if_online_ptask.\n");
-        ret = confdb_get_int(ctx->cdb, ctx->conf_path,
-                             CONFDB_DOMAIN_OFFLINE_TIMEOUT, 60,
-                             &offline_timeout);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Failed to get offline_timeout from confdb. "
-                  "Will use 60 seconds.\n");
-            offline_timeout = 60;
-        }
+        offline_timeout = get_offline_timeout(ctx);
+
         ret = be_ptask_create_sync(ctx, ctx,
                                    offline_timeout, offline_timeout,
                                    offline_timeout, 30, offline_timeout,
@@ -522,6 +533,46 @@ void be_mark_offline(struct be_ctx *ctx)
     }
 
     be_run_offline_cb(ctx);
+}
+
+static void be_ptask_reset_status(struct tevent_context *ev,
+                                  struct tevent_timer *te,
+                                  struct timeval current_time,
+                                  void *pvt)
+{
+    struct sss_domain_info *subdom = talloc_get_type(pvt,
+                                                     struct sss_domain_info);
+
+    subdom->state = DOM_ENABLED;
+}
+
+static void be_mark_subdom_offline(struct sss_domain_info *subdom,
+                                   struct be_ctx *be_ctx)
+{
+    struct timeval tv;
+    struct tevent_timer *timeout = NULL;
+    int reset_status_timeout;
+
+    reset_status_timeout = get_offline_timeout(be_ctx);
+    tv = tevent_timeval_current_ofs(reset_status_timeout, 0);
+
+    timeout = tevent_add_timer(be_ctx->ev, be_ctx, tv,
+                               be_ptask_reset_status, subdom);
+    if (timeout == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "Cannot create timer\n");
+        return;
+    }
+
+    subdom->state = DOM_INACTIVE;
+}
+
+void be_mark_dom_offline(struct sss_domain_info *dom, struct be_ctx *ctx)
+{
+    if (IS_SUBDOMAIN(dom) == false) {
+        be_mark_offline(ctx);
+    } else {
+        be_mark_subdom_offline(dom, ctx);
+    }
 }
 
 static void be_reset_offline(struct be_ctx *ctx)
