@@ -1090,7 +1090,7 @@ static void sdap_auth4chpass_done(struct tevent_req *req)
     case ETIMEDOUT:
     case ERR_NETWORK_IO:
         state->pd->pam_status = PAM_AUTHINFO_UNAVAIL;
-        be_mark_offline(be_ctx);
+        be_mark_dom_offline(be_ctx->domain, be_ctx);
         dp_err = DP_ERR_OFFLINE;
         break;
     default:
@@ -1308,7 +1308,7 @@ static void sdap_pam_auth_done(struct tevent_req *req)
     }
 
     if (ret == ETIMEDOUT || ret == ERR_NETWORK_IO) {
-        be_mark_offline(be_ctx);
+        be_mark_dom_offline(be_ctx->domain, be_ctx);
         dp_err = DP_ERR_OFFLINE;
         goto done;
     }

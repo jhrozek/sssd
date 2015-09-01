@@ -1512,7 +1512,7 @@ void proxy_get_account_info(struct be_req *breq)
         if (ret == ENXIO) {
             DEBUG(SSSDBG_OP_FAILURE,
                   "proxy returned UNAVAIL error, going offline!\n");
-            be_mark_offline(be_ctx);
+            be_mark_dom_offline(domain, be_ctx);
         }
         be_req_terminate(breq, DP_ERR_FATAL, ret, NULL);
         return;
