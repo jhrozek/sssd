@@ -721,6 +721,31 @@ static errno_t sdap_search_user_next_base(struct tevent_req *req)
     return EOK;
 }
 
+bool is_in_domain(struct sdap_options *opts,
+                  struct sss_domain_info *dom,
+                  struct sysdb_attrs *obj)
+{
+    errno_t ret;
+    const char *original_dn = NULL;
+    struct sdap_domain *sdmatch = NULL;
+
+    ret = sysdb_attrs_get_string(obj, SYSDB_ORIG_DN, &original_dn);
+    if (ret) {
+        DEBUG(SSSDBG_FUNC_DATA,
+              "The group has no original DN, assuming our domain\n");
+        return true;
+    }
+
+    sdmatch = sdap_domain_get_by_dn(opts, original_dn);
+    if (sdmatch == NULL) {
+        DEBUG(SSSDBG_FUNC_DATA,
+              "The group has no original DN, assuming our domain\n");
+        return true;
+    }
+
+    return (sdmatch->dom == dom);
+}
+
 static void sdap_search_user_process(struct tevent_req *subreq)
 {
     struct tevent_req *req = tevent_req_callback_data(subreq,
@@ -764,8 +789,18 @@ static void sdap_search_user_process(struct tevent_req *subreq)
 
         /* Copy the new users into the list
          * They're already allocated on 'state'
+         *
+         * Don't copy users from other domains in case
+         * the search was for parent domain but a child domain would match,
+         * too, such as:
+         *  dc=example,dc=com
+         *  dc=child,dc=example,dc=com
+         * while searching for an object from dc=example.
          */
         for (i = 0; i < count; i++) {
+            // get original dn
+            // call sdap_domain_get_by_dn(original_dn)
+            // if domain != this domain, continue
             state->users[state->count + i] =
                 talloc_steal(state->users, users[i]);
         }
