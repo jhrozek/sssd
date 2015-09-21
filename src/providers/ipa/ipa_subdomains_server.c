@@ -34,6 +34,9 @@
 #define LSA_TRUST_DIRECTION_INBOUND  0x00000001
 #define LSA_TRUST_DIRECTION_OUTBOUND 0x00000002
 
+#define SUBDOMAINS_FILTER "objectclass=ipaNTTrustedDomain"
+#define MODIFY_TIMESTAMP  "modifyTimestamp"
+
 static char *forest_keytab(TALLOC_CTX *mem_ctx, const char *forest)
 {
     return talloc_asprintf(mem_ctx,
@@ -330,6 +333,214 @@ ipa_ad_ctx_new(struct be_ctx *be_ctx,
     return EOK;
 }
 
+struct tdo_get_mod_stamp_state {
+    struct tevent_context *ev;
+    struct ipa_id_ctx *id_ctx;
+    const char *tdo_name;
+
+    struct sdap_id_op *sdap_op;
+    struct sdap_search_base **bases;
+    int search_base_iter;
+    const char *filter;
+
+    time_t tdo_mod;
+};
+
+static void tdo_get_mod_stamp_conn_done(struct tevent_req *subreq);
+static errno_t tdo_get_mod_stamp_next_base(struct tevent_req *req);
+static void tdo_get_mod_stamp_done(struct tevent_req *subreq);
+
+static struct tevent_req *
+tdo_get_mod_stamp_send(TALLOC_CTX *mem_ctx,
+                       struct tevent_context *ev,
+                       struct ipa_id_ctx *id_ctx,
+                       const char *tdo_name)
+{
+    errno_t ret;
+    struct tevent_req *req = NULL;
+    struct tevent_req *subreq = NULL;
+    struct tdo_get_mod_stamp_state *state;
+
+    req = tevent_req_create(mem_ctx, &state, struct tdo_get_mod_stamp_state);
+    if (req == NULL) {
+        return NULL;
+    }
+
+    state->search_base_iter = 0;
+    state->ev = ev;
+    state->id_ctx = id_ctx;
+    state->tdo_name = tdo_name;
+    state->bases = id_ctx->ipa_options->subdomains_search_bases;
+    state->filter = talloc_asprintf(state, "(&(cn=%s)(%s))",
+                                    tdo_name, SUBDOMAINS_FILTER);
+    if (state->filter == NULL) {
+        ret = ENOMEM;
+        goto fail;
+    }
+
+    state->sdap_op = sdap_id_op_create(state,
+                                       id_ctx->sdap_id_ctx->conn->conn_cache);
+    if (state->sdap_op == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create failed.\n");
+        goto fail;
+    }
+
+    subreq = sdap_id_op_connect_send(state->sdap_op, state, &ret);
+    if (subreq == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_connect_send failed: %d(%s).\n",
+                                  ret, sss_strerror(ret));
+        goto fail;
+    }
+
+    tevent_req_set_callback(subreq, tdo_get_mod_stamp_conn_done, req);
+    return req;
+
+fail:
+    tevent_req_error(req, ret);
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static void tdo_get_mod_stamp_conn_done(struct tevent_req *subreq)
+{
+    errno_t ret;
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    int dp_error = DP_ERR_FATAL;
+
+    ret = sdap_id_op_connect_recv(subreq, &dp_error);
+    talloc_zfree(subreq);
+    if (ret) {
+        if (dp_error == DP_ERR_OFFLINE) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "No IPA server is available, cannot get the "
+                  "TDO data while offline");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Failed to connect to IPA server: [%d](%s)\n",
+                  ret, sss_strerror(ret));
+        }
+
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    ret = tdo_get_mod_stamp_next_base(req);
+    if (ret == EOK) {
+        DEBUG(SSSDBG_TRACE_FUNC, "All bases iterated over, done\n");
+        tevent_req_done(req);
+    } else if (ret != EAGAIN) {
+        tevent_req_error(req, ret);
+    }
+
+    /* Will resume in callback */
+}
+
+static errno_t tdo_get_mod_stamp_next_base(struct tevent_req *req)
+{
+    struct tdo_get_mod_stamp_state *state =
+            tevent_req_data(req, struct tdo_get_mod_stamp_state);
+    struct sdap_search_base *base;
+    int timeout;
+    struct tevent_req *subreq;
+    const char *attrs[] = { MODIFY_TIMESTAMP, NULL};
+
+    base = state->bases[state->search_base_iter];
+    if (base == NULL) {
+        return EOK;
+    }
+
+    timeout = dp_opt_get_int(state->id_ctx->sdap_id_ctx->opts->basic,
+                             SDAP_SEARCH_TIMEOUT);
+
+    subreq = sdap_get_generic_send(state, state->ev,
+                                   state->id_ctx->sdap_id_ctx->opts,
+                                   sdap_id_op_handle(state->sdap_op),
+                                   base->basedn, base->scope,
+                                   state->filter,
+                                   attrs, NULL, 0,
+                                   timeout,
+                                   false);
+    if (subreq == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_get_generic_send failed.\n");
+        return ENOMEM;
+    }
+
+    DEBUG(SSSDBG_TRACE_FUNC, "Looking up TDO..\n");
+    tevent_req_set_callback(subreq, tdo_get_mod_stamp_done, req);
+    return EAGAIN;
+}
+
+static void tdo_get_mod_stamp_done(struct tevent_req *subreq)
+{
+    errno_t ret;
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct tdo_get_mod_stamp_state *state =
+            tevent_req_data(req, struct tdo_get_mod_stamp_state);
+    size_t reply_count;
+    struct sysdb_attrs **reply;
+    const char *value;
+
+    ret = sdap_get_generic_recv(subreq, state, &reply_count, &reply);
+    talloc_free(subreq);
+    if (ret != EOK) {
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    if (reply_count == 0) {
+        DEBUG(SSSDBG_TRACE_LIBS, "No TDO found, moving to next search base\n");
+        state->search_base_iter++;
+
+        ret = tdo_get_mod_stamp_next_base(req);
+        if (ret == EOK) {
+            /* TDO not found? */
+            tevent_req_error(req, ENOENT);
+        } else if (ret != EAGAIN) {
+            tevent_req_error(req, ret);
+        }
+        return;
+    } else if (reply_count > 1) {
+        DEBUG(SSSDBG_OP_FAILURE, "More than one TDO found!\n");
+        tevent_req_error(req, EIO);
+        return;
+    }
+
+    /* One TDO, extract timestamp */
+    ret = sysdb_attrs_get_string(reply[0], MODIFY_TIMESTAMP, &value);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_string failed.\n");
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    ret = sss_utc_to_time_t(value, "%Y%m%d%H%M%SZ", &state->tdo_mod);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_string failed.\n");
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "TDO %s has timestamp %ld\n", state->tdo_name, state->tdo_mod);
+    tevent_req_done(req);
+}
+
+static int tdo_get_mod_stamp_recv(struct tevent_req *req, time_t *_tdo_mod)
+{
+    struct tdo_get_mod_stamp_state *state =
+            tevent_req_data(req, struct tdo_get_mod_stamp_state);
+
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+
+    if (_tdo_mod) {
+        *_tdo_mod = state->tdo_mod;
+    }
+
+    return EOK;
+}
+
 struct ipa_getkeytab_state {
     int child_status;
     struct sss_child_ctx_old *child_ctx;
@@ -353,8 +564,6 @@ static struct tevent_req *ipa_getkeytab_send(TALLOC_CTX *mem_ctx,
                                              const char *server,
                                              const char *principal,
                                              const char *keytab)
-
-
 {
     errno_t ret;
     struct tevent_req *req = NULL;
@@ -569,6 +778,7 @@ struct ipa_server_trusted_dom_setup_state {
     struct ipa_id_ctx *id_ctx;
     struct sss_domain_info *subdom;
 
+    time_t newer_than;
     uint32_t direction;
     const char *forest;
     const char *keytab;
@@ -579,6 +789,8 @@ struct ipa_server_trusted_dom_setup_state {
 };
 
 static errno_t ipa_server_trusted_dom_setup_1way(struct tevent_req *req);
+static errno_t ipa_server_trust_1way_getkt(struct tevent_req *subreq);
+static void ipa_server_trust_1way_tstamp_done(struct tevent_req *subreq);
 static void ipa_server_trust_1way_kt_done(struct tevent_req *subreq);
 
 struct tevent_req *
@@ -586,7 +798,8 @@ ipa_server_trusted_dom_setup_send(TALLOC_CTX *mem_ctx,
                                   struct tevent_context *ev,
                                   struct be_ctx *be_ctx,
                                   struct ipa_id_ctx *id_ctx,
-                                  struct sss_domain_info *subdom)
+                                  struct sss_domain_info *subdom,
+                                  time_t newer_than)
 {
     struct tevent_req *req = NULL;
     struct ipa_server_trusted_dom_setup_state *state = NULL;
@@ -601,6 +814,7 @@ ipa_server_trusted_dom_setup_send(TALLOC_CTX *mem_ctx,
     state->be_ctx = be_ctx;
     state->id_ctx = id_ctx;
     state->subdom = subdom;
+    state->newer_than = newer_than;
 
     /* Trusts are only established with forest roots */
     if (subdom->forest_root == NULL) {
@@ -664,10 +878,9 @@ immediate:
 static errno_t ipa_server_trusted_dom_setup_1way(struct tevent_req *req)
 {
     errno_t ret;
-    struct tevent_req *subreq = NULL;
+    struct tevent_req *subreq;
     struct ipa_server_trusted_dom_setup_state *state =
             tevent_req_data(req, struct ipa_server_trusted_dom_setup_state);
-    const char *hostname;
 
     state->keytab = forest_keytab(state, state->forest);
     if (state->keytab == NULL) {
@@ -690,9 +903,6 @@ static errno_t ipa_server_trusted_dom_setup_1way(struct tevent_req *req)
     DEBUG(SSSDBG_TRACE_FUNC,
           "Will re-fetch keytab for %s\n", state->subdom->name);
 
-    hostname = dp_opt_get_string(state->id_ctx->ipa_options->basic,
-                                 IPA_HOSTNAME);
-
     state->principal = subdomain_trust_princ(state,
                                              state->forest_realm,
                                              state->subdom);
@@ -700,6 +910,58 @@ static errno_t ipa_server_trusted_dom_setup_1way(struct tevent_req *req)
         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot set up ipa_get_keytab\n");
         return EIO;
     }
+
+    if (state->newer_than > 0) {
+        DEBUG(SSSDBG_TRACE_FUNC,
+              "Check if there is a TDO newer than %ld\n", state->newer_than);
+        subreq = tdo_get_mod_stamp_send(state,
+                                        state->ev,
+                                        state->id_ctx,
+                                        state->subdom->name);
+        if (subreq == NULL) {
+            return ENOMEM;
+        }
+        tevent_req_set_callback(subreq,
+                                ipa_server_trust_1way_tstamp_done, req);
+        return EAGAIN;
+    }
+
+    return ipa_server_trust_1way_getkt(req);
+}
+
+static void ipa_server_trust_1way_tstamp_done(struct tevent_req *subreq)
+{
+    errno_t ret;
+    time_t tdo_mod;
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct ipa_server_trusted_dom_setup_state *state =
+            tevent_req_data(req, struct ipa_server_trusted_dom_setup_state);
+
+    ret = tdo_get_mod_stamp_recv(subreq, &tdo_mod);
+    if (tdo_mod < state->newer_than) {
+        DEBUG(SSSDBG_TRACE_FUNC, "Did not find a newer TDO\n");
+        tevent_req_done(req);
+        return;
+    }
+
+    DEBUG(SSSDBG_TRACE_FUNC, "TDO was recreated, fetching keytab\n");
+    ret = ipa_server_trust_1way_getkt(req);
+    if (ret != EOK && ret != EAGAIN) {
+        tevent_req_done(req);
+        return;
+    }
+}
+
+static errno_t ipa_server_trust_1way_getkt(struct tevent_req *req)
+{
+    struct tevent_req *subreq;
+    struct ipa_server_trusted_dom_setup_state *state =
+            tevent_req_data(req, struct ipa_server_trusted_dom_setup_state);
+    const char *hostname;
+
+    hostname = dp_opt_get_string(state->id_ctx->ipa_options->basic,
+                                 IPA_HOSTNAME);
 
     subreq = ipa_getkeytab_send(state->be_ctx, state->be_ctx->ev,
                                 state->ccache,
@@ -853,7 +1115,8 @@ static errno_t ipa_server_create_trusts_step(struct tevent_req *req)
                                                        state->ev,
                                                        state->be_ctx,
                                                        state->id_ctx,
-                                                       state->domiter);
+                                                       state->domiter,
+                                                       0);
             if (subreq == NULL) {
                 return ENOMEM;
             }
@@ -1111,4 +1374,13 @@ int ipa_ad_subdom_init(struct be_ctx *be_ctx,
     }
 
     return EOK;
+}
+
+void ipa_subdom_reset_trust(struct ipa_server_mode_ctx *server_mode)
+{
+    struct ipa_ad_server_ctx *trust_iter;
+
+    DLIST_FOR_EACH(trust_iter, server_mode->trusts) {
+        trust_iter->last_kt_check = 0;
+    }
 }

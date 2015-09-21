@@ -681,8 +681,8 @@ fail:
     return req;
 }
 
-static struct ad_id_ctx *
-ipa_get_ad_id_ctx(struct ipa_id_ctx *ipa_ctx,
+static struct ipa_ad_server_ctx *
+ipa_get_trust_ctx(struct ipa_id_ctx *ipa_ctx,
                   struct sss_domain_info *dom)
 {
     struct ipa_ad_server_ctx *iter;
@@ -691,7 +691,17 @@ ipa_get_ad_id_ctx(struct ipa_id_ctx *ipa_ctx,
         if (iter->dom == dom) break;
     }
 
-    return (iter) ? iter->ad_id_ctx : NULL;
+    return iter;
+}
+
+static struct ad_id_ctx *
+ipa_get_ad_id_ctx(struct ipa_id_ctx *ipa_ctx,
+                  struct sss_domain_info *dom)
+{
+    struct ipa_ad_server_ctx *trust;
+
+    trust = ipa_get_trust_ctx(ipa_ctx, dom);
+    return (trust) ? trust->ad_id_ctx : NULL;
 }
 
 static errno_t
@@ -1365,6 +1375,7 @@ struct ipa_srv_ad_acct_state {
 };
 
 static int ipa_srv_ad_acct_lookup_step(struct tevent_req *req);
+static errno_t ipa_srv_ad_acct_retry(struct tevent_req *req);
 static void ipa_srv_ad_acct_lookup_done(struct tevent_req *subreq);
 static void ipa_srv_ad_acct_retried(struct tevent_req *subreq);
 
@@ -1446,19 +1457,14 @@ static void ipa_srv_ad_acct_lookup_done(struct tevent_req *subreq)
     ret = ipa_get_ad_acct_recv(subreq, &dp_error);
     talloc_free(subreq);
     if (ret == ERR_SUBDOM_INACTIVE && state->retry == true) {
-
-        state->retry = false;
-
         DEBUG(SSSDBG_MINOR_FAILURE,
               "Sudomain lookup failed, will try to reset sudomain..\n");
-        subreq = ipa_server_trusted_dom_setup_send(state, state->ev,
-                                                   state->be_ctx,
-                                                   state->ipa_ctx,
-                                                   state->obj_dom);
-        if (subreq == NULL) {
+        ret = ipa_srv_ad_acct_retry(req);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Retry failed[ [%d]: %s\n", ret, sss_strerror(ret));
             goto fail;
         }
-        tevent_req_set_callback(subreq, ipa_srv_ad_acct_retried, req);
         return;
     } else if (ret != EOK) {
         be_mark_dom_offline(state->obj_dom, state->be_ctx);
@@ -1475,6 +1481,43 @@ static void ipa_srv_ad_acct_lookup_done(struct tevent_req *subreq)
 fail:
     state->dp_error = dp_error;
     tevent_req_error(req, ret);
+}
+
+static errno_t ipa_srv_ad_acct_retry(struct tevent_req *req)
+{
+    struct tevent_req *subreq;
+    struct ipa_ad_server_ctx *trust;
+    struct ipa_srv_ad_acct_state *state = tevent_req_data(req,
+                                            struct ipa_srv_ad_acct_state);
+
+    state->retry = false;
+
+    trust = ipa_get_trust_ctx(state->ipa_ctx, state->obj_dom);
+    if (trust == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot find truct ctx for %s\n", state->obj_dom->name);
+        return EINVAL;
+    }
+
+    if (trust->last_kt_check > trust->ad_id_ctx->ldap_ctx->conn_time) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Last kt check time %ld is past last connection time %ld\n",
+              trust->last_kt_check, trust->ad_id_ctx->ldap_ctx->conn_time);
+        return ERR_SUBDOM_INACTIVE;
+    }
+
+    subreq = ipa_server_trusted_dom_setup_send(
+                                        state, state->ev,
+                                        state->be_ctx,
+                                        state->ipa_ctx,
+                                        state->obj_dom,
+                                        trust->ad_id_ctx->ldap_ctx->conn_time);
+    if (subreq == NULL) {
+        return ENOMEM;
+    }
+    tevent_req_set_callback(subreq, ipa_srv_ad_acct_retried, req);
+
+    return EOK;
 }
 
 static void ipa_srv_ad_acct_retried(struct tevent_req *subreq)
