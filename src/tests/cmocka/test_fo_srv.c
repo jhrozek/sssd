@@ -292,13 +292,10 @@ static void test_fo_srv_done1(struct tevent_req *req);
 static void test_fo_srv_done2(struct tevent_req *req);
 static void test_fo_srv_done3(struct tevent_req *req);
 static void test_fo_srv_done4(struct tevent_req *req);
+static void test_fo_srv_done5(struct tevent_req *req);
 
-void test_fo_srv(void **state)
+static void test_fo_srv_mock_dns(struct test_fo_srv_ctx *test_ctx)
 {
-    errno_t ret;
-    struct tevent_req *req;
-    struct test_fo_srv_ctx *test_ctx =
-        talloc_get_type(*state, struct test_fo_srv_ctx);
     struct ares_srv_reply *s1;
     struct ares_srv_reply *s2;
     char *dns_domain;
@@ -325,6 +322,16 @@ void test_fo_srv(void **state)
     assert_non_null(dns_domain);
 
     mock_srv_results(s1, TEST_SRV_TTL, dns_domain);
+}
+
+static void test_fo_srv(void **state)
+{
+    errno_t ret;
+    struct tevent_req *req;
+    struct test_fo_srv_ctx *test_ctx =
+        talloc_get_type(*state, struct test_fo_srv_ctx);
+
+    test_fo_srv_mock_dns(test_ctx);
 
     ret = fo_add_srv_server(test_ctx->fo_svc, "_ldap", "sssd.com",
                             "sssd.local", "tcp", test_ctx);
@@ -425,6 +432,33 @@ static void test_fo_srv_done4(struct tevent_req *req)
     /* No servers are left..*/
     assert_int_equal(ret, ENOENT);
 
+    /* reset the server status and try again.. */
+    fo_reset_servers(test_ctx->fo_svc);
+    test_fo_srv_mock_dns(test_ctx);
+
+    req = fo_resolve_service_send(test_ctx, test_ctx->ctx->ev,
+                                  test_ctx->resolv, test_ctx->fo_ctx,
+                                  test_ctx->fo_svc);
+    assert_non_null(req);
+    tevent_req_set_callback(req, test_fo_srv_done5, test_ctx);
+}
+
+static void test_fo_srv_done5(struct tevent_req *req)
+{
+    struct test_fo_srv_ctx *test_ctx = \
+        tevent_req_callback_data(req, struct test_fo_srv_ctx);
+    struct fo_server *srv;
+    errno_t ret;
+
+    ret = fo_resolve_service_recv(req, &srv);
+    talloc_zfree(req);
+
+    assert_int_equal(ret, ERR_OK);
+
+    /* ldap1.sssd.com has lower priority, it must always be first */
+    check_server(srv, 389, "ldap1.sssd.com");
+
+    /* OK, we made a full circle with the test, done */
     test_ctx->ctx->error = ERR_OK;
     test_ctx->ctx->done = true;
 }
