@@ -773,6 +773,7 @@ static void sdap_id_op_connect_req_complete(struct sdap_id_op *op, int dp_error,
     state->result = ret;
 
     if (ret == EOK) {
+        op->conn_data->conn_cache->id_conn->conn_time = time(NULL);
         tevent_req_done(req);
     } else {
         sdap_id_op_hook_conn_data(op, NULL);

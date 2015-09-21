@@ -57,6 +57,8 @@ struct sdap_id_conn_ctx {
     struct sdap_id_conn_ctx *prev, *next;
     /* do not go offline, try another connection */
     bool ignore_mark_offline;
+    /* time of last successfull connection */
+    time_t conn_time;
 };
 
 struct sdap_id_ctx {
