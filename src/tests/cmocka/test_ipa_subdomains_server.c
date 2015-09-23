@@ -333,6 +333,7 @@ static void test_ipa_server_create_trusts(void **state)
                                         test_ctx->tctx->ev,
                                         test_ctx->be_ctx,
                                         test_ctx->ipa_ctx,
+                                        0,
                                         test_ctx->be_ctx->domain);
     assert_non_null(req);
 
@@ -359,6 +360,7 @@ static void test_ipa_server_create_trusts_none(struct tevent_req *req)
                                         test_ctx->tctx->ev,
                                         test_ctx->be_ctx,
                                         test_ctx->ipa_ctx,
+                                        0,
                                         test_ctx->be_ctx->domain);
     assert_non_null(req);
 
@@ -673,6 +675,7 @@ static void test_ipa_server_create_oneway(void **state)
                                         test_ctx->tctx->ev,
                                         test_ctx->be_ctx,
                                         test_ctx->ipa_ctx,
+                                        0,
                                         test_ctx->be_ctx->domain);
     assert_non_null(req);
 
@@ -745,6 +748,7 @@ static void test_ipa_server_create_oneway_kt_exists(void **state)
                                         test_ctx->tctx->ev,
                                         test_ctx->be_ctx,
                                         test_ctx->ipa_ctx,
+                                        0,
                                         test_ctx->be_ctx->domain);
     assert_non_null(req);
 
@@ -779,6 +783,7 @@ static void test_ipa_server_create_oneway_kt_refresh_fallback(void **state)
                                         test_ctx->tctx->ev,
                                         test_ctx->be_ctx,
                                         test_ctx->ipa_ctx,
+                                        0,
                                         test_ctx->be_ctx->domain);
     assert_non_null(req);
 
@@ -811,6 +816,7 @@ static void test_ipa_server_create_oneway_kt_refresh_fail(void **state)
                                         test_ctx->tctx->ev,
                                         test_ctx->be_ctx,
                                         test_ctx->ipa_ctx,
+                                        0,
                                         test_ctx->be_ctx->domain);
     assert_non_null(req);
 

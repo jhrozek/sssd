@@ -74,6 +74,7 @@ ipa_server_create_trusts_send(TALLOC_CTX *mem_ctx,
                               struct tevent_context *ev,
                               struct be_ctx *be_ctx,
                               struct ipa_id_ctx *id_ctx,
+                              time_t newer_than,
                               struct sss_domain_info *parent);
 
 errno_t ipa_server_create_trusts_recv(struct tevent_req *req);

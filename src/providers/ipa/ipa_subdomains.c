@@ -39,6 +39,7 @@
 #define IPA_SID "ipaNTSecurityIdentifier"
 #define IPA_TRUSTED_DOMAIN_SID "ipaNTTrustedDomainSID"
 #define IPA_RANGE_TYPE "ipaRangeType"
+#define MODIFY_TIMESTAMP  "modifyTimestamp"
 
 #define IPA_BASE_ID "ipaBaseID"
 #define IPA_ID_RANGE_SIZE "ipaIDRangeSize"
@@ -496,6 +497,7 @@ static void ipa_subdom_store_step(struct sss_domain_info *parent,
 
 static errno_t ipa_subdomains_refresh(struct ipa_subdomains_ctx *ctx,
                                       int count, struct sysdb_attrs **reply,
+                                      time_t newer_than,
                                       bool *changes)
 {
     struct sss_domain_info *parent, *dom;
@@ -503,6 +505,7 @@ static errno_t ipa_subdomains_refresh(struct ipa_subdomains_ctx *ctx,
     const char *value;
     int c, h;
     int ret;
+    time_t tdo_mstamp;
 
     parent = ctx->be_ctx->domain;
     memset(handled, 0, sizeof(bool) * count);
@@ -541,6 +544,27 @@ static errno_t ipa_subdomains_refresh(struct ipa_subdomains_ctx *ctx,
             ipa_subdom_store_step(parent, ctx->id_ctx,
                                   ctx->sdap_id_ctx->opts->idmap_ctx,
                                   reply[c]);
+
+            if (newer_than) {
+                /* One TDO, extract timestamp */
+                ret = sysdb_attrs_get_string(reply[c], MODIFY_TIMESTAMP, &value);
+                if (ret != EOK) {
+                    DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_string failed.\n");
+                    goto done;
+                }
+
+                ret = sss_utc_to_time_t(value, "%Y%m%d%H%M%SZ", &tdo_mstamp);
+                if (ret != EOK) {
+                    DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_string failed.\n");
+                    goto done;
+                }
+
+                if (tdo_mstamp > newer_than) {
+                    *changes = true;
+                }
+
+            }
+
             handled[c] = true;
             h++;
         }
@@ -580,6 +604,7 @@ struct ipa_subdomains_req_ctx {
     struct be_req *be_req;
     struct ipa_subdomains_ctx *sd_ctx;
     struct sdap_id_op *sdap_op;
+    time_t newer_than;
 
     char *current_filter;
 
@@ -588,6 +613,9 @@ struct ipa_subdomains_req_ctx {
 
     size_t reply_count;
     struct sysdb_attrs **reply;
+    bool refresh_has_changes;
+
+    struct tevent_req *req;
 };
 
 static void ipa_subdomains_get_conn_done(struct tevent_req *req);
@@ -610,7 +638,7 @@ static struct ipa_subdomains_req_params subdomain_requests[] = {
     { SUBDOMAINS_FILTER,
       ipa_subdomains_handler_done,
       { IPA_CN, IPA_FLATNAME, IPA_TRUSTED_DOMAIN_SID,
-        IPA_TRUST_DIRECTION, NULL }
+        IPA_TRUST_DIRECTION, MODIFY_TIMESTAMP, NULL }
     },
     { RANGE_FILTER,
       ipa_subdomains_handler_ranges_done,
@@ -621,64 +649,138 @@ static struct ipa_subdomains_req_params subdomain_requests[] = {
     }
 };
 
+static struct tevent_req *
+ipa_subdomains_retrieve_send(TALLOC_CTX *mem_ctx,
+                             struct tevent_context *ev,
+                             time_t newer_than,
+                             struct ipa_subdomains_ctx *ctx,
+                             struct be_req *be_req);
+static errno_t ipa_subdomains_retrieve_recv(struct tevent_req *req,
+                                            bool *_has_changes);
+
+static void ipa_sudomains_retrieve_done(struct tevent_req *subreq);
+
+struct ipa_subdomains_retrieve_ctx {
+    struct ipa_subdomains_ctx *ctx;
+    struct be_req *be_req;
+};
+
 static void ipa_subdomains_retrieve(struct ipa_subdomains_ctx *ctx, struct be_req *be_req)
 {
-    struct ipa_subdomains_req_ctx *req_ctx = NULL;
+    struct ipa_subdomains_retrieve_ctx *rctx;
     struct tevent_req *req;
-    int dp_error = DP_ERR_FATAL;
     int ret;
 
-    req_ctx = talloc(be_req, struct ipa_subdomains_req_ctx);
-    if (req_ctx == NULL) {
+    rctx = talloc_zero(be_req, struct ipa_subdomains_retrieve_ctx);
+    if (ctx == NULL) {
         ret = ENOMEM;
-        goto done;
+        goto fail;
     }
+    rctx->ctx = ctx;
+    rctx->be_req = be_req;
 
-    req_ctx->be_req = be_req;
-    req_ctx->sd_ctx = ctx;
-    req_ctx->search_base_iter = 0;
-    req_ctx->search_bases = ctx->ranges_search_bases;
-    req_ctx->current_filter = NULL;
-    req_ctx->reply_count = 0;
-    req_ctx->reply = NULL;
-
-    req_ctx->sdap_op = sdap_id_op_create(req_ctx,
-                                         ctx->sdap_id_ctx->conn->conn_cache);
-    if (req_ctx->sdap_op == NULL) {
-        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create failed.\n");
-        ret = ENOMEM;
-        goto done;
-    }
-
-    req = sdap_id_op_connect_send(req_ctx->sdap_op, req_ctx, &ret);
+    req = ipa_subdomains_retrieve_send(rctx, ctx->be_ctx->ev,
+                                       0, ctx, be_req);
     if (req == NULL) {
-        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_connect_send failed: %d(%s).\n",
-                                  ret, strerror(ret));
-        goto done;
+        ret = ENOMEM;
+        goto fail;
     }
-
-    tevent_req_set_callback(req, ipa_subdomains_get_conn_done, req_ctx);
-
+    tevent_req_set_callback(req, ipa_sudomains_retrieve_done, rctx);
     return;
 
-done:
-    talloc_free(req_ctx);
+fail:
+    talloc_free(rctx);
+    ipa_subdomains_done(ctx, be_req, DP_ERR_FATAL, ret, NULL);
+}
+
+static void ipa_sudomains_retrieve_done(struct tevent_req *req)
+{
+    struct ipa_subdomains_retrieve_ctx *rctx =
+            tevent_req_callback_data(req, struct ipa_subdomains_retrieve_ctx);
+    int dp_error = DP_ERR_FATAL;
+    errno_t ret;
+
+    ret = ipa_subdomains_retrieve_recv(req, NULL);
+    talloc_free(req);
     if (ret == EOK) {
         dp_error = DP_ERR_OK;
     }
-    ipa_subdomains_done(ctx, be_req, dp_error, ret, NULL);
+    ipa_subdomains_done(rctx->ctx, rctx->be_req, dp_error, ret, NULL);
 }
 
-static void ipa_subdomains_get_conn_done(struct tevent_req *req)
+struct ipa_subdomains_retrieve_state {
+    struct tevent_context *ev;
+    struct ipa_subdomains_req_ctx *req_ctx;
+};
+
+static struct tevent_req *
+ipa_subdomains_retrieve_send(TALLOC_CTX *mem_ctx,
+                             struct tevent_context *ev,
+                             time_t newer_than,
+                             struct ipa_subdomains_ctx *ctx,
+                             struct be_req *be_req)
+{
+    struct tevent_req *req = NULL;
+    struct tevent_req *subreq = NULL;
+    struct ipa_subdomains_retrieve_state *state = NULL;
+    errno_t ret;
+
+    req = tevent_req_create(mem_ctx, &state,
+                            struct ipa_subdomains_retrieve_state);
+    if (req == NULL) {
+        return NULL;
+    }
+    state->ev = ev;
+
+    state->req_ctx = talloc(state, struct ipa_subdomains_req_ctx);
+    if (state->req_ctx == NULL) {
+        ret = ENOMEM;
+        goto fail;
+    }
+
+    state->req_ctx->be_req = be_req;
+    state->req_ctx->sd_ctx = ctx;
+    state->req_ctx->search_base_iter = 0;
+    state->req_ctx->search_bases = ctx->ranges_search_bases;
+    state->req_ctx->current_filter = NULL;
+    state->req_ctx->reply_count = 0;
+    state->req_ctx->reply = NULL;
+    state->req_ctx->newer_than = newer_than;
+
+    state->req_ctx->sdap_op = sdap_id_op_create(state,
+                                       ctx->sdap_id_ctx->conn->conn_cache);
+    if (state->req_ctx->sdap_op == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create failed.\n");
+        ret = ENOMEM;
+        goto fail;
+    }
+
+    subreq = sdap_id_op_connect_send(state->req_ctx->sdap_op, state, &ret);
+    if (req == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_connect_send failed: %d(%s).\n",
+                                  ret, strerror(ret));
+        goto fail;
+    }
+
+    tevent_req_set_callback(subreq, ipa_subdomains_get_conn_done, req);
+
+fail:
+    tevent_req_error(req, ret);
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static void ipa_subdomains_get_conn_done(struct tevent_req *subreq)
 {
     int ret;
     int dp_error = DP_ERR_FATAL;
-    struct ipa_subdomains_req_ctx *ctx;
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct ipa_subdomains_retrieve_state *state =
+            tevent_req_data(req, struct ipa_subdomains_retrieve_state);
 
-    ctx = tevent_req_callback_data(req, struct ipa_subdomains_req_ctx);
-
-    ret = sdap_id_op_connect_recv(req, &dp_error);
-    talloc_zfree(req);
+    ret = sdap_id_op_connect_recv(subreq, &dp_error);
+    talloc_zfree(subreq);
     if (ret) {
         if (dp_error == DP_ERR_OFFLINE) {
             DEBUG(SSSDBG_MINOR_FAILURE,
@@ -690,20 +792,19 @@ static void ipa_subdomains_get_conn_done(struct tevent_req *req)
                    ret, strerror(ret));
         }
 
-        goto fail;
+        tevent_req_error(req, ret);
+        return;
     }
 
-    ret = ipa_subdomains_handler_get_start(ctx,
-                                           ctx->sd_ctx->ranges_search_bases,
+    ret = ipa_subdomains_handler_get_start(state->req_ctx,
+                                           state->req_ctx->sd_ctx->ranges_search_bases,
                                            IPA_SUBDOMAINS_RANGES);
     if (ret != EOK && ret != EAGAIN) {
-        goto fail;
+        tevent_req_error(req, ret);
+        return;
     }
 
     return;
-
-fail:
-    ipa_subdomains_done(ctx->sd_ctx, ctx->be_req, dp_error, ret, NULL);
 }
 
 static errno_t
@@ -757,6 +858,7 @@ ipa_subdomains_handler_get_start(struct ipa_subdomains_req_ctx *ctx,
 {
     ctx->search_base_iter = 0;
     ctx->search_bases = search_bases;
+
     return ipa_subdomains_handler_get(ctx, type);
 }
 
@@ -819,7 +921,6 @@ static void ipa_get_view_name_done(struct tevent_req *req)
     size_t reply_count;
     struct sdap_deref_attrs **reply = NULL;
     const char *view_name;
-    int dp_error = DP_ERR_FATAL;
 
     ctx = tevent_req_callback_data(req, struct ipa_subdomains_req_ctx);
 
@@ -990,9 +1091,10 @@ static void ipa_get_view_name_done(struct tevent_req *req)
     ret = EOK;
 done:
     if (ret == EOK) {
-        dp_error = DP_ERR_OK;
+        tevent_req_done(ctx->req);
+    } else {
+        tevent_req_error(ctx->req, ret);
     }
-    ipa_subdomains_done(ctx->sd_ctx, ctx->be_req, dp_error, ret, NULL);
 }
 
 static void ipa_subdomains_handler_done(struct tevent_req *req)
@@ -1002,8 +1104,6 @@ static void ipa_subdomains_handler_done(struct tevent_req *req)
     struct sysdb_attrs **reply = NULL;
     struct ipa_subdomains_req_ctx *ctx;
     struct sss_domain_info *domain;
-    bool refresh_has_changes = false;
-    int dp_error = DP_ERR_FATAL;
     struct tevent_req *trust_req;
 
     ctx = tevent_req_callback_data(req, struct ipa_subdomains_req_ctx);
@@ -1036,13 +1136,14 @@ static void ipa_subdomains_handler_done(struct tevent_req *req)
     }
 
     ret = ipa_subdomains_refresh(ctx->sd_ctx, ctx->reply_count, ctx->reply,
-                                 &refresh_has_changes);
+                                 ctx->newer_than,
+                                 &ctx->refresh_has_changes);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "Failed to refresh subdomains.\n");
         goto done;
     }
 
-    if (refresh_has_changes) {
+    if (ctx->refresh_has_changes) {
         ret = ipa_subdom_reinit(ctx->sd_ctx);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE, "Could not reinitialize subdomains\n");
@@ -1053,6 +1154,7 @@ static void ipa_subdomains_handler_done(struct tevent_req *req)
             trust_req = ipa_server_create_trusts_send(ctx, ctx->sd_ctx->be_ctx->ev,
                                                       ctx->sd_ctx->be_ctx,
                                                       ctx->sd_ctx->id_ctx,
+                                                      ctx->newer_than,
                                                       domain);
             if (trust_req == NULL) {
                 ret = ENOMEM;
@@ -1090,26 +1192,27 @@ static void ipa_subdomains_handler_done(struct tevent_req *req)
     ret = EOK;
 done:
     if (ret == EOK) {
-        dp_error = DP_ERR_OK;
+        tevent_req_done(ctx->req);
+    } else {
+        tevent_req_error(ctx->req, ret);
     }
-    ipa_subdomains_done(ctx->sd_ctx, ctx->be_req, dp_error, ret, NULL);
 }
 
 static void ipa_server_create_trusts_done(struct tevent_req *trust_req)
 {
     errno_t ret;
-    int dp_error = DP_ERR_FATAL;
     struct ipa_subdomains_req_ctx *ctx;
 
     ctx = tevent_req_callback_data(trust_req, struct ipa_subdomains_req_ctx);
 
     ret = ipa_server_create_trusts_recv(trust_req);
     talloc_zfree(trust_req);
-    if (ret == EOK) {
-        dp_error = DP_ERR_OK;
-    }
 
-    ipa_subdomains_done(ctx->sd_ctx, ctx->be_req, dp_error, ret, NULL);
+    if (ret == EOK) {
+        tevent_req_done(ctx->req);
+    } else {
+        tevent_req_error(ctx->req, ret);
+    }
 }
 
 static errno_t ipa_check_master(struct ipa_subdomains_req_ctx *ctx)
@@ -1145,7 +1248,6 @@ static errno_t ipa_check_master(struct ipa_subdomains_req_ctx *ctx)
 static void ipa_subdomains_handler_ranges_done(struct tevent_req *req)
 {
     errno_t ret;
-    int dp_error = DP_ERR_FATAL;
     size_t reply_count;
     struct sysdb_attrs **reply = NULL;
     struct ipa_subdomains_req_ctx *ctx;
@@ -1156,6 +1258,8 @@ static void ipa_subdomains_handler_ranges_done(struct tevent_req *req)
     ctx = tevent_req_callback_data(req, struct ipa_subdomains_req_ctx);
     domain = ctx->sd_ctx->be_ctx->domain;
     sysdb = domain->sysdb;
+
+    DEBUG(SSSDBG_CRIT_FAILURE, "PICA");
 
     ret = sdap_get_generic_recv(req, ctx, &reply_count, &reply);
     talloc_zfree(req);
@@ -1203,15 +1307,15 @@ static void ipa_subdomains_handler_ranges_done(struct tevent_req *req)
 
 done:
     if (ret == EOK) {
-        dp_error = DP_ERR_OK;
+        tevent_req_done(ctx->req);
+    } else {
+        tevent_req_error(ctx->req, ret);
     }
-    ipa_subdomains_done(ctx->sd_ctx, ctx->be_req, dp_error, ret, NULL);
 }
 
 static void ipa_subdomains_handler_master_done(struct tevent_req *req)
 {
     errno_t ret;
-    int dp_error = DP_ERR_FATAL;
     size_t reply_count = 0;
     struct sysdb_attrs **reply = NULL;
     struct ipa_subdomains_req_ctx *ctx;
@@ -1288,9 +1392,25 @@ static void ipa_subdomains_handler_master_done(struct tevent_req *req)
 
 done:
     if (ret == EOK) {
-        dp_error = DP_ERR_OK;
+        tevent_req_done(ctx->req);
+    } else {
+        tevent_req_error(ctx->req, ret);
     }
-    ipa_subdomains_done(ctx->sd_ctx, ctx->be_req, dp_error, ret, NULL);
+}
+
+static errno_t ipa_subdomains_retrieve_recv(struct tevent_req *req,
+                                            bool *_has_changes)
+{
+    struct ipa_subdomains_retrieve_state *state =
+            tevent_req_data(req, struct ipa_subdomains_retrieve_state);
+
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+
+    if (_has_changes) {
+        *_has_changes = state->req_ctx->refresh_has_changes;
+    }
+
+    return EOK;
 }
 
 static void ipa_subdom_online_cb(void *pvt);

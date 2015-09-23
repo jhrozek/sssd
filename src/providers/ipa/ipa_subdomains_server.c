@@ -1045,6 +1045,8 @@ struct ipa_server_create_trusts_state {
     struct be_ctx *be_ctx;
     struct ipa_id_ctx *id_ctx;
     struct sss_domain_info *domiter;
+    time_t newer_than;
+    struct ipa_ad_server_ctx *trust_iter;
 };
 
 static errno_t ipa_server_create_trusts_step(struct tevent_req *req);
@@ -1056,6 +1058,7 @@ ipa_server_create_trusts_send(TALLOC_CTX *mem_ctx,
                               struct tevent_context *ev,
                               struct be_ctx *be_ctx,
                               struct ipa_id_ctx *id_ctx,
+                              time_t newer_than,
                               struct sss_domain_info *parent)
 {
     struct tevent_req *req = NULL;
@@ -1072,6 +1075,7 @@ ipa_server_create_trusts_send(TALLOC_CTX *mem_ctx,
     state->be_ctx = be_ctx;
     state->id_ctx = id_ctx;
     state->domiter = parent;
+    state->newer_than = newer_than;
 
     ret = ipa_server_create_trusts_step(req);
     if (ret != EAGAIN) {
@@ -1093,30 +1097,43 @@ immediate:
 static errno_t ipa_server_create_trusts_step(struct tevent_req *req)
 {
     struct tevent_req *subreq = NULL;
-    struct ipa_ad_server_ctx *trust_iter;
     struct ipa_server_create_trusts_state *state = NULL;
 
     state = tevent_req_data(req, struct ipa_server_create_trusts_state);
+
+    state->trust_iter = NULL;
 
     for (state->domiter = get_next_domain(state->domiter, true);
          state->domiter && IS_SUBDOMAIN(state->domiter);
          state->domiter = get_next_domain(state->domiter, false)) {
 
         /* Check if we already have an ID context for this subdomain */
-        DLIST_FOR_EACH(trust_iter, state->id_ctx->server_mode->trusts) {
-            if (trust_iter->dom == state->domiter) {
+        DLIST_FOR_EACH(state->trust_iter, state->id_ctx->server_mode->trusts) {
+            if (state->trust_iter->dom == state->domiter) {
                 break;
             }
         }
 
         /* Newly detected trust */
-        if (trust_iter == NULL) {
+        if (state->trust_iter == NULL) {
             subreq = ipa_server_trusted_dom_setup_send(state,
                                                        state->ev,
                                                        state->be_ctx,
                                                        state->id_ctx,
                                                        state->domiter,
                                                        0);
+            if (subreq == NULL) {
+                return ENOMEM;
+            }
+            tevent_req_set_callback(subreq, ipa_server_create_trusts_done, req);
+            return EAGAIN;
+        } else if (state->newer_than != 0) {
+            subreq = ipa_server_trusted_dom_setup_send(state,
+                                                       state->ev,
+                                                       state->be_ctx,
+                                                       state->id_ctx,
+                                                       state->domiter,
+                                                       state->newer_than);
             if (subreq == NULL) {
                 return ENOMEM;
             }
@@ -1133,6 +1150,9 @@ static void ipa_server_create_trusts_done(struct tevent_req *subreq)
     errno_t ret;
     struct tevent_req *req = tevent_req_callback_data(subreq,
                                                       struct tevent_req);
+    struct ipa_server_create_trusts_state *state = NULL;
+
+    state = tevent_req_data(req, struct ipa_server_create_trusts_state);
 
     ret = ipa_server_trusted_dom_setup_recv(subreq);
     talloc_zfree(subreq);
@@ -1141,10 +1161,12 @@ static void ipa_server_create_trusts_done(struct tevent_req *subreq)
         return;
     }
 
-    ret = ipa_server_create_trusts_ctx(req);
-    if (ret != EOK) {
-        tevent_req_error(req, ret);
-        return;
+    if (state->trust_iter == NULL) {
+        ret = ipa_server_create_trusts_ctx(req);
+        if (ret != EOK) {
+            tevent_req_error(req, ret);
+            return;
+        }
     }
 
     ret = ipa_server_create_trusts_step(req);
@@ -1257,7 +1279,7 @@ static void create_trusts_at_startup(struct tevent_context *ev,
     state = talloc_get_type(pvt, struct ipa_ad_subdom_reinit_state);
 
     req = ipa_server_create_trusts_send(state, state->ev, state->be_ctx,
-                                        state->id_ctx, state->parent);
+                                        state->id_ctx, 0, state->parent);
     if (req == NULL) {
         DEBUG(SSSDBG_OP_FAILURE, "ipa_server_create_trusts_send failed.\n");
         talloc_free(state);
