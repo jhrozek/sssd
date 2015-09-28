@@ -18,7 +18,7 @@
 #
 
 
-def user(base_dn, uid, uidNumber, gidNumber):
+def user(base_dn, uid, uidNumber, gidNumber, **kwargs):
     """
     Generate an RFC2307(bis) user add-modlist for passing to ldap.add*
     """
@@ -28,13 +28,23 @@ def user(base_dn, uid, uidNumber, gidNumber):
         "uid=" + uid + ",ou=Users," + base_dn,
         [
             ('objectClass',     ['top', 'inetOrgPerson', 'posixAccount']),
-            ('cn',              [uidNumber]),
-            ('sn',              ['User']),
+            ('cn',              [kwargs['cn'] \
+                                 if 'cn' in kwargs else \
+                                 uidNumber]),
+            ('sn',              [kwargs['sn'] \
+                                 if 'sn' in kwargs else \
+                                 'User']),
             ('uidNumber',       [uidNumber]),
             ('gidNumber',       [gidNumber]),
-            ('userPassword',    ['Password' + uidNumber]),
-            ('homeDirectory',   ['/home/' + uid]),
-            ('loginShell',      ['/bin/bash']),
+            ('userPassword',    [kwargs['userPassword'] \
+                                 if 'userPassword' in kwargs else \
+                                 'Password' + uidNumber]),
+            ('homeDirectory',   [kwargs['homeDirectory'] \
+                                 if 'homeDirectory' in kwargs else \
+                                 '/home/' + uid]),
+            ('loginShell',      [kwargs['loginShell'] \
+                                 if 'loginShell' in kwargs else \
+                                 '/bin/bash']),
         ]
     )
 
@@ -86,10 +96,10 @@ class List(list):
         self.base_dn = base_dn
 
     def add_user(self, uid, uidNumber, gidNumber,
-                 base_dn=None):
+                 base_dn=None, **kwargs):
         """Add an RFC2307(bis) user add-modlist."""
         self.append(user(base_dn or self.base_dn,
-                         uid, uidNumber, gidNumber))
+                         uid, uidNumber, gidNumber, **kwargs))
 
     def add_group(self, cn, gidNumber, member_uids=[],
                   base_dn=None):
