@@ -104,7 +104,7 @@ def create_sssd_fixture(request):
 
 
 @pytest.fixture
-def sanity_rfc2307(request, ldap_conn):
+def sanity(request, ldap_conn):
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     ent_list.add_user("user1", 1001, 2001)
     ent_list.add_user("user2", 1002, 2002)
@@ -149,7 +149,7 @@ def sanity_rfc2307(request, ldap_conn):
 
 
 @pytest.fixture
-def simple_rfc2307(request, ldap_conn):
+def simple(request, ldap_conn):
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     ent_list.add_user('usr\\\\001', 181818, 181818)
     ent_list.add_group("group1", 181818)
@@ -180,7 +180,7 @@ def simple_rfc2307(request, ldap_conn):
 
 
 @pytest.fixture
-def sanity_rfc2307_bis(request, ldap_conn):
+def sanity_bis(request, ldap_conn):
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     ent_list.add_user("user1", 1001, 2001)
     ent_list.add_user("user2", 1002, 2002)
@@ -238,14 +238,14 @@ def sanity_rfc2307_bis(request, ldap_conn):
     return None
 
 
-def test_regression_ticket2163(ldap_conn, simple_rfc2307):
+def test_regression_ticket2163(ldap_conn, simple):
     ent.assert_passwd_by_name(
         'usr\\001',
         dict(name='usr\\001', passwd='*', uid=181818, gid=181818,
              gecos='181818', shell='/bin/bash'))
 
 
-def test_sanity_rfc2307(ldap_conn, sanity_rfc2307):
+def test_sanity(ldap_conn, sanity):
     passwd_pattern = ent.contains_only(
         dict(name='user1', passwd='*', uid=1001, gid=2001, gecos='1001', dir='/home/user1', shell='/bin/bash'),
         dict(name='user2', passwd='*', uid=1002, gid=2002, gecos='1002', dir='/home/user2', shell='/bin/bash'),
@@ -272,7 +272,7 @@ def test_sanity_rfc2307(ldap_conn, sanity_rfc2307):
         grp.getgrgid(1)
 
 
-def test_sanity_rfc2307_bis(ldap_conn, sanity_rfc2307_bis):
+def test_sanity_bis(ldap_conn, sanity_bis):
     passwd_pattern = ent.contains_only(
         dict(name='user1', passwd='*', uid=1001, gid=2001, gecos='1001', dir='/home/user1', shell='/bin/bash'),
         dict(name='user2', passwd='*', uid=1002, gid=2002, gecos='1002', dir='/home/user2', shell='/bin/bash'),

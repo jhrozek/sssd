@@ -131,7 +131,7 @@ def load_data_to_ldap(request, ldap_conn):
 
 
 @pytest.fixture
-def sanity_rfc2307(request, ldap_conn):
+def sanity(request, ldap_conn):
     load_data_to_ldap(request, ldap_conn)
 
     conf = unindent("""\
@@ -156,7 +156,7 @@ def sanity_rfc2307(request, ldap_conn):
 
 
 @pytest.fixture
-def fqname_rfc2307(request, ldap_conn):
+def fqname(request, ldap_conn):
     load_data_to_ldap(request, ldap_conn)
 
     conf = unindent("""\
@@ -182,7 +182,7 @@ def fqname_rfc2307(request, ldap_conn):
 
 
 @pytest.fixture
-def fqname_case_insensitive_rfc2307(request, ldap_conn):
+def fqname_case_insensitive(request, ldap_conn):
     load_data_to_ldap(request, ldap_conn)
 
     conf = unindent("""\
@@ -208,7 +208,7 @@ def fqname_case_insensitive_rfc2307(request, ldap_conn):
     return None
 
 
-def test_getpwnam(ldap_conn, sanity_rfc2307):
+def test_getpwnam(ldap_conn, sanity):
     ent.assert_passwd_by_name(
         'user1',
         dict(name='user1', passwd='*', uid=1001, gid=2001,
@@ -291,13 +291,13 @@ def test_getpwnam(ldap_conn, sanity_rfc2307):
              gecos='1023', shell='/bin/bash'))
 
 
-def test_getpwnam_with_mc(ldap_conn, sanity_rfc2307):
-    test_getpwnam(ldap_conn, sanity_rfc2307)
+def test_getpwnam_with_mc(ldap_conn, sanity):
+    test_getpwnam(ldap_conn, sanity)
     stop_sssd()
-    test_getpwnam(ldap_conn, sanity_rfc2307)
+    test_getpwnam(ldap_conn, sanity)
 
 
-def test_getgrnam_simple(ldap_conn, sanity_rfc2307):
+def test_getgrnam_simple(ldap_conn, sanity):
     ent.assert_group_by_name("group1", dict(name="group1", gid=2001))
     ent.assert_group_by_gid(2001, dict(name="group1", gid=2001))
 
@@ -317,13 +317,13 @@ def test_getgrnam_simple(ldap_conn, sanity_rfc2307):
     ent.assert_group_by_gid(2020, dict(name="group2x", gid=2020))
 
 
-def test_getgrnam_simple_with_mc(ldap_conn, sanity_rfc2307):
-    test_getgrnam_simple(ldap_conn, sanity_rfc2307)
+def test_getgrnam_simple_with_mc(ldap_conn, sanity):
+    test_getgrnam_simple(ldap_conn, sanity)
     stop_sssd()
-    test_getgrnam_simple(ldap_conn, sanity_rfc2307)
+    test_getgrnam_simple(ldap_conn, sanity)
 
 
-def test_getgrnam_membership(ldap_conn, sanity_rfc2307):
+def test_getgrnam_membership(ldap_conn, sanity):
     ent.assert_group_by_name(
         "group1",
         dict(mem=ent.contains_only("user1", "user11", "user21")))
@@ -367,10 +367,10 @@ def test_getgrnam_membership(ldap_conn, sanity_rfc2307):
         dict(mem=ent.contains_only("user21", "user22", "user23")))
 
 
-def test_getgrnam_membership_with_mc(ldap_conn, sanity_rfc2307):
-    test_getgrnam_membership(ldap_conn, sanity_rfc2307)
+def test_getgrnam_membership_with_mc(ldap_conn, sanity):
+    test_getgrnam_membership(ldap_conn, sanity)
     stop_sssd()
-    test_getgrnam_membership(ldap_conn, sanity_rfc2307)
+    test_getgrnam_membership(ldap_conn, sanity)
 
 
 def assert_user_gids_equal(user, expected_gids):
@@ -385,7 +385,7 @@ def assert_user_gids_equal(user, expected_gids):
         )
 
 
-def test_initgroups(ldap_conn, sanity_rfc2307):
+def test_initgroups(ldap_conn, sanity):
     assert_user_gids_equal('user1', [2000, 2001])
     assert_user_gids_equal('user2', [2000, 2002])
     assert_user_gids_equal('user3', [2000, 2003])
@@ -399,13 +399,13 @@ def test_initgroups(ldap_conn, sanity_rfc2307):
     assert_user_gids_equal('user23', [2020, 2003])
 
 
-def test_initgroups_with_mc(ldap_conn, sanity_rfc2307):
-    test_initgroups(ldap_conn, sanity_rfc2307)
+def test_initgroups_with_mc(ldap_conn, sanity):
+    test_initgroups(ldap_conn, sanity)
     stop_sssd()
-    test_initgroups(ldap_conn, sanity_rfc2307)
+    test_initgroups(ldap_conn, sanity)
 
 
-def test_initgroups_fqname_with_mc(ldap_conn, fqname_rfc2307):
+def test_initgroups_fqname_with_mc(ldap_conn, fqname):
     assert_user_gids_equal('user1@LDAP', [2000, 2001])
     stop_sssd()
     assert_user_gids_equal('user1@LDAP', [2000, 2001])
@@ -447,7 +447,7 @@ def assert_stored_last_initgroups(user1_case1, user1_case2, user1_case_last,
 
 
 def test_initgroups_case_insensitive_with_mc1(ldap_conn,
-                                              fqname_case_insensitive_rfc2307):
+                                              fqname_case_insensitive):
     user1_case1 = 'User1@LDAP'
     user1_case2 = 'uSer1@LDAP'
     user1_case_last = 'usEr1@LDAP'
@@ -459,7 +459,7 @@ def test_initgroups_case_insensitive_with_mc1(ldap_conn,
 
 
 def test_initgroups_case_insensitive_with_mc2(ldap_conn,
-                                              fqname_case_insensitive_rfc2307):
+                                              fqname_case_insensitive):
     user1_case1 = 'usEr1@LDAP'
     user1_case2 = 'User1@LDAP'
     user1_case_last = 'uSer1@LDAP'
@@ -471,7 +471,7 @@ def test_initgroups_case_insensitive_with_mc2(ldap_conn,
 
 
 def test_initgroups_case_insensitive_with_mc3(ldap_conn,
-                                              fqname_case_insensitive_rfc2307):
+                                              fqname_case_insensitive):
     user1_case1 = 'uSer1@LDAP'
     user1_case2 = 'usEr1@LDAP'
     user1_case_last = 'User1@LDAP'
@@ -510,7 +510,7 @@ def run_simple_test_with_initgroups():
     assert_initgroups_equal("user1", 2001, [2000, 2001])
 
 
-def test_invalidation_of_gids_after_initgroups(ldap_conn, sanity_rfc2307):
+def test_invalidation_of_gids_after_initgroups(ldap_conn, sanity):
 
     # the sssd cache was empty and not all user's group were
     # resolved with getgr{nm,gid}. Therefore there is a change in
@@ -549,7 +549,7 @@ def test_invalidation_of_gids_after_initgroups(ldap_conn, sanity_rfc2307):
             grp.getgrgid(gid)
 
 
-def test_initgroups_without_change_in_membership(ldap_conn, sanity_rfc2307):
+def test_initgroups_without_change_in_membership(ldap_conn, sanity):
 
     # the sssd cache was empty and not all user's group were
     # resolved with getgr{nm,gid}. Therefore there is a change in
@@ -615,7 +615,7 @@ def assert_missing_mc_records_for_user1():
         "User user1, errno:%d" % err
 
 
-def test_invalidate_user_before_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_user_before_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -628,7 +628,7 @@ def test_invalidate_user_before_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_user_after_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_user_after_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -641,7 +641,7 @@ def test_invalidate_user_after_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_users_before_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_users_before_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -654,7 +654,7 @@ def test_invalidate_users_before_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_users_after_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_users_after_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -667,7 +667,7 @@ def test_invalidate_users_after_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_group_before_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_group_before_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -680,7 +680,7 @@ def test_invalidate_group_before_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_group_after_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_group_after_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -693,7 +693,7 @@ def test_invalidate_group_after_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_groups_before_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_groups_before_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -706,7 +706,7 @@ def test_invalidate_groups_before_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_groups_after_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_groups_after_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -719,7 +719,7 @@ def test_invalidate_groups_after_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_everything_before_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_everything_before_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
@@ -732,7 +732,7 @@ def test_invalidate_everything_before_stop(ldap_conn, sanity_rfc2307):
     assert_missing_mc_records_for_user1()
 
 
-def test_invalidate_everything_after_stop(ldap_conn, sanity_rfc2307):
+def test_invalidate_everything_after_stop(ldap_conn, sanity):
     # initialize cache with full ID
     (res, errno, _) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
