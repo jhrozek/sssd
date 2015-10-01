@@ -962,11 +962,13 @@ static errno_t pam_forwarder_parse_data(struct cli_ctx *cctx, struct pam_data *p
     } else {
         /* Only SSS_PAM_PREAUTH request may have a missing name, e.g. if the
          * name is determined with the help of a certificate */
-        if (pd->cmd == SSS_PAM_PREAUTH) {
+        if (pd->cmd == SSS_PAM_PREAUTH
+                && may_do_cert_auth(talloc_get_type(cctx->rctx->pvt_ctx,
+                                                    struct pam_ctx), pd)) {
             ret = EOK;
         } else {
             DEBUG(SSSDBG_CRIT_FAILURE, "Missing logon name in PAM request.\n");
-            ret = EINVAL;
+            ret = ERR_NO_CREDS;
             goto done;
         }
     }
@@ -1076,7 +1078,6 @@ static int pam_forwarder(struct cli_ctx *cctx, int pam_cmd)
         }
         goto done;
     } else if (ret != EOK) {
-        ret = EINVAL;
         goto done;
     }
 
@@ -1594,6 +1595,11 @@ static int pam_check_user_done(struct pam_auth_req *preq, int ret)
 
     case ENOENT:
         preq->pd->pam_status = PAM_USER_UNKNOWN;
+        pam_reply(preq);
+        break;
+
+    case ERR_NO_CREDS:
+        preq->pd->pam_status = PAM_CRED_INSUFFICIENT;
         pam_reply(preq);
         break;
 
