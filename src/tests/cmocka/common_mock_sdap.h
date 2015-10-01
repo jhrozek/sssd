@@ -26,6 +26,11 @@
 #include "util/util.h"
 #include "providers/ldap/sdap.h"
 
+struct sdap_options *mock_sdap_options(TALLOC_CTX *mem_ctx,
+                                       struct sdap_attr_map *src_user_map,
+                                       struct sdap_attr_map *src_group_map,
+                                       struct dp_option *src_basic_opts);
+
 struct sdap_options *mock_sdap_options_ldap(TALLOC_CTX *mem_ctx,
                                             struct sss_domain_info *domain,
                                             struct confdb_ctx *confdb_ctx,

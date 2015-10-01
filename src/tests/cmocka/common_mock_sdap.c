@@ -40,6 +40,32 @@ struct sdap_id_ctx *mock_sdap_id_ctx(TALLOC_CTX *mem_ctx,
     return sdap_id_ctx;
 }
 
+struct sdap_options *mock_sdap_options(TALLOC_CTX *mem_ctx,
+                                       struct sdap_attr_map *src_user_map,
+                                       struct sdap_attr_map *src_group_map,
+                                       struct dp_option *src_basic_opts)
+{
+    struct sdap_options *opts;
+    errno_t ret;
+
+    opts = talloc_zero(mem_ctx, struct sdap_options);
+    assert_non_null(opts);
+
+    ret = sdap_copy_map(opts, src_user_map,
+                        SDAP_OPTS_USER, &opts->user_map);
+    assert_int_equal(ret, ERR_OK);
+
+    ret = sdap_copy_map(opts, src_group_map,
+                        SDAP_OPTS_GROUP, &opts->group_map);
+    assert_int_equal(ret, ERR_OK);
+
+    ret = dp_copy_defaults(opts, src_basic_opts,
+                           SDAP_OPTS_BASIC, &opts->basic);
+    assert_int_equal(ret, ERR_OK);
+
+    return opts;
+}
+
 struct sdap_options *mock_sdap_options_ldap(TALLOC_CTX *mem_ctx,
                                             struct sss_domain_info *domain,
                                             struct confdb_ctx *confdb_ctx,
@@ -67,73 +93,3 @@ struct sdap_handle *mock_sdap_handle(TALLOC_CTX *mem_ctx)
     return handle;
 }
 
-/*
- * Mock sdap_async.c
- *
- * Every function that is placed in sdap_async.c module has to be mocked,
- * to avoid any attempt to communicate with remote servers. Therefore no test
- * can be compiled with sdap_async.c. If any of these functions is needed,
- * their mock equivalent shall be used.
- */
-
-bool sdap_has_deref_support(struct sdap_handle *sh, struct sdap_options *opts)
-{
-    return sss_mock_type(bool);
-}
-
-struct tevent_req *sdap_get_generic_send(TALLOC_CTX *mem_ctx,
-                                         struct tevent_context *ev,
-                                         struct sdap_options *opts,
-                                         struct sdap_handle *sh,
-                                         const char *search_base,
-                                         int scope,
-                                         const char *filter,
-                                         const char **attrs,
-                                         struct sdap_attr_map *map,
-                                         int map_num_attrs,
-                                         int timeout,
-                                         bool allow_paging)
-{
-    return test_req_succeed_send(mem_ctx, ev);
-}
-
-int sdap_get_generic_recv(struct tevent_req *req,
-                          TALLOC_CTX *mem_ctx,
-                          size_t *reply_count,
-                          struct sysdb_attrs ***reply)
-{
-    TEVENT_REQ_RETURN_ON_ERROR(req);
-
-    *reply_count = sss_mock_type(size_t);
-    *reply = sss_mock_ptr_type(struct sysdb_attrs **);
-
-    return sss_mock_type(int);
-}
-
-struct tevent_req * sdap_deref_search_send(TALLOC_CTX *mem_ctx,
-                                           struct tevent_context *ev,
-                                           struct sdap_options *opts,
-                                           struct sdap_handle *sh,
-                                           const char *base_dn,
-                                           const char *deref_attr,
-                                           const char **attrs,
-                                           int num_maps,
-                                           struct sdap_attr_map_info *maps,
-                                           int timeout)
-{
-    return test_req_succeed_send(mem_ctx, ev);
-}
-
-int sdap_deref_search_recv(struct tevent_req *req,
-                           TALLOC_CTX *mem_ctx,
-                           size_t *reply_count,
-                           struct sdap_deref_attrs ***reply)
-{
-    TEVENT_REQ_RETURN_ON_ERROR(req);
-
-    *reply_count = sss_mock_type(size_t);
-    *reply = talloc_steal(mem_ctx,
-                          sss_mock_ptr_type(struct sdap_deref_attrs **));
-
-    return EOK;
-}

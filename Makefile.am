@@ -238,6 +238,7 @@ if HAVE_CMOCKA
         test_cert_utils \
         test_ldap_id_cleanup \
         test_data_provider_be \
+        sdap-async-tests \
         $(NULL)
 
 if HAVE_LIBRESOLV
@@ -1864,6 +1865,7 @@ TEST_MOCK_PROVIDER_OBJ = \
      src/providers/ldap/sdap_utils.c \
      src/providers/ldap/sdap_range.c \
      src/tests/cmocka/common_mock_sdap.c \
+     src/tests/cmocka/common_mock_sdap_async.c \
      src/tests/cmocka/common_mock_sysdb_objects.c
 
 EXTRA_nss_srv_tests_DEPENDENCIES = \
@@ -2266,6 +2268,34 @@ sdap_tests_LDADD = \
     libsss_test_common.la \
     $(NULL)
 
+sdap_async_tests_SOURCES = \
+    src/providers/data_provider_opts.c \
+    src/providers/ldap/sdap_domain.c \
+    src/providers/ldap/sdap.c \
+    src/providers/ldap/sdap_range.c \
+    src/providers/ldap/sdap_async.c \
+    src/providers/ldap/sdap_fd_events.c \
+    src/util/sss_ldap.c \
+    src/tests/cmocka/common_mock_sdap.c \
+    src/tests/cmocka/test_sdap_async.c \
+    $(NULL)
+sdap_async_tests_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(SSS_CRYPT_CFLAGS) \
+    $(NULL)
+sdap_async_tests_LDFLAGS = \
+    $(NULL)
+sdap_async_tests_LDADD = \
+    $(CMOCKA_LIBS) \
+    $(TALLOC_LIBS) \
+    $(LDB_LIBS) \
+    $(POPT_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    $(SSS_CRYPT_LIBS) \
+    $(OPENLDAP_LIBS) \
+    libsss_test_common.la \
+    $(NULL)
+
 if BUILD_IFP
 ifp_tests_SOURCES = \
      $(TEST_MOCK_RESP_OBJ) \
@@ -2525,6 +2555,7 @@ test_ipa_subdom_util_LDADD = \
 test_ipa_subdom_server_SOURCES = \
     $(libsss_krb5_common_la_SOURCES) \
     src/tests/cmocka/common_mock_sdap.c \
+    src/tests/cmocka/common_mock_sdap_async.c \
     src/tests/cmocka/common_mock_be.c \
     src/tests/cmocka/common_mock_krb5.c \
     src/tests/cmocka/test_ipa_subdomains_server.c \
