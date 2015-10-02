@@ -91,17 +91,17 @@ def create_ldap_fixture(request, ldap_conn, ent_list = None):
     create_ldap_cleanup(request, ldap_conn, ent_list)
 
 
-def format_basic_conf(ldap_conn, bis, enum):
+def format_basic_conf(ldap_conn, schema, enum):
     """Format a basic SSSD configuration"""
-    if bis:
-        schema_conf = unindent("""\
-            ldap_schema             = rfc2307bis
+    schema_conf = unindent("""\
+        ldap_schema             = {schema}
+    """).format(**locals())
+
+    if schema == 'rfc2307bis':
+        schema_conf += unindent("""
             ldap_group_object_class = groupOfNames
-        """)
-    else:
-        schema_conf = unindent("""\
-            ldap_schema             = rfc2307
-        """)
+        """).format(**locals())
+
     return unindent("""\
         [sssd]
         debug_level         = 0xffff
@@ -126,11 +126,47 @@ def format_basic_conf(ldap_conn, bis, enum):
         ldap_search_base    = {ldap_conn.ds_inst.base_dn}
     """).format(**locals())
 
+def format_conf_2307(ldap_conn, enum):
+    """Format a basic SSSD configuration for the rfc2307 schema"""
+    return format_basic_conf(ldap_conn, "rfc2307", enum);
 
-def format_interactive_conf(ldap_conn, bis):
-    """Format an SSSD configuration with all caches refreshing in 4 seconds"""
+
+def format_conf_2307_bis(ldap_conn, enum):
+    """Format a basic SSSD configuration for the rfc2307bis schema"""
+    return format_basic_conf(ldap_conn, "rfc2307bis", enum);
+
+
+def format_conf_ad(ldap_conn, enum):
+    """Format a basic SSSD configuration for the AD LDAP schema"""
+    return format_basic_conf(ldap_conn, "ad", enum);
+
+
+def format_interactive_conf_2307(ldap_conn):
+    """
+       Format an SSSD configuration with all caches refreshing in 4 seconds
+       using the rfc2307 schema
+    """
     return \
-        format_basic_conf(ldap_conn, bis, True) + \
+        format_conf_2307(ldap_conn, True) + \
+        unindent("""
+            [nss]
+            memcache_timeout                    = 4
+            enum_cache_timeout                  = 4
+            entry_negative_timeout              = 4
+
+            [domain/LDAP]
+            ldap_enumeration_refresh_timeout    = 4
+            ldap_purge_cache_timeout            = 1
+            entry_cache_timeout                 = 4
+        """)
+
+def format_interactive_conf_2307bis(ldap_conn):
+    """
+       Format an SSSD configuration with all caches refreshing in 4 seconds
+       using the rfc2307bis schema
+    """
+    return \
+        format_conf_2307_bis(ldap_conn, True) + \
         unindent("""
             [nss]
             memcache_timeout                    = 4
@@ -225,7 +261,7 @@ def sanity(request, ldap_conn):
     ent_list.add_group("two_user_group", 2012, ["user1", "user2"])
     create_ldap_fixture(request, ldap_conn, ent_list)
 
-    create_conf_fixture(request, format_basic_conf(ldap_conn, False, True))
+    create_conf_fixture(request, format_conf_2307(ldap_conn, True))
     create_sssd_fixture(request)
     return None
 
@@ -236,7 +272,7 @@ def simple(request, ldap_conn):
     ent_list.add_user('usr\\\\001', 181818, 181818)
     ent_list.add_group("group1", 181818)
     create_ldap_fixture(request, ldap_conn, ent_list)
-    create_conf_fixture(request, format_basic_conf(ldap_conn, False, False))
+    create_conf_fixture(request, format_conf_2307(ldap_conn, False))
     create_sssd_fixture(request)
     return None
 
@@ -269,7 +305,24 @@ def sanity_bis(request, ldap_conn):
                            [], ["one_user_group1", "one_user_group2"])
 
     create_ldap_fixture(request, ldap_conn, ent_list)
-    create_conf_fixture(request, format_basic_conf(ldap_conn, True, True))
+    create_conf_fixture(request, format_conf_2307_bis(ldap_conn, True))
+    create_sssd_fixture(request)
+    return None
+
+@pytest.fixture
+def neg_posix_attrs(request, ldap_conn):
+    ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
+    ent_list.add_user('neg_user', -1, -1)
+    create_ldap_fixture(request, ldap_conn, ent_list)
+    conf = \
+        format_conf_ad(ldap_conn, False) + \
+        unindent("""
+            [domain/LDAP]
+            ldap_user_object_class = posixAccount
+            ldap_user_name = uid
+        """).format(**locals())
+    print conf
+    create_conf_fixture(request, conf)
     create_sssd_fixture(request)
     return None
 
@@ -354,7 +407,7 @@ def refresh_after_cleanup_task(request, ldap_conn):
     create_ldap_fixture(request, ldap_conn, ent_list)
 
     conf = \
-        format_basic_conf(ldap_conn, True, False) + \
+        format_conf_2307_bis(ldap_conn, False) + \
         unindent("""
             [domain/LDAP]
             entry_cache_user_timeout = 1
@@ -391,7 +444,7 @@ def test_refresh_after_cleanup_task(ldap_conn, refresh_after_cleanup_task):
 def blank(request, ldap_conn):
     """Create blank RFC2307 directory fixture with interactive SSSD conf"""
     create_ldap_cleanup(request, ldap_conn)
-    create_conf_fixture(request, format_interactive_conf(ldap_conn, False))
+    create_conf_fixture(request, format_interactive_conf_2307(ldap_conn))
     create_sssd_fixture(request)
 
 
@@ -399,7 +452,7 @@ def blank(request, ldap_conn):
 def blank_bis(request, ldap_conn):
     """Create blank RFC2307bis directory fixture with interactive SSSD conf"""
     create_ldap_cleanup(request, ldap_conn)
-    create_conf_fixture(request, format_interactive_conf(ldap_conn, True))
+    create_conf_fixture(request, format_interactive_conf_2307bis(ldap_conn))
     create_sssd_fixture(request)
 
 
@@ -413,7 +466,7 @@ def user_and_group(request, ldap_conn):
     ent_list.add_user("user", 1001, 2000)
     ent_list.add_group("group", 2001)
     create_ldap_fixture(request, ldap_conn, ent_list)
-    create_conf_fixture(request, format_interactive_conf(ldap_conn, False))
+    create_conf_fixture(request, format_interactive_conf_2307(ldap_conn))
     create_sssd_fixture(request)
     return None
 
@@ -429,7 +482,7 @@ def user_and_groups_bis(request, ldap_conn):
     ent_list.add_group_bis("group1", 2001)
     ent_list.add_group_bis("group2", 2002)
     create_ldap_fixture(request, ldap_conn, ent_list)
-    create_conf_fixture(request, format_interactive_conf(ldap_conn, True))
+    create_conf_fixture(request, format_interactive_conf_2307bis(ldap_conn))
     create_sssd_fixture(request)
     return None
 
@@ -545,7 +598,7 @@ def test_add_remove_membership_bis(ldap_conn, user_and_groups_bis):
 def blank(request, ldap_conn):
     """Create blank RFC2307 directory fixture with interactive SSSD conf"""
     create_ldap_cleanup(request, ldap_conn)
-    create_conf_fixture(request, format_interactive_conf(ldap_conn, False))
+    create_conf_fixture(request, format_interactive_conf_2307(ldap_conn))
     create_sssd_fixture(request)
 
 
@@ -585,7 +638,7 @@ def test_filter_users(request, ldap_conn, three_users_three_groups,
                                             filter_users))
 
             conf = \
-                format_basic_conf(ldap_conn, False, True) + \
+                format_conf_2307(ldap_conn, True) + \
                 unindent("""
                     [nss]
                     filter_users            = {filter_users_str}
@@ -635,7 +688,7 @@ def test_filter_groups(request, ldap_conn, three_users_three_groups,
                                          filter_groups))
 
         conf = \
-            format_basic_conf(ldap_conn, False, True) + \
+            format_conf_2307(ldap_conn, True) + \
             unindent("""
                 [nss]
                 filter_groups   = {filter_groups_str}
@@ -684,7 +737,7 @@ def test_filter_groups_bis(request, ldap_conn, three_users_three_groups_bis,
                                          filter_groups))
 
         conf = \
-            format_basic_conf(ldap_conn, True, True) + \
+            format_conf_2307_bis(ldap_conn, True) + \
             unindent("""
                 [nss]
                 filter_groups   = {filter_groups_str}
@@ -721,7 +774,7 @@ def override_homedir(request, ldap_conn):
                       homeDirectory = "")
     create_ldap_fixture(request, ldap_conn, ent_list)
     conf = \
-        format_basic_conf(ldap_conn, False, True) + \
+        format_conf_2307(ldap_conn, True) + \
         unindent("""\
             [nss]
             override_homedir    = /home/B
@@ -752,7 +805,7 @@ def fallback_homedir(request, ldap_conn):
                       homeDirectory = "")
     create_ldap_fixture(request, ldap_conn, ent_list)
     conf = \
-        format_basic_conf(ldap_conn, False, True) + \
+        format_conf_2307(ldap_conn, True) + \
         unindent("""\
             [nss]
             fallback_homedir    = /home/B
@@ -783,7 +836,7 @@ def override_shell(request, ldap_conn):
                       loginShell = "")
     create_ldap_fixture(request, ldap_conn, ent_list)
     conf = \
-        format_basic_conf(ldap_conn, False, True) + \
+        format_conf_2307(ldap_conn, True) + \
         unindent("""\
             [nss]
             override_shell      = /bin/B
@@ -814,7 +867,7 @@ def shell_fallback(request, ldap_conn):
                       loginShell = "")
     create_ldap_fixture(request, ldap_conn, ent_list)
     conf = \
-        format_basic_conf(ldap_conn, False, True) + \
+        format_conf_2307(ldap_conn, True) + \
         unindent("""\
             [nss]
             shell_fallback      = /bin/fallback
@@ -847,7 +900,7 @@ def default_shell(request, ldap_conn):
                       loginShell = "")
     create_ldap_fixture(request, ldap_conn, ent_list)
     conf = \
-        format_basic_conf(ldap_conn, False, True) + \
+        format_conf_2307(ldap_conn, True) + \
         unindent("""\
             [nss]
             default_shell       = /bin/default
@@ -882,7 +935,7 @@ def vetoed_shells(request, ldap_conn):
                       loginShell = "")
     create_ldap_fixture(request, ldap_conn, ent_list)
     conf = \
-        format_basic_conf(ldap_conn, False, True) + \
+        format_conf_2307(ldap_conn, True) + \
         unindent("""\
             [nss]
             default_shell       = /bin/default
@@ -904,3 +957,26 @@ def test_vetoed_shells(vetoed_shells):
                  shell="/bin/default")
         )
     )
+
+def test_broken_posix_in_ad(ldap_conn, neg_posix_attrs):
+    """ Test that LDAP provider with AD schema doesn't go offline on
+        encountering a wrong POSIX attribute
+    """
+
+    try:
+        ent.get_passwd_by_name("no_such_user")
+    except KeyError as err:
+        pass
+    else:
+        raise KeyError("Unexpected user found!\n")
+
+    time.sleep(2)
+
+    # Add the user
+    e = ldap_ent.user(ldap_conn.ds_inst.base_dn, "user", 1001, 2000)
+    ldap_conn.add_s(*e)
+    time.sleep(2)
+
+    ent.assert_passwd_by_name(
+        'user',
+        dict(name='user', passwd='*', uid=1001, gid=2000)),
