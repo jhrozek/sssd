@@ -794,3 +794,38 @@ done:
     talloc_free(tmp_ctx);
     return fqname;
 }
+
+char *sss_ioname2internal(TALLOC_CTX *mem_ctx,
+                          struct sss_domain_info *dom,
+                          char *ioname)
+{
+    char *shortname;
+    char *domname;
+    char *_name = NULL;
+    TALLOC_CTX *tmp_ctx;
+    errno_t ret;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return NULL;
+    }
+
+    ret = sss_parse_name(tmp_ctx, dom->names, ioname, &domname, &shortname);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sss_parse_name failed [%d]: %s\n",
+              ret, sss_strerror(ret));
+        goto done;
+    }
+
+    _name = sss_create_internal_fqname(mem_ctx, shortname,
+                                       domname ? domname : dom->name);
+    if (_name == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Failed to format group name.\n");
+        goto done;
+    }
+
+done:
+    talloc_free(tmp_ctx);
+    return _name;
+}

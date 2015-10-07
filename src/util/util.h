@@ -321,6 +321,9 @@ int sss_parse_name_for_domains(TALLOC_CTX *memctx,
                                const char *default_domain,
                                const char *orig, char **domain, char **name);
 
+char *sss_ioname2internal(TALLOC_CTX *mem_ctx,
+                          struct sss_domain_info *dom,
+                          char *ioname);
 char *
 sss_get_cased_name(TALLOC_CTX *mem_ctx, const char *orig_name,
                    bool case_sensitive);
