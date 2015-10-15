@@ -1292,6 +1292,7 @@ sssd_pam_SOURCES = \
     src/responder/pam/pamsrv.c \
     src/responder/pam/pamsrv_cmd.c \
     src/responder/pam/pamsrv_extract.c \
+    src/responder/pam/pamsrv_reply.c \
     src/responder/pam/pamsrv_p11.c \
     src/responder/pam/pamsrv_dp.c \
     src/responder/pam/pam_helpers.c \
@@ -2179,6 +2180,7 @@ pam_srv_tests_SOURCES = \
     src/sss_client/pam_message.c \
     src/responder/pam/pamsrv_cmd.c \
     src/responder/pam/pamsrv_extract.c \
+    src/responder/pam/pamsrv_reply.c \
     src/responder/pam/pamsrv_p11.c \
     src/responder/pam/pam_helpers.c \
     src/responder/pam/pamsrv_dp.c \

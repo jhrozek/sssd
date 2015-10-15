@@ -1442,6 +1442,7 @@ void test_pam_offline_chauthtok_prelim(void **state)
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
 
     pam_test_ctx->exp_pam_status = PAM_AUTHINFO_UNAVAIL;
+    pam_test_ctx->pctx->warn_msgs.pam_verbosity = PAM_VERBOSITY_INFO;
 
     set_cmd_cb(test_pam_offline_chauthtok_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_CHAUTHTOK_PRELIM,
@@ -1463,6 +1464,7 @@ void test_pam_offline_chauthtok(void **state)
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
 
     pam_test_ctx->exp_pam_status = PAM_AUTHINFO_UNAVAIL;
+    pam_test_ctx->pctx->warn_msgs.pam_verbosity = PAM_VERBOSITY_INFO;
 
     set_cmd_cb(test_pam_offline_chauthtok_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_CHAUTHTOK,

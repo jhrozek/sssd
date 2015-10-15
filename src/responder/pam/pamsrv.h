@@ -31,6 +31,13 @@ struct pam_auth_req;
 
 typedef void (pam_dp_callback_t)(struct pam_auth_req *preq);
 
+struct pam_warn_msgs {
+    char *pam_account_expired_message;
+    char *pam_account_locked_message;
+
+    int pam_verbosity;
+};
+
 struct pam_ctx {
     struct resp_ctx *rctx;
     time_t id_timeout;
@@ -45,6 +52,8 @@ struct pam_ctx {
     bool cert_auth;
     int p11_child_debug_fd;
     char *nss_db;
+
+    struct pam_warn_msgs warn_msgs;
 };
 
 struct pam_auth_dp_req {
@@ -104,6 +113,23 @@ errno_t filter_responses(struct confdb_ctx *cdb,
                          struct response_data *resp_list,
                          struct pam_data *pd);
 
+enum pam_verbosity {
+    PAM_VERBOSITY_NO_MESSAGES = 0,
+    PAM_VERBOSITY_IMPORTANT,
+    PAM_VERBOSITY_INFO,
+    PAM_VERBOSITY_DEBUG
+};
+
 errno_t pam_forwarder_parse_data(struct cli_ctx *cctx, struct pam_data *pd);
+
+/* PAM responder output API */
+#define DEFAULT_PAM_VERBOSITY PAM_VERBOSITY_IMPORTANT
+
+void pamsrv_exp_warn(struct pam_data *pd,
+                     int pam_verbosity,
+                     const char *pam_account_expired_message);
+
+void pamsrv_lock_warn(struct pam_data *pd,
+                      const char *pam_account_locked_message);
 
 #endif /* __PAMSRV_H__ */

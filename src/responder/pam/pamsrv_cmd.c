@@ -34,15 +34,6 @@
 #include "responder/common/cache_req/cache_req.h"
 #include "db/sysdb.h"
 
-enum pam_verbosity {
-    PAM_VERBOSITY_NO_MESSAGES = 0,
-    PAM_VERBOSITY_IMPORTANT,
-    PAM_VERBOSITY_INFO,
-    PAM_VERBOSITY_DEBUG
-};
-
-#define DEFAULT_PAM_VERBOSITY PAM_VERBOSITY_IMPORTANT
-
 static errno_t
 pam_null_last_online_auth_with_curr_token(struct sss_domain_info *domain,
                                           const char *username);
@@ -52,54 +43,6 @@ pam_get_last_online_auth_with_curr_token(struct sss_domain_info *domain,
                                          uint64_t *_value);
 
 static void pam_reply(struct pam_auth_req *preq);
-
-static errno_t pack_user_info_msg(TALLOC_CTX *mem_ctx,
-                                  const char *user_error_message,
-                                  size_t *resp_len,
-                                  uint8_t **_resp)
-{
-    uint32_t resp_type = SSS_PAM_USER_INFO_ACCOUNT_EXPIRED;
-    size_t err_len;
-    uint8_t *resp;
-    size_t p;
-
-    err_len = strlen(user_error_message);
-    *resp_len = 2 * sizeof(uint32_t) + err_len;
-    resp = talloc_size(mem_ctx, *resp_len);
-    if (resp == NULL) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_size failed.\n");
-        return ENOMEM;
-    }
-
-    p = 0;
-    SAFEALIGN_SET_UINT32(&resp[p], resp_type, &p);
-    SAFEALIGN_SET_UINT32(&resp[p], err_len, &p);
-    safealign_memcpy(&resp[p], user_error_message, err_len, &p);
-    if (p != *resp_len) {
-        DEBUG(SSSDBG_FATAL_FAILURE, "Size mismatch\n");
-    }
-
-    *_resp = resp;
-    return EOK;
-}
-
-static void inform_user(struct pam_data* pd, const char *pam_message)
-{
-    size_t msg_len;
-    uint8_t *msg;
-    errno_t ret;
-
-    ret = pack_user_info_msg(pd, pam_message, &msg_len, &msg);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_CRIT_FAILURE,
-              "pack_user_info_account_expired failed.\n");
-    } else {
-        ret = pam_add_response(pd, SSS_PAM_USER_INFO, msg_len, msg);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "pam_add_response failed.\n");
-        }
-    }
-}
 
 static bool is_domain_requested(struct pam_data *pd, const char *domain_name)
 {
@@ -268,12 +211,12 @@ errno_t filter_responses(struct confdb_ctx *cdb,
                          struct response_data *resp_list,
                          struct pam_data *pd)
 {
-    int ret;
     struct response_data *resp;
     uint32_t user_info_type;
     int64_t expire_date = 0;
     int pam_verbosity = DEFAULT_PAM_VERBOSITY;
     char **pam_filter_opts = NULL;
+    int ret;
 
     ret = confdb_get_int(cdb, CONFDB_PAM_CONF_ENTRY,
                          CONFDB_PAM_VERBOSITY, DEFAULT_PAM_VERBOSITY,
@@ -396,49 +339,6 @@ static errno_t get_password_for_cache_auth(struct sss_auth_token *authtok,
     return EOK;
 }
 
-static errno_t add_warning_about_expiration(struct pam_data *pd,
-                                            struct confdb_ctx *cdb)
-{
-    char* pam_account_expired_message;
-    int pam_verbosity;
-    errno_t ret;
-
-    ret = confdb_get_int(cdb, CONFDB_PAM_CONF_ENTRY,
-                         CONFDB_PAM_VERBOSITY, DEFAULT_PAM_VERBOSITY,
-                         &pam_verbosity);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_CRIT_FAILURE,
-              "Failed to read PAM verbosity, not fatal.\n");
-        pam_verbosity = DEFAULT_PAM_VERBOSITY;
-    }
-
-    /* Account expiration warning is printed for sshd. If pam_verbosity
-     * is equal or above PAM_VERBOSITY_INFO then all services are informed
-     * about account expiration.
-     */
-    if (pd->pam_status == PAM_ACCT_EXPIRED &&
-        ((pd->service != NULL && strcasecmp(pd->service, "sshd") == 0) ||
-         pam_verbosity >= PAM_VERBOSITY_INFO)) {
-
-        ret = confdb_get_string(cdb, pd, CONFDB_PAM_CONF_ENTRY,
-                                CONFDB_PAM_ACCOUNT_EXPIRED_MESSAGE, "",
-                                &pam_account_expired_message);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_MINOR_FAILURE,
-                  "Failed to get expiration message: %d:[%s].\n",
-                  ret, sss_strerror(ret));
-            goto done;
-        }
-
-        inform_user(pd, pam_account_expired_message);
-    }
-
-    ret = EOK;
-
-done:
-    return ret;
-}
-
 static int pam_forwarder(struct cli_ctx *cctx, int pam_cmd);
 static void pam_handle_cached_login(struct pam_auth_req *preq, int ret,
                                     time_t expire_date, time_t delayed_until, bool cached_auth);
@@ -461,7 +361,6 @@ static void pam_reply(struct pam_auth_req *preq)
     uint32_t user_info_type;
     time_t exp_date = -1;
     time_t delay_until = -1;
-    char* pam_account_locked_message;
 
     pd = preq->pd;
     cctx = preq->cctx;
@@ -596,27 +495,15 @@ static void pam_reply(struct pam_auth_req *preq)
         goto done;
     }
 
-    ret = add_warning_about_expiration(pd, pctx->rctx->cdb);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_MINOR_FAILURE, "warn_about_expiration failed: %d:[%s]\n",
-              ret, sss_strerror(ret));
-        goto done;
-    }
+    /* Add informational messages to PAM reply for cases where the user
+     * is expired or locked out
+     */
+    pamsrv_exp_warn(pd,
+                    pctx->warn_msgs.pam_verbosity,
+                    pctx->warn_msgs.pam_account_locked_message);
 
-    if (pd->account_locked) {
-
-        ret = confdb_get_string(pctx->rctx->cdb, pd, CONFDB_PAM_CONF_ENTRY,
-                                CONFDB_PAM_ACCOUNT_LOCKED_MESSAGE, "",
-                                &pam_account_locked_message);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_MINOR_FAILURE,
-                  "Failed to get expiration message: %d:[%s].\n",
-                  ret, sss_strerror(ret));
-            goto done;
-        }
-
-        inform_user(pd, pam_account_locked_message);
-    }
+    pamsrv_lock_warn(pd,
+                     pctx->warn_msgs.pam_account_locked_message);
 
     ret = filter_responses(pctx->rctx->cdb, pd->resp_list, pd);
     if (ret != EOK) {

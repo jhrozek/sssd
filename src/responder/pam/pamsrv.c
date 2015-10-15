@@ -166,6 +166,42 @@ done:
     return ret;
 }
 
+static errno_t get_warn_msgs(struct pam_ctx *pctx)
+{
+    errno_t ret;
+
+    ret = confdb_get_int(pctx->rctx->cdb, CONFDB_PAM_CONF_ENTRY,
+                         CONFDB_PAM_VERBOSITY, DEFAULT_PAM_VERBOSITY,
+                         &pctx->warn_msgs.pam_verbosity);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+            "Failed to read PAM verbosity, not fatal.\n");
+        pctx->warn_msgs.pam_verbosity = DEFAULT_PAM_VERBOSITY;
+    }
+
+    ret = confdb_get_string(pctx->rctx->cdb, pctx, CONFDB_PAM_CONF_ENTRY,
+                            CONFDB_PAM_ACCOUNT_EXPIRED_MESSAGE, "",
+                            &pctx->warn_msgs.pam_account_expired_message);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Failed to get expiration message: %d:[%s].\n",
+              ret, sss_strerror(ret));
+        return ret;
+    }
+
+    ret = confdb_get_string(pctx->rctx->cdb, pctx, CONFDB_PAM_CONF_ENTRY,
+                            CONFDB_PAM_ACCOUNT_LOCKED_MESSAGE, "",
+                            &pctx->warn_msgs.pam_account_locked_message);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+                "Failed to get expiration message: %d:[%s].\n",
+                ret, sss_strerror(ret));
+        return ret;
+    }
+
+    return EOK;
+}
+
 static int pam_process_init(TALLOC_CTX *mem_ctx,
                             struct tevent_context *ev,
                             struct confdb_ctx *cdb,
@@ -215,6 +251,13 @@ static int pam_process_init(TALLOC_CTX *mem_ctx,
     ret = get_public_domains(pctx, pctx);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE, "get_public_domains failed: %d:[%s].\n",
+              ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = get_warn_msgs(pctx);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "get_warn_msgs failed: %d:[%s].\n",
               ret, sss_strerror(ret));
         goto done;
     }
