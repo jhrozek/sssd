@@ -21,6 +21,10 @@ TESTS_ENVIRONMENT = \
 
 dist_noinst_SCRIPTS = \
     cwrap_test_setup.sh \
+    become_user-tests.sh \
+    server-tests.sh \
+    usertools-tests.sh \
+    responder_common-tests.sh \
     $(NULL)
 
 SSSD_LIBS = \
@@ -89,7 +93,12 @@ endif # HAVE_UID_WRAPPER
 endif # HAVE_NSS_WRAPPER
 endif # HAVE_CMOCKA
 
-TESTS = $(check_PROGRAMS)
+TESTS = \
+    become_user-tests.sh \
+    server-tests.sh \
+    usertools-tests.sh \
+    responder_common-tests.sh \
+    $(NULL)
 
 become_user_tests_SOURCES = \
     test_become_user.c \
