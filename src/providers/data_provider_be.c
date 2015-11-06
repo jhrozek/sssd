@@ -142,7 +142,7 @@ static const char *safe_be_req_err_msg(const char *msg_in,
         return dp_err_to_string(dp_err_type);
     }
 
-    ok = dbus_validate_utf8(msg_in, NULL);
+    ok = sbus_validate_utf8(msg_in);
     if (!ok) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               "Back end message is invalid, using default\n");
