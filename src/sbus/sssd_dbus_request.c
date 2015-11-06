@@ -111,7 +111,7 @@ static int sbus_request_valist_check(va_list va, int first_arg_type)
         value = va_arg(va_check, const DBusBasicValue*);
 
         if (type == DBUS_TYPE_STRING) {
-             ok = dbus_validate_utf8(value->str, NULL);
+             ok = sbus_validate_utf8(value->str);
              if (!ok) {
                  DEBUG(SSSDBG_CRIT_FAILURE,
                        "String argument is not valid UTF-8\n");
