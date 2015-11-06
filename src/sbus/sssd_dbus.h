@@ -404,6 +404,12 @@ bool sbus_request_parse_or_finish(struct sbus_request *request,
                                   int first_arg_type,
                                   ...);
 
+/* Return TRUE if alleged_utf8 is a valid UTF8 string.
+ *
+ * A wrapper around dbus_validate_utf8() if available.
+ * */
+dbus_bool_t sbus_validate_utf8(const char *alleged_utf8);
+
 struct sbus_incoming_signal {
     struct sbus_connection *conn;
     DBusMessage *message;

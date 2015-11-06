@@ -27,6 +27,10 @@
 #include "sbus/sssd_dbus.h"
 #include "sbus/sssd_dbus_private.h"
 
+#ifndef HAVE_DBUS_VALIDATE_UTF8
+#include "util/sss_utf8.h"
+#endif
+
 /* =Watches=============================================================== */
 
 /* DBUS may ask us to add a watch to a file descriptor that already had a watch
@@ -378,4 +382,16 @@ void sbus_remove_timeout(DBusTimeout *dbus_timeout, void *data)
     /* Freeing the event object will remove it from the event loop */
     talloc_free(timeout);
 
+}
+
+dbus_bool_t sbus_validate_utf8(const char *alleged_utf8)
+{
+#ifdef HAVE_DBUS_VALIDATE_UTF8
+    return dbus_validate_utf8(alleged_utf8, NULL);
+#else
+    bool ok;
+
+    ok = sss_utf8_check(alleged_utf8, strlen(alleged_utf8));
+    return ok ? TRUE : FALSE;
+#endif
 }

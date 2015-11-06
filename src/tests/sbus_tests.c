@@ -366,6 +366,20 @@ START_TEST(test_sbus_new_error)
 }
 END_TEST
 
+START_TEST(test_utf8_check)
+{
+    dbus_bool_t ok;
+    const char *invalid = "ad\351la\357d";
+    const char valid[] = { 'M', 0xC3, 0x9C, 'N', 'C', 'H', 'E', 'N', 0x0 };
+
+    ok = sbus_validate_utf8(valid);
+    ck_assert(ok == TRUE);
+
+    ok = sbus_validate_utf8(invalid);
+    ck_assert(ok == FALSE);
+}
+END_TEST
+
 TCase *create_sbus_tests(void)
 {
     TCase *tc = tcase_create("tests");
@@ -375,6 +389,7 @@ TCase *create_sbus_tests(void)
     tcase_add_test(tc, test_request_parse_bad_args);
     tcase_add_test(tc, test_introspection);
     tcase_add_test(tc, test_sbus_new_error);
+    tcase_add_test(tc, test_utf8_check);
 
     return tc;
 }
