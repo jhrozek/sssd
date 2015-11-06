@@ -240,6 +240,115 @@ void be_req_terminate(struct be_req *be_req,
     be_req->fn(be_req, dp_err_type, errnum, errstr);
 }
 
+
+static errno_t be_sbus_reply(struct sbus_request *sbus_req,
+                             dbus_uint16_t err_maj,
+                             dbus_uint32_t err_min,
+                             const char *err_msg)
+{
+    errno_t ret;
+    const char *safe_err_msg;
+
+    /* Only return a reply if one was requested
+     * There may not be one if this request began
+     * while we were offline
+     */
+    if (sbus_req == NULL) {
+        return EOK;
+    }
+
+    safe_err_msg = safe_be_req_err_msg(err_msg, err_maj);
+
+    if (err_maj == DP_ERR_FATAL && err_min == ENODEV) {
+        DEBUG(SSSDBG_TRACE_LIBS, "Handler not configured\n");
+    } else {
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "Request processed. Returned %d,%d,%s\n",
+              err_maj, err_min, err_msg);
+    }
+
+    ret = sbus_request_return_and_finish(sbus_req,
+                                         DBUS_TYPE_UINT16, &err_maj,
+                                         DBUS_TYPE_UINT32, &err_min,
+                                         DBUS_TYPE_STRING, &safe_err_msg,
+                                         DBUS_TYPE_INVALID);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "sbus_request_return_and_finish failed: [%d]: %s\n",
+              ret, sss_strerror(ret));
+    }
+
+    return ret;
+}
+
+static errno_t be_sbus_req_reply(struct sbus_request *sbus_req,
+                                 const char *req_name,
+                                 int dp_err_type,
+                                 int errnum,
+                                 const char *errstr)
+{
+    const char *req_msg;
+    dbus_uint16_t err_maj;
+    dbus_uint32_t err_min;
+
+    err_maj = dp_err_type;
+    err_min = errnum;
+
+    req_msg = req_name ? req_name : "sbus";
+    return be_sbus_reply(sbus_req, err_maj, err_min, errstr);
+}
+
+/* Send back an immediate reply and set the sbus_request to NULL
+ * so that we are sure the request is not reused in the future
+ */
+static errno_t be_offline_reply(struct sbus_request **sbus_req_ptr,
+                                const char *req_name)
+{
+    struct sbus_request *dbus_req;
+    errno_t ret;
+
+    if (sbus_req_ptr == NULL) {
+        return EINVAL;
+    }
+    dbus_req = *sbus_req_ptr;
+
+    ret = be_sbus_req_reply(dbus_req, req_name,
+                            DP_ERR_OFFLINE, EAGAIN,
+                            "Fast reply - offline");
+    *sbus_req_ptr = NULL;
+    return ret;
+}
+
+struct be_sbus_reply_data {
+    dbus_uint16_t err_maj;
+    dbus_uint32_t err_min;
+    const char *err_msg;
+};
+
+#define BE_SBUS_REPLY_DATA_INIT { .err_maj = DP_ERR_FATAL, \
+                                  .err_min = EFAULT, \
+                                  .err_msg = "Fatal error" \
+                                };
+
+static inline void be_sbus_reply_data_set(struct be_sbus_reply_data *rdata,
+                                          dbus_uint16_t err_maj,
+                                          dbus_uint32_t err_min,
+                                          const char *err_msg)
+{
+    if (rdata) {
+        rdata->err_maj = err_maj;
+        rdata->err_min = err_min;
+        rdata->err_msg = err_msg;
+    }
+}
+
+static inline errno_t be_sbus_req_reply_data(struct sbus_request *sbus_req,
+                                             struct be_sbus_reply_data *data)
+{
+    return be_sbus_reply(sbus_req, data->err_maj,
+                         data->err_min, data->err_msg);
+}
+
 void be_terminate_domain_requests(struct be_ctx *be_ctx,
                                   const char *domain)
 {
@@ -437,9 +546,6 @@ static void be_queue_next_request(struct be_req *be_req, enum bet_type type)
     struct bet_queue_item **req_queue;
     struct sbus_request *dbus_req;
     int ret;
-    uint16_t err_maj;
-    uint32_t err_min;
-    const char *err_msg = "Cannot file back end request";
     struct be_req *next_be_req = NULL;
 
     req_queue = &be_req->becli->bectx->bet_info[type].req_queue;
@@ -479,21 +585,9 @@ static void be_queue_next_request(struct be_req *be_req, enum bet_type type)
 
     dbus_req = (struct sbus_request *) next_be_req->pvt;
 
-    if (dbus_req) {
-        /* Return a reply if one was requested
-         * There may not be one if this request began
-         * while we were offline
-         */
-        err_maj = DP_ERR_FATAL;
-        err_min = ret;
-
-        sbus_request_return_and_finish(dbus_req,
-                                       DBUS_TYPE_UINT16, &err_maj,
-                                       DBUS_TYPE_UINT32, &err_min,
-                                       DBUS_TYPE_STRING, &err_msg,
-                                       DBUS_TYPE_INVALID);
-    }
-
+    be_sbus_req_reply(dbus_req, "be_queue_next_request",
+                      DP_ERR_FATAL, ret,
+                      "Cannot file back end request");
     talloc_free(next_be_req);
 }
 
@@ -661,34 +755,12 @@ static void get_subdomains_callback(struct be_req *req,
                                     const char *errstr)
 {
     struct sbus_request *dbus_req;
-    dbus_uint16_t err_maj = 0;
-    dbus_uint32_t err_min = 0;
-    const char *err_msg = NULL;
-
-    DEBUG(SSSDBG_TRACE_FUNC, "Backend returned: (%d, %d, %s) [%s]\n",
-              dp_err_type, errnum, errstr?errstr:"<NULL>",
-              dp_err_to_string(dp_err_type));
 
     be_queue_next_request(req, BET_SUBDOMAINS);
 
-    dbus_req = (struct sbus_request *)req->pvt;
+    dbus_req = (struct sbus_request *) req->pvt;
 
-    if (dbus_req) {
-        /* Return a reply if one was requested
-         * There may not be one if this request began
-         * while we were offline
-         */
-        err_maj = dp_err_type;
-        err_min = errnum;
-        err_msg = safe_be_req_err_msg(errstr, dp_err_type);
-
-        sbus_request_return_and_finish(dbus_req,
-                                       DBUS_TYPE_UINT16, &err_maj,
-                                       DBUS_TYPE_UINT32, &err_min,
-                                       DBUS_TYPE_STRING, &err_msg,
-                                       DBUS_TYPE_INVALID);
-    }
-
+    be_sbus_req_reply(dbus_req, "subdomains", dp_err_type, errnum, errstr);
     talloc_free(req);
 }
 
@@ -698,9 +770,7 @@ static int be_get_subdomains(struct sbus_request *dbus_req, void *user_data)
     struct be_req *be_req = NULL;
     struct be_client *becli;
     char *domain_hint;
-    dbus_uint16_t err_maj;
-    dbus_uint32_t err_min;
-    const char *err_msg;
+    struct be_sbus_reply_data req_reply = BE_SBUS_REPLY_DATA_INIT;
     int ret;
 
     becli = talloc_get_type(user_data, struct be_client);
@@ -713,10 +783,8 @@ static int be_get_subdomains(struct sbus_request *dbus_req, void *user_data)
 
     /* return an error if corresponding backend target is not configured */
     if (becli->bectx->bet_info[BET_SUBDOMAINS].bet_ops == NULL) {
-        DEBUG(SSSDBG_TRACE_INTERNAL, "Undefined backend target.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENODEV;
-        err_msg = "Subdomains back end target is not configured";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENODEV,
+                               "Subdomains back end target is not configured");
         goto immediate;
     }
 
@@ -727,9 +795,8 @@ static int be_get_subdomains(struct sbus_request *dbus_req, void *user_data)
      */
     if (becli->bectx->offstat.offline) {
         DEBUG(SSSDBG_TRACE_FUNC, "Cannot proceed, provider is offline.\n");
-        err_maj = DP_ERR_OFFLINE;
-        err_min = EAGAIN;
-        err_msg = "Provider is offline";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_OFFLINE, EAGAIN,
+                               "Provider is offline");
         goto immediate;
     }
 
@@ -738,24 +805,21 @@ static int be_get_subdomains(struct sbus_request *dbus_req, void *user_data)
     be_req = be_req_create(becli, becli, becli->bectx,
                            get_subdomains_callback, dbus_req);
     if (!be_req) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto immediate;
     }
 
     req = talloc(be_req, struct be_subdom_req);
     if (!req) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto immediate;
     }
     req->domain_hint = talloc_strdup(req, domain_hint);
     if (!req->domain_hint) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto immediate;
     }
 
@@ -767,31 +831,16 @@ static int be_get_subdomains(struct sbus_request *dbus_req, void *user_data)
                            be_req,
                            becli->bectx->bet_info[BET_SUBDOMAINS].bet_ops->handler);
     if (ret != EOK) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ret;
-        err_msg = "Cannot file back end request";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ret,
+                               "Cannot file back end request");
         goto immediate;
     }
 
     return EOK;
 
 immediate:
-    if (be_req) {
-        talloc_free(be_req);
-    }
-
-    /* send reply back */
-    sbus_request_return_and_finish(dbus_req,
-                                   DBUS_TYPE_UINT16, &err_maj,
-                                   DBUS_TYPE_UINT32, &err_min,
-                                   DBUS_TYPE_STRING, &err_msg,
-                                   DBUS_TYPE_INVALID);
-
-    if (!(err_maj == DP_ERR_FATAL && err_min == ENODEV)) {
-        DEBUG(SSSDBG_TRACE_LIBS, "Request processed. Returned %d,%d,%s\n",
-                err_maj, err_min, err_msg);
-    }
-
+    talloc_free(be_req);
+    be_sbus_req_reply_data(dbus_req, &req_reply);
     return EOK;
 }
 
@@ -801,33 +850,10 @@ static void acctinfo_callback(struct be_req *req,
                               const char *errstr)
 {
     struct sbus_request *dbus_req;
-    dbus_uint16_t err_maj = 0;
-    dbus_uint32_t err_min = 0;
-    const char *err_msg = NULL;
 
-    dbus_req = (struct sbus_request *)req->pvt;
+    dbus_req = (struct sbus_request *) req->pvt;
 
-    if (dbus_req) {
-        /* Return a reply if one was requested
-         * There may not be one if this request began
-         * while we were offline
-         */
-
-        err_maj = dp_err_type;
-        err_min = errnum;
-        err_msg = safe_be_req_err_msg(errstr, dp_err_type);
-
-        sbus_request_return_and_finish(dbus_req,
-                                       DBUS_TYPE_UINT16, &err_maj,
-                                       DBUS_TYPE_UINT32, &err_min,
-                                       DBUS_TYPE_STRING, &err_msg,
-                                       DBUS_TYPE_INVALID);
-
-        DEBUG(SSSDBG_CONF_SETTINGS, "Request processed. Returned %d,%d,%s\n",
-                  err_maj, err_min, err_msg);
-    }
-
-    /* finally free the request */
+    be_sbus_req_reply(dbus_req, "account info", dp_err_type, errnum, errstr);
     talloc_free(req);
 }
 
@@ -1160,9 +1186,7 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
     char *domain;
     uint32_t attr_type;
     int ret;
-    dbus_uint16_t err_maj;
-    dbus_uint32_t err_min;
-    const char *err_msg;
+    struct be_sbus_reply_data req_reply = BE_SBUS_REPLY_DATA_INIT;
 
     be_req = NULL;
 
@@ -1185,24 +1209,11 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
      * return offline immediately
      */
     if ((type & BE_REQ_FAST) && becli->bectx->offstat.offline) {
-        /* Send back an immediate reply */
-        err_maj = DP_ERR_OFFLINE;
-        err_min = EAGAIN;
-        err_msg = "Fast reply - offline";
-
-        ret = sbus_request_return_and_finish(dbus_req,
-                                             DBUS_TYPE_UINT16, &err_maj,
-                                             DBUS_TYPE_UINT32, &err_min,
-                                             DBUS_TYPE_STRING, &err_msg,
-                                             DBUS_TYPE_INVALID);
+        ret = be_offline_reply(&dbus_req, "account");
         if (ret != EOK) {
             return ret;
         }
 
-        DEBUG(SSSDBG_CONF_SETTINGS, "Request processed. Returned %d,%d,%s\n",
-                  err_maj, err_min, err_msg);
-
-        dbus_req = NULL;
         /* This reply will be queued and sent
          * when we reenter the mainloop.
          *
@@ -1214,9 +1225,8 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
     be_req = be_req_create(becli, becli, becli->bectx,
                            acctinfo_callback, dbus_req);
     if (!be_req) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
 
@@ -1224,26 +1234,23 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set request domain [%d]: %s\n",
                                     ret, sss_strerror(ret));
-        err_maj = DP_ERR_FATAL;
-        err_min = ret;
-        err_msg = sss_strerror(ret);
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL,
+                               ret, sss_strerror(ret));
         goto done;
     }
 
     req = talloc_zero(be_req, struct be_acct_req);
     if (!req) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
     req->entry_type = type;
     req->attr_type = (int)attr_type;
     req->domain = talloc_strdup(req, domain);
     if (!req->domain) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
 
@@ -1251,9 +1258,8 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
         (attr_type != BE_ATTR_MEM) &&
         (attr_type != BE_ATTR_ALL)) {
         /* Unrecognized attr type */
-        err_maj = DP_ERR_FATAL;
-        err_min = EINVAL;
-        err_msg = "Invalid Attrs Parameter";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                               "Invalid Attrs Parameter");
         goto done;
     }
 
@@ -1289,55 +1295,35 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
             req->filter_value = NULL;
             req->extra_value = NULL;
         } else {
-            err_maj = DP_ERR_FATAL;
-            err_min = EINVAL;
-            err_msg = "Invalid Filter";
+            be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                                   "Invalid filter");
             goto done;
         }
 
         if (ret != EOK) {
-            err_maj = DP_ERR_FATAL;
-            err_min = EINVAL;
-            err_msg = "Invalid Filter";
+            be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                                   "Invalid filter");
             goto done;
         }
 
     } else {
-        err_maj = DP_ERR_FATAL;
-        err_min = EINVAL;
-        err_msg = "Missing Filter Parameter";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                               "Missing filter parameter");
         goto done;
     }
 
     ret = be_file_account_request(be_req, req);
     if (ret != EOK) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ret;
-        err_msg = "Cannot file account request";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                               "Cannot file account request");
         goto done;
     }
 
     return EOK;
 
 done:
-    if (be_req) {
-        talloc_free(be_req);
-    }
-
-    if (dbus_req) {
-        ret = sbus_request_return_and_finish(dbus_req,
-                                             DBUS_TYPE_UINT16, &err_maj,
-                                             DBUS_TYPE_UINT32, &err_min,
-                                             DBUS_TYPE_STRING, &err_msg,
-                                             DBUS_TYPE_INVALID);
-        if (ret != EOK) {
-            return ret;
-        }
-
-        DEBUG(SSSDBG_CONF_SETTINGS, "Request processed. Returned %d,%d,%s\n",
-                  err_maj, err_min, err_msg);
-    }
-
+    talloc_free(be_req);
+    be_sbus_req_reply_data(dbus_req, &req_reply);
     return EOK;
 }
 
@@ -1534,41 +1520,16 @@ done:
     return EOK;
 }
 
-static void be_sudo_handler_reply(struct sbus_request *dbus_req,
-                                  dbus_uint16_t dp_err,
-                                  dbus_uint32_t dp_ret,
-                                  const char *errstr)
-{
-    const char *err_msg = NULL;
-
-    if (dbus_req == NULL) {
-        return;
-    }
-
-    err_msg = errstr ? errstr : "No errmsg set\n";
-    sbus_request_return_and_finish(dbus_req,
-                                   DBUS_TYPE_UINT16, &dp_err,
-                                   DBUS_TYPE_UINT32, &dp_ret,
-                                   DBUS_TYPE_STRING, &err_msg,
-                                   DBUS_TYPE_INVALID);
-
-    DEBUG(SSSDBG_FUNC_DATA, "SUDO Backend returned: (%d, %d, %s)\n",
-                             dp_err, dp_ret, errstr ? errstr : "<NULL>");
-}
-
 static void be_sudo_handler_callback(struct be_req *req,
                                      int dp_err,
                                      int dp_ret,
                                      const char *errstr)
 {
-    const char *err_msg = NULL;
     struct sbus_request *dbus_req;
 
-    dbus_req = (struct sbus_request *)(req->pvt);
+    dbus_req = (struct sbus_request *) req->pvt;
 
-    err_msg = safe_be_req_err_msg(errstr, dp_err);
-    be_sudo_handler_reply(dbus_req, dp_err, dp_ret, err_msg);
-
+    be_sbus_req_reply(dbus_req, "sudo", dp_err, dp_ret, errstr);
     talloc_free(req);
 }
 
@@ -1619,9 +1580,8 @@ static int be_sudo_handler(struct sbus_request *dbus_req, void *user_data)
      * return offline immediately
      */
     if ((type & BE_REQ_FAST) && be_cli->bectx->offstat.offline) {
-        be_sudo_handler_reply(dbus_req, DP_ERR_OFFLINE, EAGAIN,
-                              "Fast reply - offline");
-        be_req->pvt = dbus_req = NULL;
+        be_offline_reply(&dbus_req, "sudo");
+        be_req->pvt = NULL;
         /* This reply will be queued and sent
          * when we reenter the mainloop.
          *
@@ -1749,9 +1709,7 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
     uint32_t type;
     char *filter;
     char *filter_val;
-    dbus_uint16_t err_maj;
-    dbus_uint32_t err_min;
-    const char *err_msg;
+    struct be_sbus_reply_data req_reply = BE_SBUS_REPLY_DATA_INIT;
 
     DEBUG(SSSDBG_TRACE_FUNC, "Entering be_autofs_handler()\n");
 
@@ -1771,24 +1729,7 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
      * return offline immediately
      */
     if ((type & BE_REQ_FAST) && be_cli->bectx->offstat.offline) {
-        /* Send back an immediate reply */
-        err_maj = DP_ERR_OFFLINE;
-        err_min = EAGAIN;
-        err_msg = "Fast reply - offline";
-
-        ret = sbus_request_return_and_finish(dbus_req,
-                                             DBUS_TYPE_UINT16, &err_maj,
-                                             DBUS_TYPE_UINT32, &err_min,
-                                             DBUS_TYPE_STRING, &err_msg,
-                                             DBUS_TYPE_INVALID);
-        if (ret != EOK) {
-            return ret;
-        }
-
-        DEBUG(SSSDBG_TRACE_LIBS, "Request processed. Returned %d,%d,%s\n",
-              err_maj, err_min, err_msg);
-
-        dbus_req = NULL;
+        be_offline_reply(&dbus_req, "autofs");
         /* This reply will be queued and sent
          * when we reenter the mainloop.
          *
@@ -1801,15 +1742,13 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
         if (strncmp(filter, "mapname=", 8) == 0) {
             filter_val = &filter[8];
         } else {
-            err_maj = DP_ERR_FATAL;
-            err_min = EINVAL;
-            err_msg = "Invalid Filter";
+            be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                                   "Invalid filter");
             goto done;
         }
     } else {
-        err_maj = DP_ERR_FATAL;
-        err_min = EINVAL;
-        err_msg = "Missing Filter Parameter";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                               "Missing filter parameter");
         goto done;
     }
 
@@ -1818,9 +1757,8 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
                            be_autofs_handler_callback, dbus_req);
     if (be_req == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero failed.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
 
@@ -1828,18 +1766,16 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
     be_autofs_req = talloc_zero(be_req, struct be_autofs_req);
     if (be_autofs_req == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero failed.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
 
     be_autofs_req->mapname = talloc_strdup(be_autofs_req, filter_val);
     if (be_autofs_req->mapname == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "talloc_strdup failed.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
 
@@ -1847,9 +1783,8 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
 
     if (!be_cli->bectx->bet_info[BET_AUTOFS].bet_ops) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Undefined backend target.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENODEV;
-        err_msg = "Autofs back end target is not configured";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENODEV,
+                               "Autofs back end target is not configured");
         goto done;
     }
 
@@ -1858,33 +1793,16 @@ static int be_autofs_handler(struct sbus_request *dbus_req, void *user_data)
                           be_cli->bectx->bet_info[BET_AUTOFS].bet_ops->handler);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "be_file_request failed.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENODEV;
-        err_msg = "Cannot file back end request";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ret,
+                               "Cannot file back end request");
         goto done;
     }
 
     return EOK;
 
 done:
-    if (be_req) {
-        talloc_free(be_req);
-    }
-
-    if (dbus_req) {
-        ret = sbus_request_return_and_finish(dbus_req,
-                                             DBUS_TYPE_UINT16, &err_maj,
-                                             DBUS_TYPE_UINT32, &err_min,
-                                             DBUS_TYPE_STRING, &err_msg,
-                                             DBUS_TYPE_INVALID);
-        if (ret != EOK) {
-            return ret;
-        }
-
-        DEBUG(SSSDBG_TRACE_LIBS, "Request processed. Returned %d,%d,%s\n",
-              err_maj, err_min, err_msg);
-    }
-
+    talloc_free(be_req);
+    be_sbus_req_reply_data(dbus_req, &req_reply);
     return EOK;
 }
 
@@ -1894,34 +1812,10 @@ static void be_autofs_handler_callback(struct be_req *req,
                                        const char *errstr)
 {
     struct sbus_request *dbus_req;
-    dbus_uint16_t err_maj = 0;
-    dbus_uint32_t err_min = 0;
-    const char *err_msg = NULL;
 
-    dbus_req = (struct sbus_request *)req->pvt;
+    dbus_req = (struct sbus_request *) req->pvt;
 
-    if (dbus_req) {
-        /* Return a reply if one was requested
-         * There may not be one if this request began
-         * while we were offline
-         */
-
-        err_maj = dp_err_type;
-        err_min = errnum;
-        err_msg = safe_be_req_err_msg(errstr, dp_err_type);
-
-        sbus_request_return_and_finish(dbus_req,
-                                       DBUS_TYPE_UINT16, &err_maj,
-                                       DBUS_TYPE_UINT32, &err_min,
-                                       DBUS_TYPE_STRING, &err_msg,
-                                       DBUS_TYPE_INVALID);
-
-        DEBUG(SSSDBG_TRACE_LIBS,
-              "Request processed. Returned %d,%d,%s\n",
-               err_maj, err_min, err_msg);
-    }
-
-    /* finally free the request */
+    be_sbus_req_reply(dbus_req, "autofs", dp_err_type, errnum, errstr);
     talloc_free(req);
 }
 
@@ -1933,9 +1827,7 @@ static int be_host_handler(struct sbus_request *dbus_req, void *user_data)
     uint32_t flags;
     char *filter;
     int ret;
-    dbus_uint16_t err_maj;
-    dbus_uint32_t err_min;
-    const char *err_msg;
+    struct be_sbus_reply_data req_reply = BE_SBUS_REPLY_DATA_INIT;
 
     be_req = NULL;
 
@@ -1956,24 +1848,8 @@ static int be_host_handler(struct sbus_request *dbus_req, void *user_data)
      */
     if ((flags & BE_REQ_FAST) && becli->bectx->offstat.offline) {
         /* Send back an immediate reply */
-        err_maj = DP_ERR_OFFLINE;
-        err_min = EAGAIN;
-        err_msg = "Fast reply - offline";
+        be_offline_reply(&dbus_req, "host");
 
-        ret = sbus_request_return_and_finish(dbus_req,
-                                             DBUS_TYPE_UINT16, &err_maj,
-                                             DBUS_TYPE_UINT32, &err_min,
-                                             DBUS_TYPE_STRING, &err_msg,
-                                             DBUS_TYPE_INVALID);
-        if (ret != EOK) {
-            return ret;
-        }
-
-        DEBUG(SSSDBG_TRACE_LIBS,
-              "Request processed. Returned %d,%d,%s\n",
-               err_maj, err_min, err_msg);
-
-        dbus_req = NULL;
         /* This reply will be queued and sent
          * when we reenter the mainloop.
          *
@@ -1985,17 +1861,15 @@ static int be_host_handler(struct sbus_request *dbus_req, void *user_data)
     be_req = be_req_create(becli, becli, becli->bectx,
                            acctinfo_callback, dbus_req);
     if (!be_req) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
 
     req = talloc(be_req, struct be_host_req);
     if (!req) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ENOMEM;
-        err_msg = "Out of memory";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENOMEM,
+                               "Out of memory");
         goto done;
     }
     req->type = BE_REQ_HOST | (flags & BE_REQ_FAST);
@@ -2012,15 +1886,13 @@ static int be_host_handler(struct sbus_request *dbus_req, void *user_data)
         }
 
         if (ret) {
-            err_maj = DP_ERR_FATAL;
-            err_min = EINVAL;
-            err_msg = "Invalid Filter";
+            be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                                   "Invalid filter");
             goto done;
         }
     } else {
-        err_maj = DP_ERR_FATAL;
-        err_min = EINVAL;
-        err_msg = "Missing Filter Parameter";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, EINVAL,
+                               "Missing filter parameter");
         goto done;
     }
 
@@ -2028,9 +1900,8 @@ static int be_host_handler(struct sbus_request *dbus_req, void *user_data)
 
     if (!becli->bectx->bet_info[BET_HOSTID].bet_ops) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Undefined backend target.\n");
-        err_maj = DP_ERR_FATAL;
-        err_min = ENODEV;
-        err_msg = "HostID back end target is not configured";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ENODEV,
+                               "HostID back end target is not configured");
         goto done;
     }
 
@@ -2038,34 +1909,16 @@ static int be_host_handler(struct sbus_request *dbus_req, void *user_data)
                           be_req,
                           becli->bectx->bet_info[BET_HOSTID].bet_ops->handler);
     if (ret != EOK) {
-        err_maj = DP_ERR_FATAL;
-        err_min = ret;
-        err_msg = "Failed to file request";
+        be_sbus_reply_data_set(&req_reply, DP_ERR_FATAL, ret,
+                               "Cannot file back end request");
         goto done;
     }
 
     return EOK;
 
 done:
-    if (be_req) {
-        talloc_free(be_req);
-    }
-
-    if (dbus_req) {
-        ret = sbus_request_return_and_finish(dbus_req,
-                                             DBUS_TYPE_UINT16, &err_maj,
-                                             DBUS_TYPE_UINT32, &err_min,
-                                             DBUS_TYPE_STRING, &err_msg,
-                                             DBUS_TYPE_INVALID);
-        if (ret != EOK) {
-            return ret;
-        }
-
-        DEBUG(SSSDBG_TRACE_LIBS,
-              "Request processed. Returned %d,%d,%s\n",
-               err_maj, err_min, err_msg);
-    }
-
+    talloc_free(be_req);
+    be_sbus_req_reply_data(dbus_req, &req_reply);
     return EOK;
 }
 
