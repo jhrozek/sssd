@@ -96,14 +96,53 @@ int sbus_request_finish(struct sbus_request *dbus_req,
     return talloc_free(dbus_req);
 }
 
+static int sbus_request_valist_check(va_list va, int first_arg_type)
+{
+    int ret = EOK;
+    int type;
+    va_list va_check;
+    const DBusBasicValue *value;
+    dbus_bool_t ok;
+
+    va_copy(va_check, va);
+
+    type = first_arg_type;
+    while (type != DBUS_TYPE_INVALID) {
+        value = va_arg(va_check, const DBusBasicValue*);
+
+        if (type == DBUS_TYPE_STRING) {
+             ok = dbus_validate_utf8(value->str, NULL);
+             if (!ok) {
+                 DEBUG(SSSDBG_CRIT_FAILURE,
+                       "String argument is not valid UTF-8\n");
+                 ret = EINVAL;
+                 break;
+             }
+        }
+        type = va_arg(va_check, int);
+    }
+
+    va_end(va_check);
+    return ret;
+}
+
 int sbus_request_return_and_finish(struct sbus_request *dbus_req,
                                    int first_arg_type,
                                    ...)
 {
     DBusMessage *reply;
+    DBusError error = DBUS_ERROR_INIT;
     dbus_bool_t dbret;
     va_list va;
     int ret;
+
+    va_start(va, first_arg_type);
+    ret = sbus_request_valist_check(va, first_arg_type);
+    if (ret != EOK) {
+        va_end(va);
+        dbus_set_error_const(&error, DBUS_ERROR_INVALID_ARGS, INTERNAL_ERROR);
+        return sbus_request_fail_and_finish(dbus_req, &error);
+    }
 
     reply = dbus_message_new_method_return(dbus_req->message);
     if (!reply) {
@@ -112,7 +151,6 @@ int sbus_request_return_and_finish(struct sbus_request *dbus_req,
         return ENOMEM;
     }
 
-    va_start(va, first_arg_type);
     dbret = dbus_message_append_args_valist(reply, first_arg_type, va);
     va_end(va);
 
