@@ -132,6 +132,11 @@ void pamsrv_exp_warn(struct pam_data *pd,
 void pamsrv_lock_warn(struct pam_data *pd,
                       const char *pam_account_locked_message);
 
+void pamsrv_resp_offline_auth(struct pam_data *pd, time_t expire_date);
+void pamsrv_resp_offline_delayed_auth(struct pam_data *pd,
+                                      time_t delayed_until);
+void pamsrv_resp_offline_chpass(struct pam_data *pd);
+
 errno_t pamsrv_reply_packet(TALLOC_CTX *mem_ctx,
                             struct pam_data *pd,
                             enum sss_cli_command cmd,
