@@ -1116,9 +1116,7 @@ static void krb5_auth_done(struct tevent_req *subreq)
      * (long term password) can be passed to the other modules. */
     if (res->otp == true && pd->cmd == SSS_PAM_AUTHENTICATE
             && sss_authtok_get_type(pd->authtok) != SSS_AUTHTOK_TYPE_2FA) {
-        uint32_t otp_flag = 1;
-        ret = pam_add_response(pd, SSS_OTP, sizeof(uint32_t),
-                               (const uint8_t *) &otp_flag);
+        ret = pam_resp_otp_used(pd);
         if (ret != EOK) {
             DEBUG(SSSDBG_CRIT_FAILURE,
                   "pam_add_response failed: %d (%s).\n",

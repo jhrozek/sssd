@@ -222,6 +222,7 @@ void pam_resp_grace_login(struct pam_data *pd, uint32_t grace);
 void pam_resp_expired_login(struct pam_data *pd, uint32_t expire);
 void pam_resp_srv_msg(struct pam_data *pd, const char *str_msg);
 void pam_resp_otp_chpass(struct pam_data *pd);
+errno_t pam_resp_otp_used(struct pam_data *pd);
 
 /* Unlike other pam_resp* function, failure of this one must
  * be fatal

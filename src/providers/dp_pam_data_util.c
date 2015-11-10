@@ -346,3 +346,20 @@ void pam_resp_otp_chpass(struct pam_data *pd)
         /* Not fatal */
     }
 }
+
+errno_t pam_resp_otp_used(struct pam_data *pd)
+{
+    errno_t ret;
+    uint32_t otp_flag = 1;
+
+    ret = pam_add_response(pd, SSS_OTP, sizeof(uint32_t),
+                           (const uint8_t *) &otp_flag);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "pam_add_response failed: %d (%s).\n",
+               ret, sss_strerror(ret));
+        return ret;
+    }
+
+    return EOK;
+}
