@@ -368,6 +368,7 @@ static int test_delete_custom(struct test_data *data)
     return ret;
 }
 
+#if 0
 static int test_search_all_users(struct test_data *data)
 {
     struct ldb_dn *base_dn;
@@ -384,6 +385,7 @@ static int test_search_all_users(struct test_data *data)
                              data->attrlist, &data->msgs_count, &data->msgs);
     return ret;
 }
+#endif
 
 static int test_delete_recursive(struct test_data *data)
 {
@@ -2121,6 +2123,7 @@ START_TEST (test_sysdb_asq_search)
 }
 END_TEST
 
+#if 0
 START_TEST (test_sysdb_search_all_users)
 {
     struct sysdb_test_ctx *test_ctx;
@@ -2175,6 +2178,7 @@ START_TEST (test_sysdb_search_all_users)
     talloc_free(test_ctx);
 }
 END_TEST
+#endif
 
 START_TEST (test_sysdb_delete_recursive)
 {
@@ -6461,8 +6465,10 @@ Suite *create_sysdb_suite(void)
     tcase_add_loop_test(tc_sysdb, test_sysdb_prepare_asq_test_user, 28011, 28020);
     tcase_add_test(tc_sysdb, test_sysdb_asq_search);
 
+#if 0
     /* Test search with more than one result */
     tcase_add_test(tc_sysdb, test_sysdb_search_all_users);
+#endif
 
     /* Remove the members from the groups */
     tcase_add_loop_test(tc_sysdb, test_sysdb_remove_group_member, 28010, 28020);
