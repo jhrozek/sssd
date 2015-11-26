@@ -4939,6 +4939,7 @@ END_TEST
 
 START_TEST (test_sysdb_search_return_ENOENT)
 {
+#if 0
     struct sysdb_test_ctx *test_ctx;
     int ret;
     struct ldb_dn *user_dn = NULL;
@@ -5097,6 +5098,7 @@ START_TEST (test_sysdb_search_return_ENOENT)
 
     fail_unless(check_leaks_pop(test_ctx) == true, "Memory leak");
     talloc_free(test_ctx);
+#endif
 }
 END_TEST
 
@@ -6361,6 +6363,74 @@ START_TEST(test_sysdb_mark_entry_as_expired_ldb_dn)
 }
 END_TEST
 
+static int add_group_with_members(const int base, const int nmembers)
+{
+    struct sysdb_test_ctx *test_ctx;
+    struct test_data *data;
+    errno_t ret;
+    const int uid_base = 6666 + base;
+    const int gid_base = 7777 + base;
+
+    /* Setup */
+    ret = setup_sysdb_tests(&test_ctx);
+    fail_unless(ret == EOK, "Could not set up the test");
+
+    ret = sysdb_transaction_start(test_ctx->sysdb);
+    fail_if(ret != EOK, "[%s]", strerror(ret));
+
+    for (int i = 0; i < nmembers; i++) {
+        data = talloc_zero(test_ctx, struct test_data);
+        data->ctx = test_ctx;
+        data->ev = test_ctx->ev;
+        data->uid = uid_base + i;
+        data->gid = uid_base + i;
+        data->username = talloc_asprintf(data, "test_member_%d", data->uid);
+
+        ret = test_add_user(data);
+        fail_if(ret != EOK, "Could not add user %s", data->username);
+        talloc_free(data);
+    }
+
+    data = talloc_zero(test_ctx, struct test_data);
+    data->ctx = test_ctx;
+    data->ev = test_ctx->ev;
+    data->uid = gid_base + nmembers;
+    data->gid = gid_base + nmembers;
+    data->groupname = talloc_asprintf(data, "big_ass_group%d", gid_base + nmembers);
+
+    ret = test_add_group(data);
+    fail_if(ret != EOK, "Could not add group %s", data->groupname);
+
+    for (int i = 0; i < nmembers; i++) {
+        const char *membername;
+
+        membername = talloc_asprintf(test_ctx, "test_member_%d", uid_base + i);
+        ret = sysdb_add_group_member(data->ctx->domain,
+                                     data->groupname, membername,
+                                     SYSDB_MEMBER_USER, false);
+        talloc_free(membername);
+        fail_if(ret != EOK, "Could not add member %s", membername);
+    }
+
+    ret = sysdb_transaction_commit(test_ctx->sysdb);
+    fail_if(ret != EOK, "[%s]", strerror(ret));
+}
+
+START_TEST (test_sysdb_add_large_group)
+{
+    int base = 0;
+    int nmembers = 200;
+
+    add_group_with_members(base, nmembers);
+    base = nmembers + 1;
+    nmembers *= 2;
+
+    add_group_with_members(base, nmembers);
+    base = nmembers + 1;
+    nmembers *= 2;
+}
+END_TEST
+
 Suite *create_sysdb_suite(void)
 {
     Suite *s = suite_create("sysdb");
@@ -6373,6 +6443,9 @@ Suite *create_sysdb_suite(void)
     /* Add a user with an automatic ID */
     tcase_add_test(tc_sysdb, test_sysdb_user_new_id);
 
+    tcase_add_test(tc_sysdb, test_sysdb_add_large_group);
+
+#if 0
     /* Create a new user */
     tcase_add_loop_test(tc_sysdb, test_sysdb_add_user,27000,27010);
 
@@ -6577,10 +6650,12 @@ Suite *create_sysdb_suite(void)
 /* ===== Misc ===== */
     tcase_add_test(tc_sysdb, test_sysdb_set_get_bool);
     tcase_add_test(tc_sysdb, test_sysdb_mark_entry_as_expired_ldb_dn);
+#endif
 
 /* Add all test cases to the test suite */
     suite_add_tcase(s, tc_sysdb);
 
+#if 0
     TCase *tc_memberof = tcase_create("SYSDB member/memberof/memberuid Tests");
 
     tcase_add_loop_test(tc_memberof, test_sysdb_memberof_store_group, 0, 10);
@@ -6703,7 +6778,9 @@ Suite *create_sysdb_suite(void)
                         MBO_GROUP_BASE , MBO_GROUP_BASE + 10);
 
     suite_add_tcase(s, tc_memberof);
+#endif
 
+#if 0
     TCase *tc_subdomain = tcase_create("SYSDB sub-domain Tests");
 
     tcase_add_test(tc_subdomain, test_sysdb_subdomain_store_user);
@@ -6764,6 +6841,7 @@ Suite *create_sysdb_suite(void)
     tcase_add_test(tc_confdb, test_confdb_list_all_domain_names_multi_dom);
     suite_add_tcase(s, tc_confdb);
 
+#endif
     return s;
 }
 
