@@ -317,10 +317,16 @@ static errno_t s2n_encode_request(TALLOC_CTX *mem_ctx,
         case BE_REQ_USER_AND_GROUP:  /* the extdom exop does not care if the
                                         ID belongs to a user or a group */
             if (req_input->type == REQ_INP_NAME) {
+                DEBUG(SSSDBG_TRACE_FUNC,
+                      "Looking up user by name %s@%s\n",
+                      req_input->inp.name, domain_name);
                 ret = ber_printf(ber, "{ee{ss}}", INP_NAME, request_type,
                                                   domain_name,
                                                   req_input->inp.name);
             } else if (req_input->type == REQ_INP_ID) {
+                DEBUG(SSSDBG_TRACE_FUNC,
+                      "Looking up user by ID [%"PRIu32"]@%s\n",
+                      req_input->inp.id, domain_name);
                 ret = ber_printf(ber, "{ee{si}}", INP_POSIX_UID, request_type,
                                                   domain_name,
                                                   req_input->inp.id);
@@ -333,10 +339,16 @@ static errno_t s2n_encode_request(TALLOC_CTX *mem_ctx,
             break;
         case BE_REQ_GROUP:
             if (req_input->type == REQ_INP_NAME) {
+                DEBUG(SSSDBG_TRACE_FUNC,
+                      "Looking up group by name %s@%s\n",
+                      req_input->inp.name, domain_name);
                 ret = ber_printf(ber, "{ee{ss}}", INP_NAME, request_type,
                                                   domain_name,
                                                   req_input->inp.name);
             } else if (req_input->type == REQ_INP_ID) {
+                DEBUG(SSSDBG_TRACE_FUNC,
+                      "Looking up group by ID [%"PRIu32"]@%s\n",
+                      req_input->inp.id, domain_name);
                 ret = ber_printf(ber, "{ee{si}}", INP_POSIX_GID, request_type,
                                                   domain_name,
                                                   req_input->inp.id);
@@ -349,8 +361,11 @@ static errno_t s2n_encode_request(TALLOC_CTX *mem_ctx,
             break;
         case BE_REQ_BY_SECID:
             if (req_input->type == REQ_INP_SECID) {
-            ret = ber_printf(ber, "{ees}", INP_SID, request_type,
-                                           req_input->inp.secid);
+                DEBUG(SSSDBG_TRACE_FUNC,
+                      "Looking up object by name %s@%s\n",
+                      req_input->inp.name, domain_name);
+                ret = ber_printf(ber, "{ees}", INP_SID, request_type,
+                                               req_input->inp.secid);
             } else {
                 DEBUG(SSSDBG_OP_FAILURE, "Unexpected input type [%d].\n",
                                           req_input->type == REQ_INP_ID);
@@ -539,6 +554,8 @@ static errno_t add_v1_user_data(BerElement *ber, struct resp_attrs *attrs)
             ret = ENOMEM;
             goto done;
         }
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "Received gecos [%s]\n", attrs->a.user.pw_gecos);
     }
 
     if (homedir == NULL || *homedir == '\0') {
@@ -550,6 +567,8 @@ static errno_t add_v1_user_data(BerElement *ber, struct resp_attrs *attrs)
             ret = ENOMEM;
             goto done;
         }
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "Received homedir [%s]\n", attrs->a.user.pw_dir);
     }
 
     if (shell == NULL || *shell == '\0') {
@@ -561,6 +580,8 @@ static errno_t add_v1_user_data(BerElement *ber, struct resp_attrs *attrs)
             ret = ENOMEM;
             goto done;
         }
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "Received homedir [%s]\n", attrs->a.user.pw_shell);
     }
 
     tag = ber_scanf(ber, "{v}", &list);
@@ -572,6 +593,9 @@ static errno_t add_v1_user_data(BerElement *ber, struct resp_attrs *attrs)
 
     for (attrs->ngroups = 0; list[attrs->ngroups] != NULL;
          attrs->ngroups++);
+
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "The user is a member of %zu groups\n", attrs->ngroups);
 
     if (attrs->ngroups > 0) {
         attrs->groups = talloc_zero_array(attrs, char *, attrs->ngroups + 1);
@@ -589,6 +613,8 @@ static errno_t add_v1_user_data(BerElement *ber, struct resp_attrs *attrs)
                 ret = ENOMEM;
                 goto done;
             }
+            DEBUG(SSSDBG_TRACE_LIBS,
+                  "The user is a member of group [%s]\n", attrs->groups[c]);
         }
     }
 
@@ -633,6 +659,8 @@ static errno_t add_v1_group_data(BerElement *ber, struct resp_attrs *attrs)
         for (attrs->ngroups = 0; list[attrs->ngroups] != NULL;
              attrs->ngroups++);
 
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "The group has %zu members\n", attrs->ngroups);
         if (attrs->ngroups > 0) {
             attrs->a.group.gr_mem = talloc_zero_array(attrs, char *,
                                                     attrs->ngroups + 1);
@@ -651,6 +679,8 @@ static errno_t add_v1_group_data(BerElement *ber, struct resp_attrs *attrs)
                     ret = ENOMEM;
                     goto done;
                 }
+                DEBUG(SSSDBG_TRACE_LIBS,
+                      "Group member [%s]\n", attrs->a.group.gr_mem[c]);
             }
         }
     } else {
@@ -766,6 +796,10 @@ static errno_t s2n_response_to_attrs(TALLOC_CTX *mem_ctx,
             attrs->a.user.pw_uid = uid;
             attrs->a.user.pw_gid = gid;
 
+            DEBUG(SSSDBG_TRACE_FUNC,
+                  "Received user %s UID:%"PRIu32" GID:%"PRIu32"\n",
+                  attrs->a.user.pw_name, uid, gid);
+
             if (is_v1 && type == RESP_USER_GROUPLIST) {
                 ret = add_v1_user_data(ber, attrs);
                 if (ret != EOK) {
@@ -805,6 +839,10 @@ static errno_t s2n_response_to_attrs(TALLOC_CTX *mem_ctx,
 
             attrs->a.group.gr_gid = gid;
 
+            DEBUG(SSSDBG_TRACE_FUNC,
+                  "Received group %s GID:%"PRIu32"\n",
+                  attrs->a.group.gr_name, gid);
+
             if (is_v1 && type == RESP_GROUP_MEMBERS) {
                 ret = add_v1_group_data(ber, attrs);
                 if (ret != EOK) {
@@ -835,6 +873,8 @@ static errno_t s2n_response_to_attrs(TALLOC_CTX *mem_ctx,
                 ret = ENOMEM;
                 goto done;
             }
+
+            DEBUG(SSSDBG_TRACE_FUNC, "Received SID %s\n", attrs->a.sid_str);
             break;
         case RESP_NAME:
             tag = ber_scanf(ber, "{aa}", &domain_name, &name);
@@ -850,6 +890,7 @@ static errno_t s2n_response_to_attrs(TALLOC_CTX *mem_ctx,
                 ret = ENOMEM;
                 goto done;
             }
+            DEBUG(SSSDBG_TRACE_FUNC, "Received name %s\n", attrs->a.name);
             break;
         default:
             DEBUG(SSSDBG_OP_FAILURE, "Unexpected response type [%d].\n",
@@ -866,6 +907,8 @@ static errno_t s2n_response_to_attrs(TALLOC_CTX *mem_ctx,
             ret = ENOMEM;
             goto done;
         }
+        DEBUG(SSSDBG_TRACE_FUNC,
+              "Received domain name %s\n", attrs->domain_name);
     }
 
     ret = EOK;
