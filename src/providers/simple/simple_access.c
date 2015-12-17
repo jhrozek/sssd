@@ -184,8 +184,6 @@ static errno_t simple_access_parse_names(TALLOC_CTX *mem_ctx,
 {
     TALLOC_CTX *tmp_ctx = NULL;
     char **out = NULL;
-    char *domain = NULL;
-    char *name = NULL;
     size_t size;
     size_t i;
     errno_t ret;
@@ -216,29 +214,10 @@ static errno_t simple_access_parse_names(TALLOC_CTX *mem_ctx,
     /* Since this is access provider, we should fail on any error so we don't
      * allow unauthorized access. */
     for (i = 0; i < size; i++) {
-        ret = sss_parse_name(tmp_ctx, be_ctx->domain->names, list[i],
-                             &domain, &name);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to parse name '%s' [%d]: %s\n",
-                                        list[i], ret, sss_strerror(ret));
+        out[i] = sss_ioname2internal(mem_ctx, be_ctx->domain, list[i]);
+        if (out[i] == NULL) {
+            ret = EIO;
             goto done;
-        }
-
-        if (domain == NULL || strcasecmp(domain, be_ctx->domain->name) == 0 ||
-            (be_ctx->domain->flat_name != NULL &&
-             strcasecmp(domain, be_ctx->domain->flat_name) == 0)) {
-            /* This object belongs to main SSSD domain. Those users and groups
-             * are stored without domain part, so we will strip it off.
-             * */
-            out[i] = talloc_move(out, &name);
-        } else {
-            /* Subdomain users and groups are stored as fully qualified names,
-             * thus we will remember the domain part.
-             *
-             * Since subdomains may come and go, we will look for their
-             * existence later, during each access check.
-             */
-            out[i] = talloc_move(out, &list[i]);
         }
     }
 
