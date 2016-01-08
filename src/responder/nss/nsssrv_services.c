@@ -793,6 +793,7 @@ nss_cmd_getserv_done(struct tevent_req *req);
 int nss_cmd_getservbyname(struct cli_ctx *cctx)
 {
     errno_t ret;
+    struct cli_protocol *pctx;
     struct nss_cmd_ctx *cmdctx;
     struct nss_dom_ctx *dctx;
     char *domname;
@@ -814,8 +815,10 @@ int nss_cmd_getservbyname(struct cli_ctx *cctx)
     }
     dctx->cmdctx = cmdctx;
 
+    pctx = talloc_get_type(cctx->protocol_ctx, struct cli_protocol);
+
     /* get service name and protocol */
-    sss_packet_get_body(cctx->creq->in, &body, &blen);
+    sss_packet_get_body(pctx->creq->in, &body, &blen);
     /* if not terminated fail */
     if (body[blen -1] != '\0') {
         ret = EINVAL;
@@ -989,7 +992,7 @@ nss_cmd_getserv_done(struct tevent_req *req)
 {
     errno_t ret, reqret;
     unsigned int i;
-
+    struct cli_protocol *pctx;
     struct nss_dom_ctx *dctx =
             tevent_req_callback_data(req, struct nss_dom_ctx);
     struct nss_cmd_ctx *cmdctx = dctx->cmdctx;
@@ -1003,17 +1006,19 @@ nss_cmd_getserv_done(struct tevent_req *req)
         return;
     }
 
+    pctx = talloc_get_type(cmdctx->cctx->protocol_ctx, struct cli_protocol);
+
     /* Either we succeeded or no domains were eligible */
-    ret = sss_packet_new(cmdctx->cctx->creq, 0,
-                         sss_packet_get_cmd(cmdctx->cctx->creq->in),
-                         &cmdctx->cctx->creq->out);
+    ret = sss_packet_new(pctx->creq, 0,
+                         sss_packet_get_cmd(pctx->creq->in),
+                         &pctx->creq->out);
     if (ret == EOK) {
         if (reqret == ENOENT) {
             /* Notify the caller that this entry wasn't found */
-            ret = sss_cmd_empty_packet(cmdctx->cctx->creq->out);
+            ret = sss_cmd_empty_packet(pctx->creq->out);
         } else {
             i = dctx->res->count;
-            ret = fill_service(cmdctx->cctx->creq->out,
+            ret = fill_service(pctx->creq->out,
                                dctx->domain,
                                dctx->protocol,
                                dctx->res->msgs,
@@ -1108,6 +1113,7 @@ done:
 int nss_cmd_getservbyport(struct cli_ctx *cctx)
 {
     errno_t ret;
+    struct cli_protocol *pctx;
     struct nss_cmd_ctx *cmdctx;
     struct nss_dom_ctx *dctx;
     uint16_t port;
@@ -1128,8 +1134,10 @@ int nss_cmd_getservbyport(struct cli_ctx *cctx)
     }
     dctx->cmdctx = cmdctx;
 
+    pctx = talloc_get_type(cctx->protocol_ctx, struct cli_protocol);
+
     /* get service port and protocol */
-    sss_packet_get_body(cctx->creq->in, &body, &blen);
+    sss_packet_get_body(pctx->creq->in, &body, &blen);
     /* if not terminated fail */
     if (body[blen -1] != '\0') {
         ret = EINVAL;
@@ -1197,14 +1205,17 @@ setservent_send(TALLOC_CTX *mem_ctx, struct cli_ctx *cctx)
     struct setservent_ctx *state;
     struct sss_domain_info *dom;
     struct setent_step_ctx *step_ctx;
-    struct nss_ctx *nctx =
-            talloc_get_type(cctx->rctx->pvt_ctx, struct nss_ctx);
+    struct nss_ctx *nctx;
+    struct nss_state_ctx *state_ctx;
 
     DEBUG(SSSDBG_TRACE_FUNC, "Received setservent request\n");
 
+    nctx = talloc_get_type(cctx->rctx->pvt_ctx, struct nss_ctx);
+    state_ctx = talloc_get_type(cctx->state_ctx, struct nss_state_ctx);
+
     /* Reset the read pointers */
-    cctx->svc_dom_idx = 0;
-    cctx->svcent_cur = 0;
+    state_ctx->svcent.dom_idx = 0;
+    state_ctx->svcent.cur = 0;
 
     req = tevent_req_create(mem_ctx, &state, struct setservent_ctx);
     if (!req) return NULL;
@@ -1614,7 +1625,9 @@ nss_cmd_setservent_done(struct tevent_req *req)
     errno_t ret;
     struct nss_cmd_ctx *cmdctx =
             tevent_req_callback_data(req, struct nss_cmd_ctx);
+    struct cli_protocol *pctx;
 
+    pctx = talloc_get_type(cmdctx->cctx->protocol_ctx, struct cli_protocol);
     ret = setservent_recv(req);
     talloc_zfree(req);
     if (ret == EOK || ret == ENOENT) {
@@ -1622,9 +1635,9 @@ nss_cmd_setservent_done(struct tevent_req *req)
          * were eligible.
          * Return an acknowledgment
          */
-        ret = sss_packet_new(cmdctx->cctx->creq, 0,
-                             sss_packet_get_cmd(cmdctx->cctx->creq->in),
-                             &cmdctx->cctx->creq->out);
+        ret = sss_packet_new(pctx->creq, 0,
+                             sss_packet_get_cmd(pctx->creq->in),
+                             &pctx->creq->out);
         if (ret == EOK) {
             sss_cmd_done(cmdctx->cctx, cmdctx);
             return;
@@ -1651,6 +1664,7 @@ int nss_cmd_getservent(struct cli_ctx *cctx)
     struct nss_ctx *nctx;
     struct nss_cmd_ctx *cmdctx;
     struct tevent_req *req;
+    struct nss_state_ctx *state_ctx;
 
     DEBUG(SSSDBG_TRACE_FUNC,
           "Requesting info for all services\n");
@@ -1666,8 +1680,9 @@ int nss_cmd_getservent(struct cli_ctx *cctx)
      * expired and has to be recreated, we want to resume from the same
      * location.
      */
-    cmdctx->saved_dom_idx = cctx->svc_dom_idx;
-    cmdctx->saved_cur = cctx->svcent_cur;
+    state_ctx = talloc_get_type(cctx->state_ctx, struct nss_state_ctx);
+    cmdctx->saved_dom_idx = state_ctx->svcent.dom_idx;
+    cmdctx->saved_cur = state_ctx->svcent.cur;
 
     nctx = talloc_get_type(cctx->rctx->pvt_ctx, struct nss_ctx);
     if(!nctx->svcctx || !nctx->svcctx->ready) {
@@ -1693,6 +1708,7 @@ nss_cmd_implicit_setservent_done(struct tevent_req *req)
     errno_t ret;
     struct nss_cmd_ctx *cmdctx =
             tevent_req_callback_data(req, struct nss_cmd_ctx);
+    struct nss_state_ctx *state_ctx;
 
     ret = setservent_recv(req);
     talloc_zfree(req);
@@ -1709,8 +1725,9 @@ nss_cmd_implicit_setservent_done(struct tevent_req *req)
     }
 
     /* Restore the saved index and cursor locations */
-    cmdctx->cctx->svc_dom_idx = cmdctx->saved_dom_idx;
-    cmdctx->cctx->svcent_cur = cmdctx->saved_cur;
+    state_ctx = talloc_get_type(cmdctx->cctx->state_ctx, struct nss_state_ctx);
+    state_ctx->svcent.dom_idx = cmdctx->saved_dom_idx;
+    state_ctx->svcent.cur = cmdctx->saved_cur;
 
     ret = nss_cmd_getservent_immediate(cmdctx);
     if (ret != EOK) {
@@ -1724,31 +1741,33 @@ nss_cmd_implicit_setservent_done(struct tevent_req *req)
 static errno_t
 nss_cmd_getservent_immediate(struct nss_cmd_ctx *cmdctx)
 {
-    struct cli_ctx *cctx = cmdctx->cctx;
+    struct cli_protocol *pctx;
     uint8_t *body;
     size_t blen;
     uint32_t num;
     int ret;
 
+    pctx = talloc_get_type(cmdctx->cctx->protocol_ctx, struct cli_protocol);
+
     /* get max num of entries to return in one call */
-    sss_packet_get_body(cctx->creq->in, &body, &blen);
+    sss_packet_get_body(pctx->creq->in, &body, &blen);
     if (blen != sizeof(uint32_t)) {
         return EINVAL;
     }
     SAFEALIGN_COPY_UINT32(&num, body, NULL);
 
     /* create response packet */
-    ret = sss_packet_new(cctx->creq, 0,
-                         sss_packet_get_cmd(cctx->creq->in),
-                         &cctx->creq->out);
+    ret = sss_packet_new(pctx->creq, 0,
+                         sss_packet_get_cmd(pctx->creq->in),
+                         &pctx->creq->out);
     if (ret != EOK) {
         return ret;
     }
 
-    ret = retservent(cctx, num);
+    ret = retservent(cmdctx->cctx, num);
 
-    sss_packet_set_error(cctx->creq->out, ret);
-    sss_cmd_done(cctx, cmdctx);
+    sss_packet_set_error(pctx->creq->out, ret);
+    sss_cmd_done(cmdctx->cctx, cmdctx);
 
     return EOK;
 }
@@ -1756,6 +1775,8 @@ nss_cmd_getservent_immediate(struct nss_cmd_ctx *cmdctx)
 static errno_t
 retservent(struct cli_ctx *cctx, int num)
 {
+    struct cli_protocol *pctx;
+    struct nss_state_ctx *state_ctx;
     struct nss_ctx *nctx;
     struct getent_ctx *svcctx;
     struct ldb_message **msgs = NULL;
@@ -1763,59 +1784,65 @@ retservent(struct cli_ctx *cctx, int num)
     unsigned int n = 0;
     int ret = ENOENT;
 
+    pctx = talloc_get_type(cctx->protocol_ctx, struct cli_protocol);
+    state_ctx = talloc_get_type(cctx->state_ctx, struct nss_state_ctx);
     nctx = talloc_get_type(cctx->rctx->pvt_ctx, struct nss_ctx);
     if (!nctx->svcctx) goto none;
 
     svcctx = nctx->svcctx;
 
     while (ret == ENOENT) {
-        if (cctx->svc_dom_idx >= svcctx->num) break;
+        if (state_ctx->svcent.dom_idx >= svcctx->num) break;
 
-        pdom = &svcctx->doms[cctx->svc_dom_idx];
+        pdom = &svcctx->doms[state_ctx->svcent.dom_idx];
 
-        n = pdom->res->count - cctx->svcent_cur;
-        if (n <= 0 && (cctx->svc_dom_idx+1 < svcctx->num)) {
-            cctx->svc_dom_idx++;
-            pdom = &svcctx->doms[cctx->svc_dom_idx];
+        n = pdom->res->count - state_ctx->svcent.cur;
+        if (n <= 0 && (state_ctx->svcent.dom_idx+1 < svcctx->num)) {
+            state_ctx->svcent.dom_idx++;
+            pdom = &svcctx->doms[state_ctx->svcent.dom_idx];
             n = pdom->res->count;
-            cctx->svcent_cur = 0;
+            state_ctx->svcent.cur = 0;
         }
 
         if (!n) break;
 
         if (n > num) n = num;
 
-        msgs = &(pdom->res->msgs[cctx->svcent_cur]);
+        msgs = &(pdom->res->msgs[state_ctx->svcent.cur]);
 
-        ret = fill_service(cctx->creq->out,
+        ret = fill_service(pctx->creq->out,
                            pdom->domain,
                            NULL, msgs,
                            &n);
 
-        cctx->svcent_cur += n;
+        state_ctx->svcent.cur += n;
     }
 
 none:
     if (ret == ENOENT) {
-        ret = sss_cmd_empty_packet(cctx->creq->out);
+        ret = sss_cmd_empty_packet(pctx->creq->out);
     }
     return ret;
 }
 
 int nss_cmd_endservent(struct cli_ctx *cctx)
 {
+    struct cli_protocol *pctx;
+    struct nss_state_ctx *state_ctx;
     struct nss_ctx *nctx;
     int ret;
 
     DEBUG(SSSDBG_TRACE_FUNC,
           "Terminating request info for all accounts\n");
 
+    pctx = talloc_get_type(cctx->protocol_ctx, struct cli_protocol);
+    state_ctx = talloc_get_type(cctx->state_ctx, struct nss_state_ctx);
     nctx = talloc_get_type(cctx->rctx->pvt_ctx, struct nss_ctx);
 
     /* create response packet */
-    ret = sss_packet_new(cctx->creq, 0,
-                         sss_packet_get_cmd(cctx->creq->in),
-                         &cctx->creq->out);
+    ret = sss_packet_new(pctx->creq, 0,
+                         sss_packet_get_cmd(pctx->creq->in),
+                         &pctx->creq->out);
 
     if (ret != EOK) {
         return ret;
@@ -1823,8 +1850,8 @@ int nss_cmd_endservent(struct cli_ctx *cctx)
     if (nctx->svcctx == NULL) goto done;
 
     /* Reset the indices so that subsequent requests start at zero */
-    cctx->svc_dom_idx = 0;
-    cctx->svcent_cur = 0;
+    state_ctx->svcent.dom_idx = 0;
+    state_ctx->svcent.cur = 0;
 
 done:
     sss_cmd_done(cctx, NULL);
