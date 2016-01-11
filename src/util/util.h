@@ -607,9 +607,10 @@ errno_t sssd_domain_init(TALLOC_CTX *mem_ctx,
  * written to */
 #define KRB5_MAPPING_DIR PUBCONF_PATH"/krb5.include.d"
 
-errno_t sss_write_domain_mappings(struct sss_domain_info *domain);
+errno_t sss_write_domain_mappings(struct sss_domain_info *domain,
+                                  int krb5_conf_fd);
 
-errno_t sss_write_krb5_conf_snippet(const char *path);
+errno_t sss_write_krb5_conf_snippet(const char *path, int krb5_conf_fd);
 
 errno_t get_dom_names(TALLOC_CTX *mem_ctx,
                       struct sss_domain_info *start_dom,

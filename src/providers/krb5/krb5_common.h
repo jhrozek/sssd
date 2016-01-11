@@ -78,6 +78,7 @@ struct krb5_service {
     char *name;
     char *realm;
     bool write_kdcinfo;
+    int krb5_conf_fd;
 };
 
 struct fo_service;

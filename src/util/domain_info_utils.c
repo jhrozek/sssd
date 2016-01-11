@@ -241,21 +241,25 @@ errno_t sssd_domain_init(TALLOC_CTX *mem_ctx,
 }
 
 static errno_t
-sss_krb5_touch_config(void)
+sss_krb5_touch_config(int krb5_conf_fd)
 {
-    const char *config = NULL;
     errno_t ret;
+    struct timeval tv[2];
 
-    config = getenv("KRB5_CONFIG");
-    if (config == NULL) {
-        config = KRB5_CONF_PATH;
+    if (krb5_conf_fd < 0) {
+        return EBADF;
     }
 
-    ret = utime(config, NULL);
+    tv[0].tv_sec  = time(NULL);
+    tv[0].tv_usec = 0;
+    tv[1].tv_sec = time(NULL);
+    tv[1].tv_usec = 0;
+
+    ret = futimes(krb5_conf_fd, tv);
     if (ret == -1) {
         ret = errno;
-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to change mtime of \"%s\" "
-                                    "[%d]: %s\n", config, ret, strerror(ret));
+        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to change mtime of krb5.conf"
+                                    "[%d]: %s\n", ret, sss_strerror(ret));
         return ret;
     }
 
@@ -263,7 +267,8 @@ sss_krb5_touch_config(void)
 }
 
 errno_t
-sss_write_domain_mappings(struct sss_domain_info *domain)
+sss_write_domain_mappings(struct sss_domain_info *domain,
+                          int krb5_conf_fd)
 {
     struct sss_domain_info *dom;
     struct sss_domain_info *parent_dom;
@@ -437,7 +442,7 @@ sss_write_domain_mappings(struct sss_domain_info *domain)
 
     ret = EOK;
 done:
-    err = sss_krb5_touch_config();
+    err = sss_krb5_touch_config(krb5_conf_fd);
     if (err != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to change last modification time "
               "of krb5.conf. Created mappings may not be loaded.\n");
@@ -635,7 +640,7 @@ done:
 #endif
 }
 
-errno_t sss_write_krb5_conf_snippet(const char *path)
+errno_t sss_write_krb5_conf_snippet(const char *path, int krb5_conf_fd)
 {
     errno_t ret;
     errno_t err;
@@ -660,7 +665,7 @@ errno_t sss_write_krb5_conf_snippet(const char *path)
     ret = EOK;
 
 done:
-    err = sss_krb5_touch_config();
+    err = sss_krb5_touch_config(krb5_conf_fd);
     if (err != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to change last modification time "
               "of krb5.conf. Created mappings may not be loaded.\n");

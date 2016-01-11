@@ -186,4 +186,7 @@ krb5_error_code sss_krb5_kt_have_content(krb5_context context,
                                          krb5_keytab keytab);
 
 bool sss_krb5_realm_has_proxy(const char *realm);
+
+errno_t sss_open_krb5_conf(TALLOC_CTX *fd_owner, int *_fd);
+
 #endif /* __SSS_KRB5_H__ */

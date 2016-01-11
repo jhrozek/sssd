@@ -1037,6 +1037,14 @@ int ipa_service_init(TALLOC_CTX *memctx, struct be_ctx *ctx,
         goto done;
     }
 
+    ret = sss_open_krb5_conf(service->krb5_service,
+                             &service->krb5_service->krb5_conf_fd);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Cannot open krb5.conf [%d]: [%s]\n",
+              ret, sss_strerror(ret));
+    }
+
     ret = EOK;
 
 done:

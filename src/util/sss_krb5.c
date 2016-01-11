@@ -1129,3 +1129,49 @@ done:
 
     return res;
 }
+
+static int krb5_conf_fd_destructor(void *memptr)
+{
+    int *fd;
+
+    fd = talloc_get_type(memptr, int);
+
+    if (fd != NULL && *fd > 0) {
+        close(*fd);
+    }
+    return 0;
+}
+
+errno_t sss_open_krb5_conf(TALLOC_CTX *fd_owner, int *_fd)
+{
+    const char *krb5_config;
+    int *fd;
+    errno_t ret;
+
+    if (_fd == NULL) {
+        return EINVAL;
+    }
+
+    fd = talloc(fd_owner, int);
+    if (fd == NULL) {
+        return ENOMEM;
+    }
+
+    krb5_config = getenv("KRB5_CONFIG");
+    if (krb5_config == NULL) {
+        krb5_config = KRB5_CONF_PATH;
+    }
+
+    *fd = open(krb5_config, O_WRONLY, 0);
+    if (*fd == -1) {
+        ret = errno;
+    } else {
+        talloc_set_destructor((TALLOC_CTX *) fd,
+                              krb5_conf_fd_destructor);
+
+        *_fd = *fd;
+        ret = EOK;
+    }
+
+    return ret;
+}

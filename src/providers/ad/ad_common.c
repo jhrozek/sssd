@@ -760,6 +760,14 @@ ad_failover_init(TALLOC_CTX *mem_ctx, struct be_ctx *bectx,
         goto done;
     }
 
+    ret = sss_open_krb5_conf(service->krb5_service,
+                             &service->krb5_service->krb5_conf_fd);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Cannot open krb5.conf [%d]: [%s]\n",
+              ret, sss_strerror(ret));
+    }
+
     *_service = talloc_steal(mem_ctx, service);
 
     ret = EOK;

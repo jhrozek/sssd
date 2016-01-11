@@ -23,6 +23,9 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <popt.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "tests/cmocka/common_mock.h"
 #include "util/sss_nss.h"
@@ -49,6 +52,8 @@
 
 #define DUMMY "dummy"
 #define DUMMY2 "dummy2"
+
+#define FILENAME_TEMPLATE "tests-krb5-conf-XXXXXX"
 
 struct dom_list_test_ctx {
     size_t dom_count;
@@ -1241,24 +1246,111 @@ void test_add_strings_lists(void **state)
     talloc_free(res);
 }
 
-void test_sss_write_krb5_conf_snippet(void **state)
+struct write_krb5_conf_snippet_ctx {
+    int krb5_conf_fd;
+    char *filename;
+};
+
+static int test_write_krb5_conf_snippet_setup(void **state)
+{
+    struct write_krb5_conf_snippet_ctx *test_ctx;
+    int ret;
+    mode_t old_umask;
+
+    assert_true(leak_check_setup());
+
+    test_ctx = talloc_zero(global_talloc_context,
+                           struct write_krb5_conf_snippet_ctx);
+    if (test_ctx == NULL) {
+        return 1;
+    }
+
+    test_ctx->filename = talloc_strdup(test_ctx, FILENAME_TEMPLATE);
+    if (test_ctx->filename == NULL) {
+        return 1;
+    }
+
+    test_ctx->krb5_conf_fd = -1;
+    old_umask = umask(SSS_DFL_UMASK);
+    ret = mkstemp(test_ctx->filename);
+    umask(old_umask);
+    if (ret == -1) {
+        return 1;
+    }
+    test_ctx->krb5_conf_fd  = ret;
+
+    check_leaks_push(test_ctx);
+    *state = test_ctx;
+    return 0;
+}
+
+static int test_write_krb5_conf_snippet_teardown(void **state)
+{
+    int ret;
+    struct write_krb5_conf_snippet_ctx *test_ctx = \
+                            talloc_get_type(*state,
+                                            struct write_krb5_conf_snippet_ctx);
+
+    if (test_ctx == NULL) {
+        return 0;
+    }
+
+    if (test_ctx->krb5_conf_fd != -1) {
+        ret = close(test_ctx->krb5_conf_fd);
+        if (ret != 0) {
+            return 1;
+        }
+    }
+
+    if (test_ctx->filename != NULL) {
+        ret = unlink(test_ctx->filename);
+        if (ret != 0) {
+            return 1;
+        }
+    }
+
+    assert_true(check_leaks_pop(test_ctx));
+    talloc_free(test_ctx);
+    assert_true(leak_check_teardown());
+    return 0;
+}
+
+static time_t get_fd_mtime(int fd)
+{
+    int ret;
+    struct stat sb;
+
+    ret = fstat(fd, &sb);
+    if (ret == -1) {
+        return 0;
+    }
+
+    return sb.st_mtim.tv_sec;
+}
+
+static void test_sss_write_krb5_conf_snippet(void **state)
 {
     int ret;
     char buf[PATH_MAX];
     char *cwd;
     char *path;
     char *file;
+    struct write_krb5_conf_snippet_ctx *test_ctx = \
+                            talloc_get_type(*state,
+                                            struct write_krb5_conf_snippet_ctx);
+    time_t old_mtime;
+    time_t new_mtime;
 
-    ret = sss_write_krb5_conf_snippet(NULL);
+    ret = sss_write_krb5_conf_snippet(NULL, -1);
     assert_int_equal(ret, EINVAL);
 
-    ret = sss_write_krb5_conf_snippet("abc");
+    ret = sss_write_krb5_conf_snippet("abc", -1);
     assert_int_equal(ret, EINVAL);
 
-    ret = sss_write_krb5_conf_snippet("");
+    ret = sss_write_krb5_conf_snippet("", test_ctx->krb5_conf_fd);
     assert_int_equal(ret, EOK);
 
-    ret = sss_write_krb5_conf_snippet("none");
+    ret = sss_write_krb5_conf_snippet("none", test_ctx->krb5_conf_fd);
     assert_int_equal(ret, EOK);
 
     cwd = getcwd(buf, PATH_MAX);
@@ -1270,12 +1362,19 @@ void test_sss_write_krb5_conf_snippet(void **state)
     ret = asprintf(&file, "%s/%s/localauth_plugin", cwd, TESTS_PATH);
     assert_true(ret > 0);
 
-    ret = sss_write_krb5_conf_snippet(path);
+    ret = sss_write_krb5_conf_snippet(path, test_ctx->krb5_conf_fd);
     assert_int_equal(ret, EOK);
 
-    /* Check if writing a second time will work as well */
-    ret = sss_write_krb5_conf_snippet(path);
+    /* Check if writing a second time will work as well. Also check that
+     * the mocked krb5.conf's time is updated*/
+    old_mtime = get_fd_mtime(test_ctx->krb5_conf_fd);
+    sleep(1);
+
+    ret = sss_write_krb5_conf_snippet(path, test_ctx->krb5_conf_fd);
     assert_int_equal(ret, EOK);
+
+    new_mtime = get_fd_mtime(test_ctx->krb5_conf_fd);
+    assert_true(new_mtime > old_mtime);
 
 #ifdef HAVE_KRB5_LOCALAUTH_PLUGIN
     ret = unlink(file);
@@ -1552,7 +1651,9 @@ int main(int argc, const char *argv[])
         cmocka_unit_test_setup_teardown(test_add_strings_lists,
                                         setup_add_strings_lists,
                                         teardown_add_strings_lists),
-        cmocka_unit_test(test_sss_write_krb5_conf_snippet),
+        cmocka_unit_test_setup_teardown(test_sss_write_krb5_conf_snippet,
+                                        test_write_krb5_conf_snippet_setup,
+                                        test_write_krb5_conf_snippet_teardown),
         cmocka_unit_test_setup_teardown(test_fix_domain_in_name_list,
                                         confdb_test_setup,
                                         confdb_test_teardown),

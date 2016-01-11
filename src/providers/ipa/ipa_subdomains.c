@@ -114,8 +114,9 @@ ipa_subdom_reinit(struct ipa_subdomains_ctx *ctx)
           "Re-initializing domain %s\n", ctx->be_ctx->domain->name);
 
     ret = sss_write_krb5_conf_snippet(
-                              dp_opt_get_string(ctx->id_ctx->ipa_options->basic,
-                                                IPA_KRB5_CONFD_PATH));
+            dp_opt_get_string(ctx->id_ctx->ipa_options->basic,
+                              IPA_KRB5_CONFD_PATH),
+            ctx->id_ctx->ipa_options->service->krb5_service->krb5_conf_fd);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE, "sss_write_krb5_conf_snippet failed.\n");
         /* Just continue */
@@ -133,7 +134,8 @@ ipa_subdom_reinit(struct ipa_subdomains_ctx *ctx)
         return ret;
     }
 
-    ret = sss_write_domain_mappings(ctx->be_ctx->domain);
+    ret = sss_write_domain_mappings(ctx->be_ctx->domain,
+            ctx->id_ctx->ipa_options->service->krb5_service->krb5_conf_fd);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE,
                 "sss_krb5_write_mappings failed.\n");

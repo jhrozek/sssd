@@ -760,6 +760,7 @@ int krb5_service_init(TALLOC_CTX *memctx, struct be_ctx *ctx,
         ret = ENOMEM;
         goto done;
     }
+    service->krb5_conf_fd = -1;
 
     ret = be_fo_add_service(ctx, service_name, krb5_user_data_cmp);
     if (ret != EOK) {
@@ -816,7 +817,6 @@ done:
     talloc_zfree(tmp_ctx);
     return ret;
 }
-
 
 errno_t remove_krb5_info_files(TALLOC_CTX *mem_ctx, const char *realm)
 {

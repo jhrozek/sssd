@@ -697,6 +697,27 @@ START_TEST(test_sss_krb5_realm_has_proxy)
 }
 END_TEST
 
+START_TEST(test_sss_open_krb5_conf)
+{
+    char *old_krb5_config;
+    errno_t ret;
+    TALLOC_CTX *owner = NULL;
+    int fd = -1;;
+
+    owner = talloc_new(NULL);
+    fail_if(owner == NULL);
+
+    old_krb5_config = getenv("KRB5_CONFIG");
+    setenv("KRB5_CONFIG", "/dev/null", 1);
+    ret = sss_open_krb5_conf(owner, &fd);
+    fail_unless(ret == EOK);
+    setenv("KRB5_CONFIG", old_krb5_config, 1);
+
+    fail_if(fd == -1);
+    talloc_free(owner);
+}
+END_TEST
+
 Suite *krb5_utils_suite (void)
 {
     Suite *s = suite_create ("krb5_utils");
@@ -737,6 +758,7 @@ Suite *krb5_utils_suite (void)
     tcase_add_test(tc_krb5_helpers, test_compare_principal_realm);
     tcase_add_test(tc_krb5_helpers, test_parse_krb5_map_user);
     tcase_add_test(tc_krb5_helpers, test_sss_krb5_realm_has_proxy);
+    tcase_add_test(tc_krb5_helpers, test_sss_open_krb5_conf);
     suite_add_tcase(s, tc_krb5_helpers);
 
     return s;

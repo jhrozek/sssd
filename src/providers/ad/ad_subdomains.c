@@ -464,8 +464,9 @@ static errno_t ad_subdom_reinit(struct ad_subdomains_ctx *ctx)
     errno_t ret;
 
     ret = sss_write_krb5_conf_snippet(
-                            dp_opt_get_string(ctx->ad_id_ctx->ad_options->basic,
-                                              AD_KRB5_CONFD_PATH));
+            dp_opt_get_string(ctx->ad_id_ctx->ad_options->basic,
+                                AD_KRB5_CONFD_PATH),
+            ctx->ad_id_ctx->ad_options->service->krb5_service->krb5_conf_fd);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE, "sss_write_krb5_conf_snippet failed.\n");
         /* Just continue */
@@ -477,7 +478,8 @@ static errno_t ad_subdom_reinit(struct ad_subdomains_ctx *ctx)
         return ret;
     }
 
-    ret = sss_write_domain_mappings(ctx->be_ctx->domain);
+    ret = sss_write_domain_mappings(ctx->be_ctx->domain,
+               ctx->ad_id_ctx->ad_options->service->krb5_service->krb5_conf_fd);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE, "sss_krb5_write_mappings failed.\n");
         /* Just continue */
