@@ -1,7 +1,7 @@
 /*
    SSSD
 
-   Secrets Responder, header file
+   Secrets Local Provider
 
    Copyright (C) Simo Sorce <ssorce@redhat.com>	2016
 
@@ -19,22 +19,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __SECSRV_H__
-#define __SECSRV_H__
+#ifndef __SECSRV_LOCAL_H__
+#define __SECSRV_LOCAL_H__
 
-#include "config.h"
+int local_secrets_provider_handle(TALLOC_CTX *mem_ctx,
+                                  struct provider_handle **handle);
 
-#include <stdint.h>
-#include <sys/un.h>
-#include <talloc.h>
-#include <tevent.h>
-#include <ldb.h>
-
-struct sec_ctx {
-    struct resp_ctx *rctx;
-    int fd_limit;
-};
-
-int sec_connection_setup(struct cli_ctx *cctx);
-
-#endif /* __SECSRV_H__ */
+#endif /* __SECSRV_LOCAL_H__ */

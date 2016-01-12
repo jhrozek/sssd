@@ -79,12 +79,15 @@ krb5rcachedir = @krb5rcachedir@
 sudolibdir = @sudolibpath@
 polkitdir = @polkitdir@
 
+secdbpath = @secdbpath@
+
 UNICODE_LIBS=@UNICODE_LIBS@
 
 MKDIR_P = @MKDIR_P@
 INSTALL = @INSTALL@
 
 SSSD_USER = @SSSD_USER@
+
 
 AM_CFLAGS =
 if WANT_AUX_INFO
@@ -589,6 +592,8 @@ dist_noinst_HEADERS = \
     src/responder/ifp/ifp_groups.h \
     src/responder/ifp/ifp_cache.h \
     src/responder/secrets/secsrv.h \
+    src/responder/secrets/secsrv_private.h \
+    src/responder/secrets/secsrv_local.h \
     src/sbus/sbus_client.h \
     src/sbus/sssd_dbus.h \
     src/sbus/sssd_dbus_meta.h \
@@ -1227,9 +1232,12 @@ if BUILD_SECRETS
 sssd_secrets_SOURCES = \
     src/responder/secrets/secsrv.c \
     src/responder/secrets/secsrv_cmd.c \
+    src/responder/secrets/providers.c \
+    src/responder/secrets/local.c \
     $(SSSD_RESPONDER_OBJ)
 sssd_secrets_LDADD = \
     $(HTTP_PARSER_LIBS) \
+    $(JANSSON_LIBS) \
     $(TDB_LIBS) \
     $(SSSD_LIBS) \
     $(SSSD_INTERNAL_LTLIBS)
@@ -3569,6 +3577,9 @@ endif
             $(DESTDIR)$(pubconfpath) \
             $(DESTDIR)$(pubconfpath)/krb5.include.d $(DESTDIR)$(gpocachepath)
 	$(INSTALL) -d -m 0711 $(DESTDIR)$(sssdconfdir)
+if BUILD_SECRETS
+	$(MKDIR_P) $(DESTDIR)$(secdbpath)
+endif
 
 if HAVE_DOXYGEN
 docs:
