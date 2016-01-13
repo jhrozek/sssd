@@ -333,8 +333,6 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
     size_t msgs_count = 0;
     char *sanitized_name;
     char *lc_sanitized_name;
-    char *fqname;
-    char *lc_fqname;
     char *filter;
     int ret;
 
@@ -371,17 +369,8 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    fqname = sss_create_internal_fqname(tmp_ctx, sanitized_name,
-                                        domain->name);
-    lc_fqname = sss_create_internal_fqname(tmp_ctx, lc_sanitized_name,
-                                           domain->name);
-    if (fqname == NULL || lc_fqname == NULL) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    filter = talloc_asprintf(tmp_ctx, filter_tmpl, lc_fqname,
-                             fqname, fqname);
+    filter = talloc_asprintf(tmp_ctx, filter_tmpl, lc_sanitized_name,
+                             sanitized_name, sanitized_name);
     if (!filter) {
         ret = ENOMEM;
         goto done;

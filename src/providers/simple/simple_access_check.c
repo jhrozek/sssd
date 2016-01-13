@@ -720,6 +720,15 @@ struct tevent_req *simple_access_check_send(TALLOC_CTX *mem_ctx,
 
     state->access_granted = false;
     state->ctx = ctx;
+
+    ret = sss_parse_internal_fqname(state, username, NULL, NULL);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Username [%s] is not in the expected format!\n", username);
+        ret = ERR_WRONG_NAME_FORMAT;
+        goto immediate;
+    }
+
     state->username = talloc_strdup(state, username);
     if (!state->username) {
         ret = ENOMEM;
