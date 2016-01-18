@@ -18,15 +18,9 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <string.h>
-#include <talloc.h>
-#include <signal.h>
-#include <errno.h>
-#include <utime.h>
-
-#include "config.h"
-#include "confdb/confdb.h"
 #include "util/util.h"
+#include <signal.h>
+#include <utime.h>
 #include "responder/common/responder.h"
 #include "responder/ifp/ifp_components.h"
 

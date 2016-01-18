@@ -20,10 +20,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <popt.h>
-
 #include "util/util.h"
-#include "confdb/confdb.h"
 #include "monitor/monitor_interfaces.h"
 #include "responder/common/responder.h"
 #include "providers/data_provider.h"

@@ -18,9 +18,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include <errno.h>
-#include "db/sysdb.h"
 #include "util/util.h"
+#include "db/sysdb.h"
 #include "responder/common/responder.h"
 #include "responder/common/responder_packet.h"
 

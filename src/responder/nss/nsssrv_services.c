@@ -21,13 +21,11 @@
 */
 
 
-#include <arpa/inet.h>
 #include "util/util.h"
 #include "responder/nss/nsssrv.h"
 #include "responder/nss/nsssrv_private.h"
 #include "responder/nss/nsssrv_services.h"
 #include "responder/common/negcache.h"
-#include "confdb/confdb.h"
 #include "db/sysdb.h"
 #include "db/sysdb_services.h"
 

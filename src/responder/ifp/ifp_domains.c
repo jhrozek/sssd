@@ -19,13 +19,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <talloc.h>
-#include <tevent.h>
-#include <string.h>
-
-#include "db/sysdb.h"
 #include "util/util.h"
-#include "confdb/confdb.h"
+#include "db/sysdb.h"
 #include "responder/common/responder.h"
 #include "responder/ifp/ifp_domains.h"
 

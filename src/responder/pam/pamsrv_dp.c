@@ -19,13 +19,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <sys/time.h>
-#include <time.h>
-
-#include <talloc.h>
-#include <security/pam_modules.h>
-
 #include "util/util.h"
+#include <security/pam_modules.h>
 #include "responder/common/responder_packet.h"
 #include "providers/data_provider.h"
 #include "sbus/sbus_client.h"

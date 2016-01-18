@@ -21,8 +21,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "util/util.h"
 #include <sys/param.h>
-
 #include "db/sysdb.h"
 #include "responder/ifp/ifp_private.h"
 

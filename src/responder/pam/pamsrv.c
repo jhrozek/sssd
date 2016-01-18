@@ -20,23 +20,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "util/util.h"
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <string.h>
-#include <sys/time.h>
-#include <errno.h>
-#include <popt.h>
-#include <dbus/dbus.h>
-
-#include "util/util.h"
 #include "db/sysdb.h"
-#include "confdb/confdb.h"
-#include "sbus/sssd_dbus.h"
 #include "responder/common/responder_packet.h"
 #include "providers/data_provider.h"
 #include "monitor/monitor_interfaces.h"

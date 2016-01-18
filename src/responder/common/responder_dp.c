@@ -20,8 +20,6 @@
 */
 
 
-#include <sys/time.h>
-#include <time.h>
 #include "util/util.h"
 #include "responder/common/responder_packet.h"
 #include "responder/common/responder.h"

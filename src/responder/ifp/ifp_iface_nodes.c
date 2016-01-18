@@ -18,6 +18,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "config.h"
 #include "sbus/sssd_dbus.h"
 #include "responder/ifp/ifp_iface_generated.h"
 #include "responder/ifp/ifp_users.h"

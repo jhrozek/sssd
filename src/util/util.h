@@ -35,11 +35,13 @@
 #include <limits.h>
 #include <locale.h>
 #include <time.h>
+#include <sys/time.h>
 #include <pcre.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <popt.h>
 
 #include <talloc.h>
 #include <tevent.h>

@@ -19,10 +19,9 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <time.h>
+#include "util/util.h"
 #include <security/pam_modules.h>
 
-#include "util/util.h"
 #include "db/sysdb.h"
 #include "util/crypto/sss_crypto.h"
 #include "providers/data_provider.h"

@@ -18,10 +18,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdint.h>
-#include <errno.h>
-#include <talloc.h>
-
 #include "util/util.h"
 #include "responder/common/responder.h"
 #include "responder/common/responder_packet.h"

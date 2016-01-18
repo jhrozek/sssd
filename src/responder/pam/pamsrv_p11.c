@@ -19,9 +19,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <time.h>
-
-#include "util/util.h"
 #include "providers/data_provider.h"
 #include "util/child_common.h"
 #include "util/strtonum.h"

@@ -20,11 +20,9 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <time.h>
 #include "util/util.h"
 #include "util/auth_utils.h"
 #include "db/sysdb.h"
-#include "confdb/confdb.h"
 #include "responder/common/responder_packet.h"
 #include "responder/common/responder.h"
 #include "responder/common/negcache.h"

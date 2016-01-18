@@ -18,12 +18,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <talloc.h>
-#include <tevent.h>
-#include <string.h>
-
-#include "db/sysdb.h"
 #include "util/util.h"
+#include "db/sysdb.h"
 #include "util/strtonum.h"
 #include "util/cert.h"
 #include "sbus/sssd_dbus_errors.h"

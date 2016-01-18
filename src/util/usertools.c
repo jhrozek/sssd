@@ -19,16 +19,11 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <pwd.h>
-#include <pcre.h>
-#include <errno.h>
-#include <talloc.h>
+#include "util/util.h"
 #include <pwd.h>
 #include <grp.h>
 
-#include "confdb/confdb.h"
 #include "util/strtonum.h"
-#include "util/util.h"
 #include "util/safe-format-string.h"
 #include "responder/common/responder.h"
 

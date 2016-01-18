@@ -18,12 +18,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <string.h>
-#include <stdint.h>
-#include <errno.h>
-#include <talloc.h>
-#include <tevent.h>
-
 #include "util/util.h"
 #include "responder/sudo/sudosrv_private.h"
 

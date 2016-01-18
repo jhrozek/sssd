@@ -18,12 +18,9 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <dbus/dbus.h>
-#include <ldb.h>
-#include <talloc.h>
-#include <tevent.h>
-
 #include "util/util.h"
+#include <dbus/dbus.h>
+
 #include "db/sysdb.h"
 #include "responder/common/responder_cache_req.h"
 #include "providers/data_provider.h"

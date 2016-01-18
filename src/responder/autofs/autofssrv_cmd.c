@@ -20,15 +20,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <talloc.h>
-
 #include "util/util.h"
 #include "responder/common/responder.h"
 #include "responder/common/responder_packet.h"
 #include "responder/autofs/autofs_private.h"
 #include "db/sysdb.h"
 #include "db/sysdb_autofs.h"
-#include "confdb/confdb.h"
 
 static int autofs_cmd_send_error(struct autofs_cmd_ctx *cmdctx, int err)
 {

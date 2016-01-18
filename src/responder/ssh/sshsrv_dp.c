@@ -18,11 +18,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <talloc.h>
-#include <tevent.h>
-#include <dbus/dbus.h>
-#include "sbus/sssd_dbus.h"
-
 #include "util/util.h"
 #include "sbus/sbus_client.h"
 #include "providers/data_provider.h"
