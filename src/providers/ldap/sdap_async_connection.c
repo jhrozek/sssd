@@ -754,6 +754,9 @@ static void simple_bind_done(struct sdap_op *op,
 
     if (result == LDAP_SUCCESS) {
         ret = EOK;
+    } else if (result == LDAP_INVALID_CREDENTIALS
+                   && errmsg != NULL && strstr(errmsg, "data 775,") != NULL) {
+        ret = ERR_ACCOUNT_LOCKED;
     } else {
         ret = ERR_AUTH_FAILED;
     }
