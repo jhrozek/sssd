@@ -21,6 +21,7 @@
 
 #include "responder/secrets/secsrv_private.h"
 #include "responder/secrets/secsrv_local.h"
+#include "responder/secrets/secsrv_proxy.h"
 #include <jansson.h>
 
 int sec_map_url_to_user_path(struct sec_req_ctx *secreq, char **mapped_path)
@@ -42,13 +43,14 @@ int sec_map_url_to_user_path(struct sec_req_ctx *secreq, char **mapped_path)
 int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
                     struct provider_handle **handle)
 {
+    struct sec_ctx *sctx;
     char **sections;
     char *def_provider;
     char *provider;
-    const char *upath;
-    int ulen;
     int num_sections;
     int ret;
+
+    sctx = talloc_get_type(secreq->cctx->rctx->pvt_ctx, struct sec_ctx);
 
     /* patch must start with /secrets/ for now */
     ret = strncasecmp(secreq->parsed_url.path,
@@ -75,12 +77,16 @@ int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
     if (ret != EOK) return ret;
 
     provider = def_provider;
-    upath = &secreq->parsed_url.path[sizeof(SEC_BASEPATH) - 1];
-    ulen = strlen(upath);
 
     // TODO order by length ?
-    for (int i = 0; ulen > 0 && i < num_sections; i++) {
-        if (strncmp(sections[i], upath, ulen) == 0) {
+    for (int i = 0; i < num_sections; i++) {
+        int slen;
+
+        secreq->base_path = talloc_asprintf(secreq, SEC_BASEPATH"%s/", sections[i]);
+        if (!secreq->base_path) return ENOMEM;
+        slen = strlen(secreq->base_path);
+
+        if (strncmp(secreq->base_path, secreq->mapped_path, slen) == 0) {
             char *secname;
 
             secname = talloc_asprintf(mem_ctx, CONFDB_SEC_CONF_ENTRY"/%s",
@@ -93,19 +99,31 @@ int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
             if (ret || !provider) return EIO;
 
             secreq->cfg_section = talloc_steal(secreq, secname);
+            if (!secreq->cfg_section) return ENOMEM;
             break;
+        }
+        talloc_zfree(secreq->base_path);
+    }
+
+    if (!secreq->base_path) secreq->base_path = SEC_BASEPATH;
+
+    ret = sec_get_provider(sctx, provider, handle);
+    if (ret == ENOENT) {
+        if (strcasecmp(provider, "LOCAL") == 0) {
+            ret = local_secrets_provider_handle(sctx, handle);
+        } else if (strcasecmp(provider, "PROXY") == 0) {
+            ret = proxy_secrets_provider_handle(sctx, handle);
+        } else {
+            DEBUG(SSSDBG_FATAL_FAILURE,
+                  "Unknown provider type: %s\n", provider);
+            ret = EIO;
+        }
+        if (ret == EOK) {
+            ret = sec_add_provider(sctx, *handle);
         }
     }
 
-    if (strcasecmp(provider, "LOCAL") == 0) {
-        return local_secrets_provider_handle(mem_ctx, handle);
-    } else {
-        DEBUG(SSSDBG_FATAL_FAILURE,
-              "Unknown provider type: %s\n", provider);
-        return EIO;
-    }
-
-    return EINVAL;
+    return ret;
 }
 
 int sec_provider_recv(struct tevent_req *req) {
@@ -198,6 +216,58 @@ int sec_http_reply_with_body(TALLOC_CTX *mem_ctx, struct sec_data *reply,
     return EOK;
 }
 
+int sec_http_append_header(TALLOC_CTX *mem_ctx, char **dest,
+                           char *field, char *value)
+{
+    if (*dest == NULL) {
+        *dest = talloc_asprintf(mem_ctx, "%s: %s\r\n", field, value);
+    } else {
+        *dest = talloc_asprintf_append_buffer(*dest, "%s: %s\r\n",
+                                              field, value);
+    }
+    if (!*dest) return ENOMEM;
+
+    return EOK;
+}
+
+int sec_http_reply_with_headers(TALLOC_CTX *mem_ctx, struct sec_data *reply,
+                                int status_code, const char *reason,
+                                struct sec_kvp *headers, int num_headers,
+                                struct sec_data *body)
+{
+    const char *reason_phrase = reason ? reason : "";
+    int ret;
+
+    /* Status-Line */
+    reply->data = talloc_asprintf(mem_ctx, "HTTP/1.1 %d %s\r\n",
+                                  status_code, reason_phrase);
+    if (!reply->data) return ENOMEM;
+
+    /* Headers */
+    for (int i = 0; i < num_headers; i++) {
+        ret = sec_http_append_header(mem_ctx, &reply->data,
+                                     headers[i].name, headers[i].value);
+        if (ret) return ret;
+    }
+
+    /* CRLF separator before body */
+    reply->data = talloc_strdup_append_buffer(reply->data, "\r\n");
+
+    reply->length = strlen(reply->data);
+
+    /* Message-Body */
+    if (body && body->length) {
+        reply->data = talloc_realloc(mem_ctx, reply->data, char,
+                                     reply->length + body->length);
+        if (!reply->data) return ENOMEM;
+
+        memcpy(&reply->data[reply->length], body->data, body->length);
+        reply->length += body->length;
+    }
+
+    return EOK;
+}
+
 enum sec_http_status_codes sec_errno_to_http_status(errno_t err)
 {
     switch (err) {
@@ -220,6 +290,40 @@ enum sec_http_status_codes sec_errno_to_http_status(errno_t err)
     default:
         return STATUS_500;
     }
+}
+
+int sec_http_format_request(TALLOC_CTX *mem_ctx, uint8_t method,
+                            const char *url, char **headers,
+                            struct sec_data *body, struct sec_data *req)
+{
+    const char *cmd;
+
+    req->length = 0;
+
+    cmd = http_method_str(method);
+    if (cmd == NULL) return EINVAL;
+
+    req->data = talloc_asprintf(mem_ctx, "%s %s\r\n", cmd, url);
+    if (!req->data) return ENOMEM;
+
+    for (int i = 0; headers[i]; i++) {
+        req->data = talloc_asprintf_append_buffer(req->data,
+                                                  "%s\r\n", headers[i]);
+        if (!req->data) return ENOMEM;
+    }
+    req->length = strlen(req->data);
+
+    if (body) {
+        req->data = talloc_realloc_size(mem_ctx, req->data,
+                                        req->length + body->length);
+        if (!req->data) return ENOMEM;
+
+        memcpy(&req->data[req->length], body->data, body->length);
+
+        req->length += body->length;
+    }
+
+    return EOK;
 }
 
 int sec_json_to_simple_secret(TALLOC_CTX *mem_ctx,
@@ -351,4 +455,37 @@ done:
     json_decref(root);
     free(jsonized);
     return ret;
+}
+
+int sec_get_provider(struct sec_ctx *sctx, const char *name,
+                     struct provider_handle **out_handle)
+{
+    struct provider_handle *handle;
+
+    for (int i = 0; sctx->providers && sctx->providers[i]; i++) {
+        handle = sctx->providers[i];
+        if (strcasecmp(handle->name, name) != 0) {
+            continue;
+        }
+        *out_handle = handle;
+        return EOK;
+    }
+    return ENOENT;
+}
+
+int sec_add_provider(struct sec_ctx *sctx, struct provider_handle *handle)
+{
+    int c;
+
+    for (c = 0; sctx->providers && sctx->providers[c]; c++)
+        continue;
+
+    sctx->providers = talloc_realloc(sctx, sctx->providers,
+                                     struct provider_handle *, c + 2);
+    if (!sctx->providers) return ENOMEM;
+
+    sctx->providers[c] = talloc_steal(sctx, handle);
+    sctx->providers[c + 1] = NULL;
+
+    return EOK;
 }

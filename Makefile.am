@@ -1235,12 +1235,16 @@ sssd_secrets_SOURCES = \
     src/responder/secrets/secsrv_cmd.c \
     src/responder/secrets/providers.c \
     src/responder/secrets/local.c \
-    $(SSSD_RESPONDER_OBJ)
+    src/responder/secrets/proxy.c \
+    src/util/sss_sockets.c \
+    $(SSSD_RESPONDER_OBJ) \
+    $(SSSD_RESOLV_OBJ)
 sssd_secrets_LDADD = \
     $(HTTP_PARSER_LIBS) \
     $(JANSSON_LIBS) \
     $(TDB_LIBS) \
     $(SSSD_LIBS) \
+    $(CARES_LIBS) \
     $(SSSD_INTERNAL_LTLIBS)
 endif
 
