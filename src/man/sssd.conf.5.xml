@@ -1047,23 +1047,28 @@ pam_account_locked_message = Account locked, please contact help desk.
                     </listitem>
                 </varlistentry>
                 <varlistentry>
-                    <term>pam_account_locked_message (string)</term>
+                    <term>pam_cert_auth (bool)</term>
                     <listitem>
                         <para>
-                           If user is authenticating and
-                           account is locked then by default
-                           'Permission denied' is output. This output will
-                           be changed to content of this variable if it is
-                           set.
+                            Enable certificate based Smartcard authentication.
+                            Since this requires additional communication with
+                            the Smartcard which will delay the authentication
+                            process this option is disabled by default.
                         </para>
                         <para>
-                            example:
-                            <programlisting>
-pam_account_locked_message = Account locked, please call help desk.
-                            </programlisting>
+                            Default: False
+                        </para>
+                    </listitem>
+                </varlistentry>
+                <varlistentry>
+                    <term>pam_cert_db_path (string)</term>
+                    <listitem>
+                        <para>
+                            The path to the certificate database which contain
+                            the PKCS#11 modules to access the Smartcard.
                         </para>
                         <para>
-                            Default: none
+                            Default: /etc/pki/nssdb (NSS version)
                         </para>
                     </listitem>
                 </varlistentry>
