@@ -212,6 +212,7 @@
                         SYSDB_PRIMARY_GROUP_GIDNUM, \
                         SYSDB_SID_STR, \
                         SYSDB_UPN, \
+                        SYSDB_USER_CERT, \
                         SYSDB_OVERRIDE_DN, \
                         SYSDB_OVERRIDE_OBJECT_DN, \
                         SYSDB_DEFAULT_OVERRIDE_NAME, \
