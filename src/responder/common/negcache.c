@@ -39,6 +39,9 @@
 
 struct sss_nc_ctx {
     struct tdb_context *tdb;
+
+    int timeout;
+    int locals_timeout;
 };
 
 typedef int (*ncache_set_byname_fn_t)(struct sss_nc_ctx *, bool,
@@ -73,6 +76,26 @@ int sss_ncache_init(TALLOC_CTX *memctx, struct sss_nc_ctx **_ctx)
     *_ctx = ctx;
     return EOK;
 };
+
+void sss_ncache_set_timeout(struct sss_nc_ctx *ctx, int value)
+{
+    ctx->timeout = value;
+}
+
+void sss_ncache_set_locals_timeout(struct sss_nc_ctx *ctx, int value)
+{
+    ctx->locals_timeout = value;
+}
+
+int sss_ncache_get_timeout(struct sss_nc_ctx *ctx)
+{
+    return ctx->timeout;
+}
+
+int sss_ncache_get_locals_timeout(struct sss_nc_ctx *ctx)
+{
+    return ctx->locals_timeout;
+}
 
 static int sss_ncache_check_str(struct sss_nc_ctx *ctx, char *str, int ttl)
 {

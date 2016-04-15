@@ -448,6 +448,7 @@ EXTRA_DIST =
 
 SSSD_RESPONDER_OBJ = \
     src/responder/common/negcache.c \
+    src/responder/common/negcache_utils.c \
     src/responder/common/responder_cmd.c \
     src/responder/common/responder_common.c \
     src/responder/common/responder_dp.c \
@@ -573,6 +574,7 @@ dist_noinst_HEADERS = \
     src/responder/nss/nsssrv_mmap_cache.h \
     src/responder/pac/pacsrv.h \
     src/responder/common/negcache.h \
+    src/responder/common/negcache_utils.h \
     src/responder/sudo/sudosrv_private.h \
     src/responder/autofs/autofs_private.h \
     src/responder/ssh/sshsrv_private.h \
@@ -1885,6 +1887,7 @@ TEST_MOCK_RESP_OBJ = \
      src/responder/common/responder_packet.c \
      src/responder/common/responder_cmd.c \
      src/responder/common/negcache.c \
+     src/responder/common/negcache_utils.c \
      src/responder/common/responder_common.c \
      src/responder/common/responder_cache_req.c
 
