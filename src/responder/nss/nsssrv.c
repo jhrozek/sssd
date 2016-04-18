@@ -38,6 +38,7 @@
 #include "responder/nss/nsssrv_mmap_cache.h"
 #include "responder/nss/nsssrv_netgroup.h"
 #include "responder/common/negcache.h"
+#include "responder/common/negcache_utils.h"
 #include "db/sysdb.h"
 #include "confdb/confdb.h"
 #include "sbus/sssd_dbus.h"
@@ -440,7 +441,8 @@ int nss_process_init(TALLOC_CTX *mem_ctx,
         goto fail;
     }
 
-    ret = sss_ncache_init(rctx, &nctx->ncache);
+    ret = sss_ncache_init_from_confdb(rctx, cdb, CONFDB_NSS_CONF_ENTRY,
+                                      &nctx->ncache);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE,
               "fatal error initializing negative cache\n");
