@@ -175,7 +175,7 @@ getserv_send(TALLOC_CTX *mem_ctx,
          if (service_name) {
              /* Check the negative cache */
              ret = sss_ncache_check_service(nctx->ncache,
-                                            nctx->neg_timeout,
+                                            sss_ncache_get_timeout(nctx->ncache),
                                             dom,
                                             SVC_NAME_CASED,
                                             SVC_PROTO_CASED);
@@ -217,7 +217,7 @@ getserv_send(TALLOC_CTX *mem_ctx,
          } else { /* Looking up by port */
              /* Check the negative cache */
              ret = sss_ncache_check_service_port(nctx->ncache,
-                                            nctx->neg_timeout,
+                                            sss_ncache_get_timeout(nctx->ncache),
                                             dom, port,
                                             SVC_PROTO_CASED);
              /* If negatively cached, return we didn't find it */

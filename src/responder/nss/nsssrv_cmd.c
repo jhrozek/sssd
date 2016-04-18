@@ -4845,7 +4845,9 @@ static errno_t nss_cmd_getbysid_search(struct nss_dom_ctx *dctx)
 
     /* verify this user has not yet been negatively cached,
         * or has been permanently filtered */
-    ret = sss_ncache_check_sid(nctx->ncache, nctx->neg_timeout, cmdctx->secid);
+    ret = sss_ncache_check_sid(nctx->ncache,
+                               sss_ncache_get_timeout(nctx->ncache),
+                               cmdctx->secid);
     if (ret == EEXIST) {
         DEBUG(SSSDBG_TRACE_FUNC,
               "SID [%s] does not exist! (negative cache)\n", cmdctx->secid);
