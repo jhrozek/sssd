@@ -47,7 +47,6 @@
 #define SID "S-1-2-3-4-5"
 #define CERT "MIIECTCCAvGgAwIBAgIBCTANBgkqhkiG9w0BAQsFADA0MRIwEAYDVQQKDAlJUEEuREVWRUwxHjAcBgNVBAMMFUNlcnRpZmljYXRlIEF1dGhvcml0eTAeFw0xNTA0MjgxMDIxMTFaFw0xNzA0MjgxMDIxMTFaMDIxEjAQBgNVBAoMCUlQQS5ERVZFTDEcMBoGA1UEAwwTaXBhLWRldmVsLmlwYS5kZXZlbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALIykqtHuAwTVEofHikG/9BQy/dfeZFlsTkBg2qtnnc78w3XufbcnkpJp9Bmcsy/d9beqf5nlsxJ8TcjLsRQ9Ou6YtQjTfM3OILuOz8s0ICbF6qb66bd9hX/BrLO/9+KnpWFSR+E/YEmzgYyDTbKfBWBaGuPPrOi/K6vwkRYFZVA/FYZkYDtQhFmBO884HYzS4P6frRH3PvtRqWNCmaHpe97dGKsvnM2ybT+IMSB8/54GajQr3+BciRh2XaT4wvSTxkXM1fUgrDxqAP2AZmpuIyDyboZh+rWOwbrTPfx5SipELZG3uHhP8HMcr4qQ8b20LWgxCRuT73sIooHET350xUCAwEAAaOCASYwggEiMB8GA1UdIwQYMBaAFPKdQk4PxEglWC8czg+hPyLIVciRMDsGCCsGAQUFBwEBBC8wLTArBggrBgEFBQcwAYYfaHR0cDovL2lwYS1jYS5pcGEuZGV2ZWwvY2Evb2NzcDAOBgNVHQ8BAf8EBAMCBPAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMHQGA1UdHwRtMGswaaAxoC+GLWh0dHA6Ly9pcGEtY2EuaXBhLmRldmVsL2lwYS9jcmwvTWFzdGVyQ1JMLmJpbqI0pDIwMDEOMAwGA1UECgwFaXBhY2ExHjAcBgNVBAMMFUNlcnRpZmljYXRlIEF1dGhvcml0eTAdBgNVHQ4EFgQULSs/y/Wy/zIsqMIc3b2MgB7dMYIwDQYJKoZIhvcNAQELBQADggEBAJpHLlCnTR1TD8lxQgzl2n1JZOeryN/fAsGH0Vve2m8r5PC+ugnfAoULiuabBn1pOGxy/0x7Kg0/Iy8WRv8Fk7DqJCjXEqFXuFkZJfNDCtP9DzeNuMoV50iKoMfHS38BPFjXN+X/fSsBrA2fUWrlQCTmXlUN97gvQqxt5Slrxgukvxm9OSfu/sWz22LUvtJHupYwWv1iALgnXS86lAuVNYVALLxn34r58XsZlj5CSBMjBJWpaxEzgUdag3L2IPqOQXuPd0d8x11G9E/9gQquOSe2aiZjsdO/VYOCmzZsM2QPUMBVlBPDhfTVcWXQwN385uycW/ARtSzzSME2jKKWSIQ="
 #define PROTO "TCP"
-#define LIFETIME 200
 #define SHORTSPAN 1
 #define NAME "foo_name"
 #define TESTS_PATH "tp_" BASE_FILE_STEM
@@ -178,17 +177,16 @@ static void test_sss_ncache_init(void **state)
 static void test_sss_ncache_uid(void **state)
 {
     uid_t uid;
-    int ret, ttl;
+    int ret;
     bool permanent;
     struct test_state *ts;
 
-    ttl = LIFETIME;
     uid = getuid();
 
     ts = talloc_get_type_abort(*state, struct test_state);
 
     /* test when uid not present in database */
-    ret = sss_ncache_check_uid(ts->ctx, ttl, NULL, uid);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, uid);
     assert_int_equal(ret, ENOENT);
 
     /* test when uid is present in database */
@@ -200,19 +198,18 @@ static void test_sss_ncache_uid(void **state)
     ret = sss_ncache_set_uid(ts->ctx, permanent, NULL, uid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_uid(ts->ctx, ttl, NULL, uid);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, uid);
     assert_int_equal(ret, EEXIST);
 
-    ttl = SHORTSPAN;
     ret = sss_ncache_set_uid(ts->ctx, permanent, NULL, uid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_uid(ts->ctx, ttl, NULL, uid);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, uid);
     assert_int_equal(ret, EEXIST);
 
     sleep(SHORTSPAN + 1);
 
-    ret = sss_ncache_check_uid(ts->ctx, ttl, NULL, uid);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, uid);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
@@ -220,12 +217,12 @@ static void test_sss_ncache_uid(void **state)
     ret = sss_ncache_set_uid(ts->ctx, permanent, NULL, uid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_uid(ts->ctx, ttl, NULL, uid);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, uid);
     assert_int_equal(ret, EEXIST);
 
     sleep(SHORTSPAN + 1);
 
-    ret = sss_ncache_check_uid(ts->ctx, ttl, NULL, uid);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, uid);
     assert_int_equal(ret, ENOENT);
 
     ret = sss_ncache_set_uid(ts->ctx, permanent, NULL, uid);
@@ -239,16 +236,15 @@ static void test_sss_ncache_uid(void **state)
 static void test_sss_ncache_gid(void **state)
 {
     gid_t gid;
-    int ret, ttl;
+    int ret;
     bool permanent;
     struct test_state *ts;
 
-    ttl = LIFETIME;
     gid = getgid();
     ts = talloc_get_type_abort(*state, struct test_state);
 
     /* test when gid is not present in database */
-    ret = sss_ncache_check_gid(ts->ctx, ttl, NULL, gid);
+    ret = sss_ncache_check_gid(ts->ctx, NULL, gid);
     assert_int_equal(ret, ENOENT);
 
     /* test when gid is present in database */
@@ -256,14 +252,14 @@ static void test_sss_ncache_gid(void **state)
     ret = sss_ncache_set_gid(ts->ctx, permanent, NULL, gid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_gid(ts->ctx, ttl, NULL, gid);
+    ret = sss_ncache_check_gid(ts->ctx, NULL, gid);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_gid(ts->ctx, permanent, NULL, gid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_gid(ts->ctx, ttl, NULL, gid);
+    ret = sss_ncache_check_gid(ts->ctx, NULL, gid);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -274,17 +270,16 @@ static void test_sss_ncache_gid(void **state)
  */
 static void test_sss_ncache_sid(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     const char *sid = NULL;
     struct test_state *ts;
 
-    ttl = LIFETIME;
     sid = SID;
     ts = talloc_get_type_abort(*state, struct test_state);
 
     /*test when sid in not present in database */
-    ret = sss_ncache_check_sid(ts->ctx, ttl, sid);
+    ret = sss_ncache_check_sid(ts->ctx, sid);
     assert_int_equal(ret, ENOENT);
 
     /* test when sid is present in database */
@@ -292,14 +287,14 @@ static void test_sss_ncache_sid(void **state)
     ret = sss_ncache_set_sid(ts->ctx, permanent, sid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_sid(ts->ctx, ttl, sid);
+    ret = sss_ncache_check_sid(ts->ctx, sid);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_sid(ts->ctx, permanent, sid);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_sid(ts->ctx, ttl, sid);
+    ret = sss_ncache_check_sid(ts->ctx, sid);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -309,17 +304,16 @@ static void test_sss_ncache_sid(void **state)
  */
 static void test_sss_ncache_cert(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     const char *cert = NULL;
     struct test_state *ts;
 
-    ttl = LIFETIME;
     cert = CERT;
     ts = talloc_get_type_abort(*state, struct test_state);
 
     /*test when cert in not present in database */
-    ret = sss_ncache_check_cert(ts->ctx, ttl, cert);
+    ret = sss_ncache_check_cert(ts->ctx, cert);
     assert_int_equal(ret, ENOENT);
 
     /* test when cert is present in database */
@@ -327,14 +321,14 @@ static void test_sss_ncache_cert(void **state)
     ret = sss_ncache_set_cert(ts->ctx, permanent, cert);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_cert(ts->ctx, ttl, cert);
+    ret = sss_ncache_check_cert(ts->ctx, cert);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_cert(ts->ctx, permanent, cert);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_cert(ts->ctx, ttl, cert);
+    ret = sss_ncache_check_cert(ts->ctx, cert);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -344,24 +338,23 @@ static void test_sss_ncache_cert(void **state)
  */
 static void test_sss_ncache_user(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     const char *name = NAME;
     struct test_state *ts;
     struct sss_domain_info *dom;
 
-    ttl = LIFETIME;
     ts = talloc_get_type_abort(*state, struct test_state);
     dom = talloc(ts, struct sss_domain_info);
     dom->name = discard_const_p(char, TEST_DOM_NAME);
 
     /* test when domain name is not present in database */
     dom->case_sensitive = false;
-    ret = sss_ncache_check_user(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_user(ts->ctx, dom, name);
     assert_int_equal(ret, ENOENT);
 
     dom->case_sensitive = true;
-    ret = sss_ncache_check_user(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_user(ts->ctx, dom, name);
     assert_int_equal(ret, ENOENT);
 
     /* test when domain name is present in database */
@@ -369,14 +362,14 @@ static void test_sss_ncache_user(void **state)
     ret = sss_ncache_set_user(ts->ctx, permanent, dom, name);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_user(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_user(ts->ctx, dom, name);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_user(ts->ctx, permanent, dom, name);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_user(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_user(ts->ctx, dom, name);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -386,24 +379,23 @@ static void test_sss_ncache_user(void **state)
  */
 static void test_sss_ncache_group(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     const char *name = NAME;
     struct test_state *ts;
     struct sss_domain_info *dom;
 
-    ttl = LIFETIME;
     ts = talloc_get_type_abort(*state, struct test_state);
     dom = talloc(ts, struct sss_domain_info);
     dom->name = discard_const_p(char, TEST_DOM_NAME);
 
     /* test when domain name is not present in database */
     dom->case_sensitive = false;
-    ret = sss_ncache_check_group(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_group(ts->ctx, dom, name);
     assert_int_equal(ret, ENOENT);
 
     dom->case_sensitive = true;
-    ret = sss_ncache_check_group(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_group(ts->ctx, dom, name);
     assert_int_equal(ret, ENOENT);
 
     /* test when domain name is present in database */
@@ -411,14 +403,14 @@ static void test_sss_ncache_group(void **state)
     ret = sss_ncache_set_group(ts->ctx, permanent, dom, name);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_group(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_group(ts->ctx, dom, name);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_group(ts->ctx, permanent, dom, name);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_group(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_group(ts->ctx, dom, name);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -428,24 +420,23 @@ static void test_sss_ncache_group(void **state)
  */
 static void test_sss_ncache_netgr(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     const char *name = NAME;
     struct test_state *ts;
     struct sss_domain_info *dom;
 
-    ttl = LIFETIME;
     ts = talloc_get_type_abort(*state, struct test_state);
     dom = talloc(ts, struct sss_domain_info);
     dom->name = discard_const_p(char, TEST_DOM_NAME);
 
     /* test when domain name is not present in database */
     dom->case_sensitive = false;
-    ret = sss_ncache_check_netgr(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_netgr(ts->ctx, dom, name);
     assert_int_equal(ret, ENOENT);
 
     dom->case_sensitive = true;
-    ret = sss_ncache_check_netgr(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_netgr(ts->ctx, dom, name);
     assert_int_equal(ret, ENOENT);
 
     /* test when domain name is present in database */
@@ -453,14 +444,14 @@ static void test_sss_ncache_netgr(void **state)
     ret = sss_ncache_set_netgr(ts->ctx, permanent, dom, name);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_netgr(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_netgr(ts->ctx, dom, name);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_netgr(ts->ctx, permanent, dom, name);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_netgr(ts->ctx, ttl, dom, name);
+    ret = sss_ncache_check_netgr(ts->ctx, dom, name);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -470,24 +461,23 @@ static void test_sss_ncache_netgr(void **state)
  */
 static void test_sss_ncache_service_name(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     const char *name = NAME;
     struct test_state *ts;
     struct sss_domain_info *dom;
 
-    ttl = LIFETIME;
     ts = talloc_get_type_abort(*state, struct test_state);
     dom = talloc(ts, struct sss_domain_info);
     dom->name = discard_const_p(char, TEST_DOM_NAME);
 
     /* test when domain name and protocol are not present in database */
     dom->case_sensitive = false;
-    ret = sss_ncache_check_service(ts->ctx, ttl, dom, name, PROTO);
+    ret = sss_ncache_check_service(ts->ctx, dom, name, PROTO);
     assert_int_equal(ret, ENOENT);
 
     dom->case_sensitive = true;
-    ret = sss_ncache_check_service(ts->ctx, ttl, dom, name, PROTO);
+    ret = sss_ncache_check_service(ts->ctx, dom, name, PROTO);
     assert_int_equal(ret, ENOENT);
 
     /* test when domain name and protocol are present in database */
@@ -495,14 +485,14 @@ static void test_sss_ncache_service_name(void **state)
     ret = sss_ncache_set_service_name(ts->ctx, permanent, dom, name, PROTO);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_service(ts->ctx, ttl, dom, name, PROTO);
+    ret = sss_ncache_check_service(ts->ctx, dom, name, PROTO);
     assert_int_equal(ret, EEXIST);
 
     permanent = false;
     ret = sss_ncache_set_service_name(ts->ctx, permanent, dom, name, PROTO);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_service(ts->ctx, ttl, dom, name, PROTO);
+    ret = sss_ncache_check_service(ts->ctx, dom, name, PROTO);
     assert_int_equal(ret, EEXIST);
 }
 
@@ -512,24 +502,23 @@ static void test_sss_ncache_service_name(void **state)
  */
 static void test_sss_ncache_service_port(void **state)
 {
-    int ret, ttl;
+    int ret;
     bool permanent;
     struct test_state *ts;
     struct sss_domain_info *dom;
 
-    ttl = LIFETIME;
     ts = talloc_get_type_abort(*state, struct test_state);
     dom = talloc(ts, struct sss_domain_info);
     dom->name = discard_const_p(char, TEST_DOM_NAME);
 
     /* test when domain name, port and protocol are not present in database */
     dom->case_sensitive = false;
-    ret = sss_ncache_check_service_port(ts->ctx, ttl, dom, (uint16_t)PORT,
+    ret = sss_ncache_check_service_port(ts->ctx, dom, (uint16_t)PORT,
                                         PROTO);
     assert_int_equal(ret, ENOENT);
 
     dom->case_sensitive = true;
-    ret = sss_ncache_check_service_port(ts->ctx, ttl, dom, (uint16_t)PORT,
+    ret = sss_ncache_check_service_port(ts->ctx, dom, (uint16_t)PORT,
                                         PROTO);
     assert_int_equal(ret, ENOENT);
 
@@ -539,7 +528,7 @@ static void test_sss_ncache_service_port(void **state)
                                       PROTO);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_service_port(ts->ctx, ttl, dom, (uint16_t)PORT,
+    ret = sss_ncache_check_service_port(ts->ctx, dom, (uint16_t)PORT,
                                         PROTO);
     assert_int_equal(ret, EEXIST);
 
@@ -548,7 +537,7 @@ static void test_sss_ncache_service_port(void **state)
                                       PROTO);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_service_port(ts->ctx, ttl, dom, (uint16_t)PORT,
+    ret = sss_ncache_check_service_port(ts->ctx, dom, (uint16_t)PORT,
                                         PROTO);
     assert_int_equal(ret, EEXIST);
 }
@@ -565,13 +554,13 @@ static void test_sss_ncache_reset_permanent(void **state)
     ret = sss_ncache_set_uid(ts->ctx, permanent, NULL, 0);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_uid(ts->ctx, 0, NULL, 0);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, 0);
     assert_int_equal(ret, EEXIST);
 
     ret = sss_ncache_reset_permanent(ts->ctx);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_uid(ts->ctx, 0, NULL, 0);
+    ret = sss_ncache_check_uid(ts->ctx, NULL, 0);
     assert_int_equal(ret, ENOENT);
 }
 
@@ -618,28 +607,28 @@ static void test_sss_ncache_prepopulate(void **state)
 
     sleep(SHORTSPAN);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser1");
+    ret = sss_ncache_check_user(ncache, dom, "testuser1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup1");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser2");
+    ret = sss_ncache_check_user(ncache, dom, "testuser2");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup2");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup2");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser3");
+    ret = sss_ncache_check_user(ncache, dom, "testuser3");
     assert_int_equal(ret, ENOENT);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup3");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup3");
     assert_int_equal(ret, ENOENT);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser3@somedomain");
+    ret = sss_ncache_check_user(ncache, dom, "testuser3@somedomain");
     assert_int_equal(ret, ENOENT);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup3@somedomain");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup3@somedomain");
     assert_int_equal(ret, ENOENT);
 }
 
@@ -685,22 +674,22 @@ static void test_sss_ncache_default_domain_suffix(void **state)
     ret = sss_ncache_prepopulate(ncache, tc->confdb, ts->rctx);
     assert_int_equal(ret, EOK);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser1");
+    ret = sss_ncache_check_user(ncache, dom, "testuser1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup1");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser2");
+    ret = sss_ncache_check_user(ncache, dom, "testuser2");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup2");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup2");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser3");
+    ret = sss_ncache_check_user(ncache, dom, "testuser3");
     assert_int_equal(ret, ENOENT);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup3");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup3");
     assert_int_equal(ret, ENOENT);
 
 }
@@ -768,32 +757,32 @@ static void test_sss_ncache_reset_prepopulate(void **state)
     dom2->names = dom->names;
 
     /* First domain should not be known, the second not */
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser1");
+    ret = sss_ncache_check_user(ncache, dom, "testuser1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup1");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_user(ncache, 1, dom2, "testuser2");
+    ret = sss_ncache_check_user(ncache, dom2, "testuser2");
     assert_int_equal(ret, ENOENT);
 
-    ret = sss_ncache_check_group(ncache, 1, dom2, "testgroup2");
+    ret = sss_ncache_check_group(ncache, dom2, "testgroup2");
     assert_int_equal(ret, ENOENT);
 
     ret = sss_ncache_reset_repopulate_permanent(ts->rctx, ncache);
     assert_int_equal(ret, EOK);
 
     /* First domain should not be known, the second not */
-    ret = sss_ncache_check_user(ncache, 1, dom, "testuser1");
+    ret = sss_ncache_check_user(ncache, dom, "testuser1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom, "testgroup1");
+    ret = sss_ncache_check_group(ncache, dom, "testgroup1");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_user(ncache, 1, dom2, "testuser2");
+    ret = sss_ncache_check_user(ncache, dom2, "testuser2");
     assert_int_equal(ret, EEXIST);
 
-    ret = sss_ncache_check_group(ncache, 1, dom2, "testgroup2");
+    ret = sss_ncache_check_group(ncache, dom2, "testgroup2");
     assert_int_equal(ret, EEXIST);
 }
 int main(void)
