@@ -627,6 +627,7 @@ dist_noinst_HEADERS = \
     src/responder/common/cache_req/cache_req_plugin.h \
     src/responder/common/cache_req/cache_req_private.h \
     src/responder/common/data_provider/rdp.h \
+    src/responder/common/sss_packet.h \
     src/responder/pam/pamsrv.h \
     src/responder/pam/pam_helpers.h \
     src/responder/nss/nsssrv.h \

@@ -27,26 +27,10 @@
 
 #include "util/util.h"
 #include "responder/common/responder_packet.h"
+#include "responder/common/sss_packet.h"
 
 #define SSSSRV_PACKET_MEM_SIZE 512
 
-struct sss_packet {
-    size_t memsize;
-
-    /* Structure of the buffer:
-    * Bytes    Content
-    * ---------------------------------
-    * 0-15     packet header
-    * 0-3      packet length (uint32_t)
-    * 4-7      command type (uint32_t)
-    * 8-11     status (uint32_t)
-    * 12-15    reserved
-    * 16+      packet body */
-    uint8_t *buffer;
-
-    /* io pointer */
-    size_t iop;
-};
 
 /* Offsets to data in sss_packet's buffer */
 #define SSS_PACKET_LEN_OFFSET 0
