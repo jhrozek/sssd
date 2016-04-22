@@ -15,7 +15,6 @@ AM_CPPFLAGS = \
 TESTS_ENVIRONMENT = \
     CWRAP_TEST_SRCDIR=$(abs_srcdir) \
     ABS_TOP_BUILDDIR=$(abs_top_builddir) \
-    . $(srcdir)/cwrap_test_setup.sh; \
     $(AUX_TESTS_ENVIRONMENT) \
     $(NULL)
 
@@ -25,6 +24,12 @@ dist_noinst_SCRIPTS = \
     server-tests.sh \
     usertools-tests.sh \
     responder_common-tests.sh \
+    pam_wrapper_test_setup.sh \
+    pam_sss-tests.sh \
+    $(NULL)
+
+dist_noinst_HEADERS = \
+    test_pam_sss_common.h \
     $(NULL)
 
 SSSD_LIBS = \
@@ -91,6 +96,15 @@ check_PROGRAMS += \
     $(NULL)
 endif # HAVE_UID_WRAPPER
 endif # HAVE_NSS_WRAPPER
+
+if HAVE_PAM_WRAPPER
+if HAVE_LIBPAMTEST
+check_PROGRAMS += \
+    pam_sss_wrapper-tests \
+    $(NULL)
+endif # HAVE_LIBPAMTEST
+endif # HAVE_PAM_WRAPPER
+
 endif # HAVE_CMOCKA
 
 TESTS = \
@@ -99,6 +113,17 @@ TESTS = \
     usertools-tests.sh \
     responder_common-tests.sh \
     $(NULL)
+
+if HAVE_PAM_WRAPPER
+if HAVE_LIBPAMTEST
+if HAVE_PWRAP_MODULES
+TESTS += \
+    pam_sss-tests.sh \
+    $(NULL)
+endif # HAVE_PWRAP_MODULES
+endif # HAVE_LIBPAMTEST
+endif # HAVE_PAM_WRAPPER
+
 
 become_user_tests_SOURCES = \
     test_become_user.c \
@@ -193,6 +218,33 @@ negcache_tests_LDADD = \
     $(abs_top_builddir)/libsss_util.la \
     $(abs_top_builddir)/libsss_debug.la \
     $(abs_top_builddir)/libsss_test_common.la \
+    $(NULL)
+
+PAM_WRAPPER_TEST_FLGS = \
+    $(AM_CFLAGS) \
+    -DPAM_PREAUTH_INDICATOR=TEST_DIR\"/pam_preauth_available\" \
+    $(NULL)
+
+PAM_WRAPPER_TEST_LBS = \
+    $(CMOCKA_LIBS) \
+    $(TALLOC_LIBS) \
+    $(POPT_LIBS) \
+    $(PAM_LIBS) \
+    $(PAMTEST_LIBS) \
+    $(abs_top_builddir)/libsss_util.la \
+    $(abs_top_builddir)/libsss_debug.la \
+    $(abs_top_builddir)/libsss_test_common.la \
+    $(NULL)
+
+pam_sss_wrapper_tests_SOURCES = \
+    test_wrapper_pam_sss.c \
+    test_pam_sss_common.c \
+    $(NULL)
+pam_sss_wrapper_tests_CFLAGS = \
+    $(PAM_WRAPPER_TEST_FLGS) \
+    $(NULL)
+pam_sss_wrapper_tests_LDADD = \
+    $(PAM_WRAPPER_TEST_LBS) \
     $(NULL)
 
 tests: $(check_PROGRAMS)

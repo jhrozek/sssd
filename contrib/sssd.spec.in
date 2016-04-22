@@ -194,6 +194,10 @@ BuildRequires: libcmocka-devel >= 1.0.0
 BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
 %endif
+%if (0%{?fedora} >= 23)
+BuildRequires: pam_wrapper
+BuildRequires: libpamtest-devel
+%endif
 BuildRequires: libnl3-devel
 %if (0%{?use_systemd} == 1)
 BuildRequires: systemd-devel

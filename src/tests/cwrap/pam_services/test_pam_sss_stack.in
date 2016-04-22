@@ -1,0 +1,6 @@
+auth            required        @PAM_WRAPPER_MODULESDIR@/pam_set_items.so
+auth            required        @abs_top_builddir@/.libs/pam_test_sss.so
+auth            required        @PAM_WRAPPER_MODULESDIR@/pam_get_items.so
+password        required        @PAM_WRAPPER_MODULESDIR@/pam_set_items.so
+password        required        @abs_top_builddir@/.libs/pam_test_sss.so
+password        required        @PAM_WRAPPER_MODULESDIR@/pam_get_items.so
