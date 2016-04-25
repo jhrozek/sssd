@@ -128,21 +128,30 @@ def format_basic_conf(ldap_conn, schema, enum):
     """).format(**locals())
 
 
-def format_interactive_conf(ldap_conn, schema):
+def format_interactive_conf(ldap_conn, schema, enum):
     """Format an SSSD configuration with all caches refreshing in 4 seconds"""
+    conf_kwargs = dict()
+
+    enum_specific_conf = "\n"
+    if enum is True:
+        enum_specific_conf += "ldap_enumeration_refresh_timeout = %d\n" % INTERACTIVE_TIMEOUT
+        enum_specific_conf += "ldap_purge_cache_timeout         = 1\n"
+
+    conf_kwargs['interactive_timeout'] = INTERACTIVE_TIMEOUT
+    conf_kwargs['enum_specific_conf'] = enum_specific_conf
+
     return \
-        format_basic_conf(ldap_conn, schema, enum=True) + \
+        format_basic_conf(ldap_conn, schema, enum) + \
         unindent("""
             [nss]
             memcache_timeout                    = 0
-            enum_cache_timeout                  = {0}
+            enum_cache_timeout                  = {interactive_timeout}
             entry_negative_timeout              = 0
 
             [domain/LDAP]
-            ldap_enumeration_refresh_timeout    = {0}
-            ldap_purge_cache_timeout            = 1
-            entry_cache_timeout                 = {0}
-        """).format(INTERACTIVE_TIMEOUT)
+            entry_cache_timeout                 = {interactive_timeout}
+            {enum_specific_conf}
+        """).format(**conf_kwargs)
 
 
 def create_conf_file(contents):
@@ -207,7 +216,6 @@ def create_sssd_fixture(request):
     """Start SSSD and add teardown for stopping it and removing its state"""
     create_sssd_process()
     create_sssd_cleanup(request)
-
 
 @pytest.fixture
 def sanity_rfc2307(request, ldap_conn):
@@ -413,7 +421,7 @@ def blank_rfc2307(request, ldap_conn):
     """Create blank RFC2307 directory fixture with interactive SSSD conf"""
     create_ldap_cleanup(request, ldap_conn)
     create_conf_fixture(request,
-                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307))
+                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307, True))
     create_sssd_fixture(request)
 
 
@@ -422,41 +430,61 @@ def blank_rfc2307_bis(request, ldap_conn):
     """Create blank RFC2307bis directory fixture with interactive SSSD conf"""
     create_ldap_cleanup(request, ldap_conn)
     create_conf_fixture(request,
-                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307_BIS))
+                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307_BIS, True))
     create_sssd_fixture(request)
 
 
-@pytest.fixture
+@pytest.fixture(params=[
+    # Tuple with (enumerate, lookup). The lookup is useful for non-enumerate
+    # tests to make we test both regular members and ghost members
+    (True, None),
+    (False, True),
+    (False, False)],
+    ids=["enumerate", "direct_member", "direct_ghost"])
 def user_and_group_rfc2307(request, ldap_conn):
     """
     Create an RFC2307 directory fixture with interactive SSSD conf,
-    one user and one group
+    one user and one group. Each test using this fixture will be run
+    twice, with and without enumeration.
     """
+    enum_val, lookup = request.param
+
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     ent_list.add_user("user", 1001, 2000)
     ent_list.add_group("group", 2001)
     create_ldap_fixture(request, ldap_conn, ent_list)
     create_conf_fixture(request,
-                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307))
+                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307,
+                                                enum_val))
     create_sssd_fixture(request)
-    return None
+    return lookup
 
 
-@pytest.fixture
+@pytest.fixture(params=[
+    # Tuple with (enumerate, lookup). The lookup is useful for non-enumerate
+    # tests to make we test both regular members and ghost members
+    (True, None),
+    (False, True),
+    (False, False)],
+    ids=["enumerate", "direct_member", "direct_ghost"])
 def user_and_groups_rfc2307_bis(request, ldap_conn):
     """
     Create an RFC2307bis directory fixture with interactive SSSD conf,
-    one user and two groups
+    one user and two groups. Each test using this fixture will be run
+    twice, with and without enumeration.
     """
+    enum_val, lookup = request.param
+
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     ent_list.add_user("user", 1001, 2000)
     ent_list.add_group_bis("group1", 2001)
     ent_list.add_group_bis("group2", 2002)
     create_ldap_fixture(request, ldap_conn, ent_list)
     create_conf_fixture(request,
-                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307_BIS))
+                        format_interactive_conf(ldap_conn, SCHEMA_RFC2307_BIS,
+                                                enum_val))
     create_sssd_fixture(request)
-    return None
+    return lookup
 
 
 def test_add_remove_user(ldap_conn, blank_rfc2307):
@@ -506,6 +534,8 @@ def test_add_remove_group_rfc2307_bis(ldap_conn, blank_rfc2307_bis):
 
 def test_add_remove_membership_rfc2307(ldap_conn, user_and_group_rfc2307):
     """Test user membership addition and removal are reflected by SSSD"""
+    lookup = user_and_groups_rfc2307_bis
+
     time.sleep(INTERACTIVE_TIMEOUT/2)
     # Add user to group
     ent.assert_group_by_name("group", dict(mem=ent.contains_only()))
@@ -513,6 +543,14 @@ def test_add_remove_membership_rfc2307(ldap_conn, user_and_group_rfc2307):
                        [(ldap.MOD_REPLACE, "memberUid", "user")])
     time.sleep(INTERACTIVE_TIMEOUT)
     ent.assert_group_by_name("group", dict(mem=ent.contains_only("user")))
+
+    if lookup is True:
+        # Lookup the user to turn ghost member into full member
+        ent.assert_passwd_by_name(
+            'user',
+            dict(name='user', passwd='*', uid=1001, gid=2000,
+                 gecos='1001', shell='/bin/bash'))
+
     # Remove user from group
     ldap_conn.modify_s("cn=group,ou=Groups," + ldap_conn.ds_inst.base_dn,
                        [(ldap.MOD_DELETE, "memberUid", None)])
@@ -526,6 +564,8 @@ def test_add_remove_membership_rfc2307_bis(ldap_conn,
     Test user and group membership addition and removal are reflected by SSSD,
     with RFC2307bis schema
     """
+    lookup = user_and_groups_rfc2307_bis
+
     time.sleep(INTERACTIVE_TIMEOUT/2)
     # Add user to group1
     ent.assert_group_by_name("group1", dict(mem=ent.contains_only()))
@@ -534,6 +574,13 @@ def test_add_remove_membership_rfc2307_bis(ldap_conn,
                          "uid=user,ou=Users," + ldap_conn.ds_inst.base_dn)])
     time.sleep(INTERACTIVE_TIMEOUT)
     ent.assert_group_by_name("group1", dict(mem=ent.contains_only("user")))
+
+    if lookup is True:
+        # Lookup the user to turn ghost member into full member
+        ent.assert_passwd_by_name(
+            'user',
+            dict(name='user', passwd='*', uid=1001, gid=2000,
+                 gecos='1001', shell='/bin/bash'))
 
     # Add group1 to group2
     ldap_conn.modify_s("cn=group2,ou=Groups," + ldap_conn.ds_inst.base_dn,
