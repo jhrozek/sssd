@@ -8,6 +8,7 @@ AM_CPPFLAGS = \
     -DVARDIR=\"$(localstatedir)\" \
     -DSSS_STATEDIR=\"$(localstatedir)/lib/sss\" \
     -DSYSCONFDIR=\"$(sysconfdir)\" \
+    -DBASE_FILE_STEM=\"$(*F)\" \
     $(DBUS_CFLAGS) \
     $(GLIB2_CFLAGS) \
     $(NULL)
@@ -35,6 +36,43 @@ SSSD_LIBS = \
     $(OPENLDAP_LIBS) \
     $(TDB_LIBS)
 
+SSSD_INTERNAL_LTLIBS = \
+    $(abs_top_builddir)/libsss_util.la \
+    $(abs_top_builddir)/libsss_crypt.la \
+    $(abs_top_builddir)/libsss_debug.la \
+    $(abs_top_builddir)/libsss_child.la \
+    $(NULL)
+
+SSSD_RESPONDER_OBJ = \
+    ../../../src/responder/common/negcache_files.c \
+    ../../../src/responder/common/negcache.c \
+    ../../../src/responder/common/responder_cmd.c \
+    ../../../src/responder/common/responder_common.c \
+    ../../../src/responder/common/responder_dp.c \
+    ../../../src/responder/common/responder_packet.c \
+    ../../../src/responder/common/responder_get_domains.c \
+    ../../../src/responder/common/responder_utils.c \
+    ../../../src/responder/common/responder_cache_req.c \
+    ../../../src/monitor/monitor_iface_generated.c \
+    ../../../src/providers/data_provider_iface_generated.c \
+    ../../../src/providers/data_provider_req.c
+
+memberof_la_SOURCES = \
+    ../../../src/ldb_modules/memberof.c \
+    ../../../src/util/util.c
+memberof_la_CFLAGS = \
+    $(AM_CFLAGS)
+memberof_la_LIBADD = \
+    $(abs_top_builddir)/libsss_debug.la \
+    $(LDB_LIBS) \
+    $(DHASH_LIBS)
+memberof_la_LDFLAGS = \
+    -avoid-version \
+    -module
+
+ldblib_LTLIBRARIES = \
+    memberof.la
+
 dist_noinst_DATA = \
     group \
     passwd \
@@ -49,6 +87,7 @@ check_PROGRAMS += \
     server-tests \
     usertools-tests \
     responder_common-tests \
+    negcache-tests \
     $(NULL)
 endif # HAVE_UID_WRAPPER
 endif # HAVE_NSS_WRAPPER
@@ -123,5 +162,21 @@ responder_common_tests_LDADD = \
     $(abs_top_builddir)/libsss_debug.la \
     $(abs_top_builddir)/libsss_test_common.la \
     $(NULL)
+
+EXTRA_negcache_tests_DEPENDENCIES = \
+    $(ldblib_LTLIBRARIES)
+negcache_tests_SOURCES = \
+    $(SSSD_RESPONDER_OBJ) \
+    test_negcache.c
+negcache_tests_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(TALLOC_CFLAGS) \
+    $(DHASH_CFLAGS)
+negcache_tests_LDADD = \
+    $(CMOCKA_LIBS) \
+    $(SSSD_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    $(abs_top_builddir)/libsss_test_common.la \
+    $(abs_top_builddir)/libsss_idmap.la
 
 tests: $(check_PROGRAMS)
