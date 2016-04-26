@@ -177,7 +177,7 @@ struct pam_ctx *mock_pctx(TALLOC_CTX *mem_ctx)
     pctx = talloc_zero(mem_ctx, struct pam_ctx);
     assert_non_null(pctx);
 
-    ret = sss_ncache_init(pctx, 10, &pctx->ncache);
+    ret = sss_ncache_init(pctx, 10, 0, &pctx->ncache);
     assert_int_equal(ret, EOK);
 
     ret = sss_hash_create(pctx, 10, &pctx->id_table);
