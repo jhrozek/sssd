@@ -348,4 +348,8 @@ const char **parse_attr_list_ex(TALLOC_CTX *mem_ctx, const char *conf_str,
 int responder_get_neg_timeout_from_confdb(struct confdb_ctx *cdb,
                                           uint32_t *neg_timeout);
 
+int responder_init_ncache(TALLOC_CTX *mem_ctx,
+                          struct confdb_ctx *cdb,
+                          struct sss_nc_ctx **ncache);
+
 #endif /* __SSS_RESPONDER_H__ */

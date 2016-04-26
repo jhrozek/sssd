@@ -1790,6 +1790,7 @@ sss_idmap_tests_LDADD = \
 
 responder_socket_access_tests_SOURCES = \
     src/tests/responder_socket_access-tests.c \
+    src/responder/common/negcache.c \
     src/responder/common/responder_common.c \
     src/responder/common/responder_packet.c \
     src/responder/common/responder_cmd.c

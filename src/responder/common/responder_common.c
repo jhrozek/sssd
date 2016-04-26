@@ -37,6 +37,7 @@
 #include "db/sysdb.h"
 #include "confdb/confdb.h"
 #include "sbus/sssd_dbus.h"
+#include "responder/common/negcache.h"
 #include "responder/common/responder.h"
 #include "responder/common/responder_packet.h"
 #include "providers/data_provider.h"
@@ -1083,15 +1084,18 @@ void responder_set_fd_limit(rlim_t fd_limit)
     }
 }
 
-int responder_get_neg_timeout_from_confdb(struct confdb_ctx *cdb,
-                                          uint32_t *neg_timeout)
+int responder_init_ncache(TALLOC_CTX *mem_ctx,
+                          struct confdb_ctx *cdb,
+                          struct sss_nc_ctx **ncache)
 {
-    int value;
+    uint32_t neg_timeout;
+    int tmp_value;
     int ret = EOK;
 
+    /* neg_timeout */
     ret = confdb_get_int(cdb, CONFDB_NSS_CONF_ENTRY,
-                         CONFDB_NSS_ENTRY_NEG_TIMEOUT, 15,
-                         &value);
+                         CONFDB_NSS_ENTRY_NEG_TIMEOUT,
+                         15, &tmp_value);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE,
               "Fatal failure of setup negative cache timeout.\n");
@@ -1099,12 +1103,22 @@ int responder_get_neg_timeout_from_confdb(struct confdb_ctx *cdb,
         goto done;
     }
 
-    if (value < 0) {
+    if (tmp_value < 0) {
         ret = EINVAL;
         goto done;
     }
 
-    *neg_timeout = value;
+    neg_timeout = tmp_value;
+    ret = EOK;
+
+    /* negative cache init */
+    ret = sss_ncache_init(mem_ctx, neg_timeout, ncache);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE,
+              "Fatal failure of initializing negative cache.\n");
+        goto done;
+    }
+
     ret = EOK;
 
 done:

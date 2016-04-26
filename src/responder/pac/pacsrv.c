@@ -111,7 +111,6 @@ int pac_process_init(TALLOC_CTX *mem_ctx,
     struct be_conn *iter;
     struct pac_ctx *pac_ctx;
     int ret, max_retries;
-    uint32_t neg_timeout;
     enum idmap_error_code err;
     int fd_limit;
     char *uid_str;
@@ -196,10 +195,7 @@ int pac_process_init(TALLOC_CTX *mem_ctx,
     }
     responder_set_fd_limit(fd_limit);
 
-    ret = responder_get_neg_timeout_from_confdb(cdb, &neg_timeout);
-    if (ret != EOK) goto fail;
-
-    ret = sss_ncache_init(pac_ctx, neg_timeout, &pac_ctx->ncache);
+    ret = responder_init_ncache(pac_ctx, cdb, &pac_ctx->ncache);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE,
               "Failed to initializing negative cache\n");
