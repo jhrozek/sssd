@@ -439,7 +439,7 @@ int nss_process_init(TALLOC_CTX *mem_ctx,
     ret = responder_get_neg_timeout_from_confdb(cdb, &neg_timeout);
     if (ret != EOK) goto fail;
 
-    ret = sss_ncache_init(rctx, neg_timeout, &nctx->ncache);
+    ret = sss_ncache_init(nctx, neg_timeout, &nctx->ncache);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE,
               "fatal error initializing negative cache\n");

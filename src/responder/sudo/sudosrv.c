@@ -118,7 +118,7 @@ int sudo_process_init(TALLOC_CTX *mem_ctx,
     ret = responder_get_neg_timeout_from_confdb(cdb, &neg_timeout);
     if (ret != EOK) goto fail;
 
-    ret = sss_ncache_init(rctx, neg_timeout, &sudo_ctx->ncache);
+    ret = sss_ncache_init(sudo_ctx, neg_timeout, &sudo_ctx->ncache);
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE,
               "fatal error initializing ncache\n");
