@@ -452,6 +452,7 @@ AM_CPPFLAGS = \
 EXTRA_DIST =
 
 SSSD_RESPONDER_OBJ = \
+    src/responder/common/negcache_files.c \
     src/responder/common/negcache.c \
     src/responder/common/responder_cmd.c \
     src/responder/common/responder_common.c \
@@ -577,6 +578,7 @@ dist_noinst_HEADERS = \
     src/responder/nss/nsssrv_services.h \
     src/responder/nss/nsssrv_mmap_cache.h \
     src/responder/pac/pacsrv.h \
+    src/responder/common/negcache_files.h \
     src/responder/common/negcache.h \
     src/responder/sudo/sudosrv_private.h \
     src/responder/autofs/autofs_private.h \
@@ -1799,6 +1801,7 @@ sss_idmap_tests_LDADD = \
 
 responder_socket_access_tests_SOURCES = \
     src/tests/responder_socket_access-tests.c \
+    src/responder/common/negcache_files.c \
     src/responder/common/negcache.c \
     src/responder/common/responder_common.c \
     src/responder/common/responder_packet.c \
@@ -1896,6 +1899,7 @@ TEST_MOCK_RESP_OBJ = \
      src/tests/cmocka/common_mock_resp_dp.c \
      src/responder/common/responder_packet.c \
      src/responder/common/responder_cmd.c \
+     src/responder/common/negcache_files.c \
      src/responder/common/negcache.c \
      src/responder/common/responder_common.c \
      src/responder/common/responder_cache_req.c
