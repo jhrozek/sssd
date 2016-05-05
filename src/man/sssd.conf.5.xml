@@ -577,6 +577,19 @@
                     </listitem>
                 </varlistentry>
                 <varlistentry>
+                    <term>neg_cache_locals_timeout (integer)</term>
+                    <listitem>
+                        <para>
+                            Specifies for how many seconds nss_sss should
+                            negatively cache local users and groups. That means
+                            the period during which the back end is not asking.
+                        </para>
+                        <para>
+                            Default: 0
+                        </para>
+                    </listitem>
+                </varlistentry>
+                <varlistentry>
                     <term>filter_users, filter_groups (string)</term>
                     <listitem>
                         <para>
