@@ -63,6 +63,7 @@ struct ad_subdomains_ctx {
     struct sdap_id_conn_ctx *ldap_ctx;
     struct sss_idmap_ctx *idmap_ctx;
     char *domain_name;
+    char **ad_enabled_domains;
 
     time_t last_refreshed;
     struct tevent_timer *timer_event;
@@ -1177,6 +1178,7 @@ struct bet_ops ad_subdomains_ops = {
 int ad_subdom_init(struct be_ctx *be_ctx,
                    struct ad_id_ctx *id_ctx,
                    const char *ad_domain,
+                   char **ad_enabled_domains,
                    struct bet_ops **ops,
                    void **pvt_data)
 {
@@ -1199,6 +1201,7 @@ int ad_subdom_init(struct be_ctx *be_ctx,
         DEBUG(SSSDBG_OP_FAILURE, "talloc_strdup failed.\n");
         return ENOMEM;
     }
+    ctx->ad_enabled_domains = ad_enabled_domains;
     ctx->ad_id_ctx = id_ctx;
     *ops = &ad_subdomains_ops;
     *pvt_data = ctx;

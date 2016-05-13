@@ -533,6 +533,87 @@ ad_shutdown(struct be_req *req)
     sdap_handler_done(req, DP_ERR_OK, EOK, NULL);
 }
 
+static int get_enabled_domains(TALLOC_CTX *mem_ctx, const char *ad_domain,
+                               char ***_ad_enabled_domains)
+{
+    int ret;
+    char *str;
+    char **domains = NULL;
+    char **list = NULL;
+    int count;
+    bool is_ad_in_domains;
+    TALLOC_CTX *tmp_ctx = NULL;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    str = dp_opt_get_string(ad_options->basic, AD_ENABLED_DOMAINS);
+    if (str == NULL) {
+        _ad_enabled_domains = NULL;
+        ret = EOK;
+        goto done;
+    }
+
+    count = 0;
+    ret = split_on_separator(tmp_ctx, str, ',', true, true, &domains, &count);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "Failed to parse option [%s], [%i] [%s]!\n",
+                                 ad_options->basic[AD_ENABLED_DOMAINS].opt_name,
+                                 ret, sss_strerror(ret));
+        ret = EINVAL;
+        goto done;
+    }
+
+    list = talloc_array_size(tmp_ctx, sizeof(char*), count);
+    if (list == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    is_ad_in_domains = false;
+    for (int i = 0; i < count; i++) {
+        list[i] = talloc_strdup(list, domains[i]);
+        if (list[i] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+
+        is_ad_in_domains += strcmp(ad_domain, domains[i]) == 0 ? true : false;
+    }
+
+    if (is_ad_in_domains == false) {
+        list = talloc_realloc(tmp_ctx, list, char*, count + 1);
+        if (list == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+
+        list[count] = talloc_strdup(list, ad_domain);
+        if (list[count] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    if (list == NULL) {
+        // No allocations were done, make space for the NULL
+        list = talloc(tmp_ctx, char *);
+        if (list == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    *_ad_enabled_domains = talloc_steal(mem_ctx, list);
+    ret = EOK;
+
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
 int sssm_ad_subdomains_init(struct be_ctx *bectx,
                             struct bet_ops **ops,
                             void **pvt_data)
@@ -540,6 +621,7 @@ int sssm_ad_subdomains_init(struct be_ctx *bectx,
     int ret;
     struct ad_id_ctx *id_ctx;
     const char *ad_domain;
+    char **ad_enabled_domains = NULL;
 
     ret = sssm_ad_id_init(bectx, ops, (void **) &id_ctx);
     if (ret != EOK) {
@@ -554,7 +636,15 @@ int sssm_ad_subdomains_init(struct be_ctx *bectx,
 
     ad_domain = dp_opt_get_cstring(ad_options->basic, AD_DOMAIN);
 
-    ret = ad_subdom_init(bectx, id_ctx, ad_domain, ops, pvt_data);
+    ret = get_enabled_domains(bectx, ad_domain, &ad_enabled_domains);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to parse option [%s]!\n",
+                                ad_options->basic[AD_ENABLED_DOMAINS].opt_name);
+        return EINVAL;
+    }
+
+    ret = ad_subdom_init(bectx, id_ctx, ad_domain, ad_enabled_domains,
+                         ops, pvt_data);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "ad_subdom_init failed.\n");
         return ret;

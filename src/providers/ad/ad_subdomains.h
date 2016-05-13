@@ -31,6 +31,7 @@
 int ad_subdom_init(struct be_ctx *be_ctx,
                    struct ad_id_ctx *id_ctx,
                    const char *ad_domain,
+                   char **ad_enabled_domains,
                    struct bet_ops **ops,
                    void **pvt_data);
 
