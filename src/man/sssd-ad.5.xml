@@ -114,6 +114,28 @@ ldap_id_mapping = False
                 </varlistentry>
 
                 <varlistentry>
+                    <term>ad_enabled_domains (string)</term>
+                    <listitem>
+                        <para>
+                            The comma-separated list of the enabled Active
+                            Directory domains. This is optional. If provided,
+                            SSSD will not contact domains not listed in this
+                            option. If not provided, all domains from AD forest
+                            are enabled.
+                        </para>
+                        <para>
+                            For proper operation, this option should be
+                            specified as the lower-case version of the long
+                            version of the Active Directory domain.
+                        </para>
+                        <para>
+                            The short domain name (also known as the NetBIOS
+                            or the flat name) is autodetected by the SSSD.
+                        </para>
+                    </listitem>
+                </varlistentry>
+
+                <varlistentry>
                     <term>ad_server, ad_backup_server (string)</term>
                     <listitem>
                         <para>
