@@ -90,11 +90,10 @@ void test_exec_child(void **state)
     child_pid = fork();
     assert_int_not_equal(child_pid, -1);
     if (child_pid == 0) {
-        ret = exec_child(child_tctx,
-                         child_tctx->pipefd_to_child,
-                         child_tctx->pipefd_from_child,
-                         CHILD_DIR"/"TEST_BIN, 2);
-        assert_int_equal(ret, EOK);
+        exec_child(child_tctx,
+                   child_tctx->pipefd_to_child,
+                   child_tctx->pipefd_from_child,
+                   CHILD_DIR"/"TEST_BIN, 2);
     } else {
             do {
                 errno = 0;
@@ -132,12 +131,23 @@ void test_exec_child_extra_args(void **state)
     child_pid = fork();
     assert_int_not_equal(child_pid, -1);
     if (child_pid == 0) {
+<<<<<<< HEAD
         ret = exec_child_ex(child_tctx,
                             child_tctx->pipefd_to_child,
                             child_tctx->pipefd_from_child,
                             CHILD_DIR"/"TEST_BIN, 2, extra_args,
                             STDIN_FILENO, STDOUT_FILENO);
         assert_int_equal(ret, EOK);
+=======
+        debug_timestamps = 1;
+
+        exec_child_ex(child_tctx,
+                      child_tctx->pipefd_to_child,
+                      child_tctx->pipefd_from_child,
+                      CHILD_DIR"/"TEST_BIN, 2, extra_args,
+                      extra_args_only,
+                      STDIN_FILENO, STDOUT_FILENO);
+>>>>>>> 763af7a... UTIL: exit() the forked process if exec()-ing a child process fails
     } else {
             do {
                 errno = 0;
@@ -229,11 +239,10 @@ void test_exec_child_handler(void **state)
     child_pid = fork();
     assert_int_not_equal(child_pid, -1);
     if (child_pid == 0) {
-        ret = exec_child(child_tctx,
-                         child_tctx->pipefd_to_child,
-                         child_tctx->pipefd_from_child,
-                         CHILD_DIR"/"TEST_BIN, 2);
-        assert_int_equal(ret, EOK);
+        exec_child(child_tctx,
+                   child_tctx->pipefd_to_child,
+                   child_tctx->pipefd_from_child,
+                   CHILD_DIR"/"TEST_BIN, 2);
     }
 
     ret = child_handler_setup(child_tctx->test_ctx->ev, child_pid,
@@ -280,12 +289,11 @@ void test_exec_child_echo(void **state)
     child_pid = fork();
     assert_int_not_equal(child_pid, -1);
     if (child_pid == 0) {
-        ret = exec_child_ex(child_tctx,
-                            child_tctx->pipefd_to_child,
-                            child_tctx->pipefd_from_child,
-                            CHILD_DIR"/"TEST_BIN, 2, NULL,
-                            STDIN_FILENO, 3);
-        assert_int_equal(ret, EOK);
+        exec_child_ex(child_tctx,
+                      child_tctx->pipefd_to_child,
+                      child_tctx->pipefd_from_child,
+                      CHILD_DIR"/"TEST_BIN, 2, NULL, false,
+                      STDIN_FILENO, 3);
     }
 
     DEBUG(SSSDBG_FUNC_DATA, "Forked into %d\n", child_pid);
@@ -414,11 +422,10 @@ void test_sss_child(void **state)
     child_pid = fork();
     assert_int_not_equal(child_pid, -1);
     if (child_pid == 0) {
-        ret = exec_child(child_tctx,
-                         child_tctx->pipefd_to_child,
-                         child_tctx->pipefd_from_child,
-                         CHILD_DIR"/"TEST_BIN, 2);
-        assert_int_equal(ret, EOK);
+        exec_child(child_tctx,
+                   child_tctx->pipefd_to_child,
+                   child_tctx->pipefd_from_child,
+                   CHILD_DIR"/"TEST_BIN, 2);
     }
 
     ret = sss_child_register(child_tctx, sc_ctx,
