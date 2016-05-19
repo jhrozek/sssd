@@ -189,6 +189,20 @@ int get_fd_from_debug_file(void);
 #define FLAGS_INTERACTIVE 0x0002
 #define FLAGS_PID_FILE 0x0004
 
+#define PIPE_INIT { -1, -1 }
+
+#define PIPE_FD_CLOSE(fd) do {      \
+    if (fd != -1) {                 \
+        close(fd);                  \
+        fd = -1;                    \
+    }                               \
+} while(0);
+
+#define PIPE_CLOSE(p) do {          \
+    PIPE_FD_CLOSE(p[0]);            \
+    PIPE_FD_CLOSE(p[1]);            \
+} while(0);
+
 #ifndef talloc_zfree
 #define talloc_zfree(ptr) do { talloc_free(discard_const(ptr)); ptr = NULL; } while(0)
 #endif
