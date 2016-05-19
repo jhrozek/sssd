@@ -131,23 +131,14 @@ void test_exec_child_extra_args(void **state)
     child_pid = fork();
     assert_int_not_equal(child_pid, -1);
     if (child_pid == 0) {
-<<<<<<< HEAD
-        ret = exec_child_ex(child_tctx,
-                            child_tctx->pipefd_to_child,
-                            child_tctx->pipefd_from_child,
-                            CHILD_DIR"/"TEST_BIN, 2, extra_args,
-                            STDIN_FILENO, STDOUT_FILENO);
-        assert_int_equal(ret, EOK);
-=======
         debug_timestamps = 1;
 
         exec_child_ex(child_tctx,
                       child_tctx->pipefd_to_child,
                       child_tctx->pipefd_from_child,
                       CHILD_DIR"/"TEST_BIN, 2, extra_args,
-                      extra_args_only,
+                      false,
                       STDIN_FILENO, STDOUT_FILENO);
->>>>>>> 763af7a... UTIL: exit() the forked process if exec()-ing a child process fails
     } else {
             do {
                 errno = 0;
