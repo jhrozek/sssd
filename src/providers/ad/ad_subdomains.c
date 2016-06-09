@@ -575,6 +575,7 @@ static void ad_subdomains_get_conn_done(struct tevent_req *req)
         goto fail;
     }
 
+    /* connect to the DC we are a member of */
     req = ad_master_domain_send(ctx, ctx->sd_ctx->be_ctx->ev,
                                 ctx->sd_ctx->ldap_ctx,
                                 ctx->sdap_op,
@@ -623,6 +624,21 @@ static void ad_subdomains_master_dom_done(struct tevent_req *req)
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "Cannot save master domain info\n");
         goto done;
+    }
+
+    /*
+     * If ad_enabled_domains contains only master domain
+     * we shouldn't lookup other domains.
+     */
+    if (ctx->sd_ctx->ad_enabled_domains != NULL) {
+        if (talloc_array_length(ctx->sd_ctx->ad_enabled_domains) == 1) {
+            if (strcmp(ctx->sd_ctx->ad_enabled_domains[0],
+                       ctx->sd_ctx->be_ctx->domain->name) == 0) {
+                DEBUG(SSSDBG_TRACE_FUNC,
+                      "No other enabled domain than master.\n");
+                goto done;
+            }
+        }
     }
 
     if (ctx->forest == NULL ||
