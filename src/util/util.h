@@ -391,6 +391,10 @@ errno_t diff_string_lists(TALLOC_CTX *memctx,
                           char ***string2_only,
                           char ***both_strings);
 
+errno_t get_string_list_with_termination(TALLOC_CTX *mem_ctx,
+                                         char **noterm_list,
+                                         char ***_term_list);
+
 /* Sanitize an input string (e.g. a username) for use in
  * an LDAP/LDB filter
  * Returns a newly-constructed string attached to mem_ctx

@@ -898,6 +898,41 @@ static void ad_subdomains_root_conn_done(struct tevent_req *req)
         DEBUG(SSSDBG_OP_FAILURE,
               "Failed to connect to AD server: [%d](%s)\n",
               ret, strerror(ret));
+
+////////////////////////////////////////////////////////////////////////////////
+        DEBUG(SSSDBG_OP_FAILURE, ">>> ZZZ\n");
+/*
+        if (ctx->sd_ctx->ad_enabled_domains != NULL) {
+            int size = talloc_array_length(ctx->sd_ctx->ad_enabled_domains);
+            for (int i = 0; i < size; i++) {
+                if (strcmp(ctx->sd_ctx->ad_enabled_domains[i], ctx->sd_ctx->domain_name) == 0) {
+                    continue;
+                }
+
+
+                struct sss_domain_info *subdom = talloc(ctx, struct sss_domain_info);
+                subdom->name = ctx->sd_ctx->ad_enabled_domains[i];
+                subdom->realm = ctx->sd_ctx->ad_enabled_domains[i];
+
+                ret = ad_subdom_store(ctx->sd_ctx, subdom, ctx->root_domain_attrs, false);
+                DEBUG(SSSDBG_OP_FAILURE, ">>> ad_subdom_store ret = [%i]\n", ret);
+
+                ret = sysdb_update_subdomains(ctx->sd_ctx->be_ctx->domain);
+                DEBUG(SSSDBG_OP_FAILURE, ">>> sysdb_update_subdomains ret = [%i]\n", ret);
+
+
+                // not goto fail
+            }
+        }
+*/
+////////////////////////////////////////////////////////////////////////////////
+
+        /* zname minimalne svoji domenu. Pokud uzivatel nastavil jako viditelnou
+         * jen domenu, co zname, neni chyba
+         */
+        /* Je potreba zajistit, aby se data, co jsme nacetli o znamych domenach
+         * ulozila do sysdb + volat sysdb_domains_update()
+         */
         goto fail;
     }
 
@@ -966,7 +1001,6 @@ static errno_t ad_subdomains_process(TALLOC_CTX *mem_ctx,
         *_sd_out = sd;
         return EOK;
     }
-
     /* If we searched for root separately, we must:
      *  a) treat the root domain as a subdomain
      *  b) filter the subdomain we are connected to from the subdomain
@@ -1008,6 +1042,99 @@ fail:
     return ret;
 }
 
+static errno_t get_subdomains_list(TALLOC_CTX *mem_ctx,
+                                   struct sysdb_attrs **subdoms,
+                                   size_t nsubdoms,
+                                   char ***_list)
+{
+    char **list = NULL;
+    const char *subdom;
+    errno_t ret;
+    TALLOC_CTX *tmp_ctx = NULL;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    list = talloc_array_size(tmp_ctx, sizeof(char*), nsubdoms + 1);
+    if (list == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    for (int i = 0; i < nsubdoms; i++) {
+        ret = sysdb_attrs_get_string(subdoms[i], AD_AT_TRUST_PARTNER, &subdom);
+        // if ret
+        list[i] = talloc_strdup(list, subdom);
+        if (list[i] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+    list[nsubdoms] = NULL;
+
+    *_list = talloc_steal(mem_ctx, list);
+    ret = EOK;
+
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static errno_t filter_enabled_domains(TALLOC_CTX *mem_ctx,
+                                      char **enabled_domains_list,
+                                      struct sysdb_attrs **subdoms,
+                                      size_t nsubdoms,
+                                      struct sysdb_attrs ***_enabled_subdoms,
+                                      size_t *_nsubdoms)
+{
+    size_t size = 0;
+    size_t enabled_subdoms_iter;
+    const char *name;
+    bool is_enabled;
+    struct sysdb_attrs **enabled_subdoms;
+    TALLOC_CTX *tmp_ctx = NULL;
+    errno_t ret;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    for (size = 0; enabled_domains_list[size] != NULL; size++) {}
+
+    enabled_subdoms = talloc_array_size(tmp_ctx, sizeof(struct sysdb_attrs **), size);
+    if (enabled_subdoms == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    enabled_subdoms_iter = 0;
+    for (int i = 0; i < nsubdoms; i++) {
+        ret = sysdb_attrs_get_string(subdoms[i], AD_AT_TRUST_PARTNER, &name);
+        // if ret
+
+        is_enabled = false;
+        for (int j = 0; enabled_domains_list[j] != NULL; j++) {
+            is_enabled = true;
+        }
+
+        if (is_enabled) {
+            enabled_subdoms[enabled_subdoms_iter] = subdoms[i];
+            enabled_subdoms_iter++;
+        }
+    }
+
+    *_enabled_subdoms = talloc_steal(mem_ctx, enabled_subdoms);
+    *_nsubdoms = size;
+    ret = EOK;
+
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
 static void ad_subdomains_get_slave_domain_done(struct tevent_req *req)
 {
     int ret;
@@ -1038,6 +1165,7 @@ static void ad_subdomains_get_slave_domain_done(struct tevent_req *req)
         memcpy(ctx->reply+ctx->reply_count, reply,
                reply_count * sizeof(struct sysdb_attrs *));
         ctx->reply_count += reply_count;
+        // filter, bud tady nebo v process
     }
 
     ctx->base_iter++;
@@ -1075,8 +1203,59 @@ static void ad_subdomains_get_slave_domain_done(struct tevent_req *req)
         return;
     }
 
+    //---
+    // we need to add null on the end of list
+
+    DEBUG(SSSDBG_OP_FAILURE, ">>> <----- BEGIN ALL -----\n");
+
+    char **enabled_sdom_names = NULL;
+    char **known_sdom_names = NULL;
+    char **filtered_sdom_names;
+
+    struct sysdb_attrs **filtered_subdoms = NULL;
+    size_t nfsubdoms = 0;
+
+    ret = get_string_list_with_termination(ctx, ctx->sd_ctx->ad_enabled_domains,
+                                           &enabled_sdom_names);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, ">>> ERROR get_string_list_with_termination()\n");
+    }
+
+    ret = get_subdomains_list(ctx, subdoms, nsubdoms, &known_sdom_names);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, ">>> ERROR get_subdomains_list()\n");
+    }
+
+    ret = diff_string_lists(ctx, known_sdom_names, enabled_sdom_names, NULL, NULL,
+                            &filtered_sdom_names);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, ">>> ERROR diff_string_lists()\n");
+    }
+
+    talloc_free(enabled_sdom_names);
+    talloc_free(known_sdom_names);
+
+    ret = filter_enabled_domains(ctx, filtered_sdom_names,
+                                 subdoms, nsubdoms,
+                                 &filtered_subdoms, &nfsubdoms);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, ">>> ERROR filter_enabled_domains()\n");
+    }
+
+    talloc_free(filtered_sdom_names);
+
+    for (int i = 0; i < nfsubdoms; i++) {
+        const char *name;
+        ret = sysdb_attrs_get_string(filtered_subdoms[i], AD_AT_TRUST_PARTNER, &name);
+        DEBUG(SSSDBG_OP_FAILURE, ">>> ... %i %s\n", i, name);
+    }
+
+    DEBUG(SSSDBG_OP_FAILURE, ">>> ----- END -----> \n");
+
+    //---
+
     /* Got all the subdomains, let's process them */
-    ret = ad_subdomains_refresh(ctx->sd_ctx, nsubdoms, false, subdoms,
+    ret = ad_subdomains_refresh(ctx->sd_ctx, nfsubdoms, false, filtered_subdoms,
                                 &refresh_has_changes);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "Failed to refresh subdomains.\n");
@@ -1201,6 +1380,17 @@ int ad_subdom_init(struct be_ctx *be_ctx,
     struct ad_subdomains_ctx *ctx;
     int ret;
     enum idmap_error_code err;
+
+
+/*
+    DEBUG(SSSDBG_CRIT_FAILURE, ">>> .. -- ==  WAITING  == -- .. <<<\n");
+    for (int i = 50; i > 0; i--) {
+        DEBUG(SSSDBG_CRIT_FAILURE, ">>> .. -- ==     %i     == -- .. <<<\n", i);
+        sleep(1);
+    }
+    DEBUG(SSSDBG_CRIT_FAILURE, ">>> .. -- == GO GO GO! == -- .. <<<\n");
+*/
+
 
     ctx = talloc_zero(id_ctx, struct ad_subdomains_ctx);
     if (ctx == NULL) {

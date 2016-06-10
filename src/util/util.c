@@ -458,6 +458,51 @@ done:
     return ret;
 }
 
+errno_t get_string_list_with_termination(TALLOC_CTX *mem_ctx,
+                                         char **noterm_list,
+                                         char ***_term_list)
+{
+    char **term_list = NULL;
+    size_t noterm_list_size = 0;
+    errno_t ret;
+    TALLOC_CTX *tmp_ctx = NULL;
+
+/*
+    if (str == NULL || *str == '\0' || _list == NULL) {
+        return EINVAL;
+    }
+*/
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    noterm_list_size = talloc_array_length(noterm_list);
+
+    term_list = talloc_array_size(tmp_ctx, sizeof(char*), noterm_list_size + 1);
+    if (term_list == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    for (size_t i = 0; i < noterm_list_size; i++) {
+        term_list[i] = talloc_strdup(term_list, noterm_list[i]);
+        if (term_list[i] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+    term_list[noterm_list_size] = NULL;
+
+    *_term_list = talloc_steal(mem_ctx, term_list);
+    ret = EOK;
+
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
 static void *hash_talloc(const size_t size, void *pvt)
 {
     return talloc_size(pvt, size);
