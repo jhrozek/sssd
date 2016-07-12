@@ -1370,6 +1370,9 @@ sssd_secrets_SOURCES = \
     $(SSSD_RESPONDER_OBJ) \
     $(SSSD_RESOLV_OBJ) \
     $(NULL)
+sssd_secrets_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(NULL)
 sssd_secrets_LDADD = \
     $(HTTP_PARSER_LIBS) \
     $(JANSSON_LIBS) \
@@ -1379,6 +1382,18 @@ sssd_secrets_LDADD = \
     $(CARES_LIBS) \
     $(SSSD_INTERNAL_LTLIBS) \
     $(NULL)
+
+if BUNDLE_HTTP_PARSER
+sssd_secrets_CFLAGS += \
+    -DHTTP_PARSER_STRICT=1 \
+    $(NULL)
+
+sssd_secrets_SOURCES += \
+    src/responder/secrets/http_parser.c \
+    src/responder/secrets/http_parser.h \
+    $(NULL)
+endif
+
 endif
 
 sssd_be_SOURCES = \

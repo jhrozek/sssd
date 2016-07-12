@@ -16,7 +16,6 @@ AS_IF([test x"$found_http_parser" != xyes],
                                     [-L$sss_extra_libdir -lhttp_parser])
                       ],
                       [-L$sss_extra_libdir -lhttp_parser_strict])],
-        [AC_MSG_ERROR([
-You must have the header file http_parse.h installed to build sssd
-with secrets responder. If you want to build sssd without secret responder
-then specify --without-secrets when running configure.])])])
+        [AC_MSG_WARN([Will use bundled http-parser])])])
+
+AM_CONDITIONAL([BUNDLE_HTTP_PARSER], [test x"$HTTP_PARSER_LIBS" = x])

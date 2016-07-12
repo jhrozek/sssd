@@ -25,7 +25,7 @@
 #include "config.h"
 #include "responder/common/responder.h"
 #include "responder/secrets/secsrv.h"
-#include <http_parser.h>
+#include "http_parser.h"
 
 struct sec_kvp {
     char *name;
