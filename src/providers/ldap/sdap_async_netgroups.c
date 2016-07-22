@@ -38,6 +38,35 @@ bool is_dn(const char *str)
     return (ret == LDAP_SUCCESS ? true : false);
 }
 
+static errno_t add_to_missing_attrs(TALLOC_CTX * mem_ctx,
+                                    struct sysdb_attrs *attrs,
+                                    const char *ext_key,
+                                    char ***_missing)
+{
+    bool is_present = false;
+    size_t size = 0;
+    size_t ret;
+
+    for (int i = 0; i < attrs->num; i++) {
+        if (strcmp(ext_key, attrs->a[i].name) == 0) {
+            is_present = true;
+        }
+        size++;
+    }
+
+    if (is_present == false) {
+        ret = add_string_to_list(attrs, ext_key, _missing);
+        if (ret != EOK) {
+            goto done;
+        }
+    }
+
+    ret = EOK;
+
+done:
+    return ret;
+}
+
 static errno_t sdap_save_netgroup(TALLOC_CTX *memctx,
                                   struct sss_domain_info *dom,
                                   struct sdap_options *opts,
@@ -135,6 +164,17 @@ static errno_t sdap_save_netgroup(TALLOC_CTX *memctx,
                              attrs, &missing);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to list missing attributes\n");
+        goto fail;
+    }
+
+    /* Prepare SYSDB_NETGROUP_MEMBER removing
+     * if not present in netgroup_attrs
+     */
+    ret = add_to_missing_attrs(attrs, netgroup_attrs, SYSDB_NETGROUP_MEMBER,
+                               &missing);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to add [%s] to missing attributes\n",
+              SYSDB_NETGROUP_MEMBER);
         goto fail;
     }
 
