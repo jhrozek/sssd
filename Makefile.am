@@ -87,6 +87,7 @@ sudolibdir = @sudolibpath@
 polkitdir = @polkitdir@
 pamconfdir = $(sysconfdir)/pam.d
 systemtap_tapdir = @tapset_dir@
+krb5sysincludedir = $(sysconfdir)/krb5.conf.d
 
 if HAVE_SYSTEMD_UNIT
 ifp_exec_cmd = $(sssdlibexecdir)/sssd_ifp --uid 0 --gid 0 --debug-to-files --dbus-activated
@@ -186,6 +187,11 @@ endif
 if BUILD_SECRETS
 sssdlibexec_PROGRAMS += sssd_secrets
 endif
+if BUILD_KCM
+sssdlibexec_PROGRAMS += sssd_kcm
+dist_krb5sysinclude_DATA = contrib/kcm_default_ccache
+endif
+
 
 if BUILD_PAC_RESPONDER
     sssdlibexec_PROGRAMS += sssd_pac
@@ -698,6 +704,8 @@ dist_noinst_HEADERS = \
     src/responder/secrets/secsrv_private.h \
     src/responder/secrets/secsrv_local.h \
     src/responder/secrets/secsrv_proxy.h \
+    src/responder/kcm/kcm.h \
+    src/responder/kcm/kcmsrv_pvt.h \
     src/sbus/sbus_client.h \
     src/sbus/sssd_dbus.h \
     src/sbus/sssd_dbus_meta.h \
@@ -1462,6 +1470,24 @@ sssd_secrets_LDADD = \
     $(SSSD_LIBS) \
     $(SYSTEMD_DAEMON_LIBS) \
     $(CARES_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    $(NULL)
+endif
+
+if BUILD_KCM
+sssd_kcm_SOURCES = \
+    src/responder/kcm/kcm.c \
+    src/responder/kcm/kcmsrv_cmd.c \
+    src/util/sss_sockets.c \
+    $(SSSD_RESPONDER_OBJ) \
+    $(NULL)
+sssd_kcm_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(KRB5_CFLAGS) \
+    $(NULL)
+sssd_kcm_LDADD = \
+    $(KRB5_LIBS) \
+    $(SSSD_LIBS) \
     $(SSSD_INTERNAL_LTLIBS) \
     $(NULL)
 endif
@@ -4157,6 +4183,12 @@ if BUILD_SUDO
         src/sysv/systemd/sssd-sudo.service \
         $(NULL)
 endif
+if BUILD_KCM
+    systemdunit_DATA += \
+        src/sysv/systemd/sssd-kcm.socket \
+        src/sysv/systemd/sssd-kcm.service \
+        $(NULL)
+endif
 if WITH_JOURNALD
     systemdconf_DATA += \
         src/sysv/systemd/journal.conf
@@ -4248,6 +4280,12 @@ EXTRA_DIST += \
     src/sysv/systemd/sssd-sudo.service.in \
     $(NULL)
 endif
+if BUILD_KCM
+EXTRA_DIST += \
+    src/sysv/systemd/sssd-kcm.socket.in \
+    src/sysv/systemd/sssd-kcm.service.in \
+    $(NULL)
+endif
 
 src/sysv/systemd/sssd.service: src/sysv/systemd/sssd.service.in Makefile
 	@$(MKDIR_P) src/sysv/systemd/
@@ -4327,6 +4365,16 @@ src/sysv/systemd/sssd-sudo.socket: src/sysv/systemd/sssd-sudo.socket.in Makefile
 	$(replace_script)
 
 src/sysv/systemd/sssd-sudo.service: src/sysv/systemd/sssd-sudo.service.in Makefile
+	@$(MKDIR_P) src/sysv/systemd/
+	$(replace_script)
+endif
+
+if BUILD_KCM
+src/sysv/systemd/sssd-kcm.socket: src/sysv/systemd/sssd-kcm.socket.in Makefile
+	@$(MKDIR_P) src/sysv/systemd/
+	$(replace_script)
+
+src/sysv/systemd/sssd-kcm.service: src/sysv/systemd/sssd-kcm.service.in Makefile
 	@$(MKDIR_P) src/sysv/systemd/
 	$(replace_script)
 endif
@@ -4493,6 +4541,9 @@ install-data-hook:
 if BUILD_SAMBA
 	mv $(DESTDIR)/$(winbindplugindir)/winbind_idmap_sss.so $(DESTDIR)/$(winbindplugindir)/sss.so
 endif
+if BUILD_KCM
+	$(MKDIR_P) $(DESTDIR)/$(krb5sysincludedir)
+endif
 
 uninstall-hook:
 	if [ -f $(abs_builddir)/src/config/.files2 ]; then \
@@ -4567,6 +4618,8 @@ endif
 	rm -f $(builddir)/src/sysv/systemd/sssd-sudo.service
 	rm -f $(builddir)/src/sysv/systemd/sssd-secrets.socket
 	rm -f $(builddir)/src/sysv/systemd/sssd-secrets.service
+	rm -f $(builddir)/src/sysv/systemd/sssd-kcm.socket
+	rm -f $(builddir)/src/sysv/systemd/sssd-kcm.service
 	rm -f $(builddir)/src/sysv/systemd/journal.conf
 
 CLEANFILES += *.X */*.X */*/*.X
