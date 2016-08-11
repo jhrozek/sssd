@@ -35,6 +35,30 @@ LDAP_BASE_DN = "dc=example,dc=com"
 INTERACTIVE_TIMEOUT = 4
 
 
+def stop_sssd():
+    """Stop sssd"""
+    pid_file = open(config.PIDFILE_PATH, "r")
+    pid = int(pid_file.read())
+    os.kill(pid, signal.SIGTERM)
+    while True:
+        try:
+            os.kill(pid, signal.SIGCONT)
+        except:
+            break
+        time.sleep(1)
+
+
+def start_sssd():
+    """Start sssd"""
+    if subprocess.call(["sssd", "-D", "-f"]) != 0:
+        raise Exception("sssd start failed")
+
+
+def restart_sssd():
+    stop_sssd()
+    start_sssd()
+
+
 @pytest.fixture(scope="module")
 def ds_inst(request):
     """LDAP server instance fixture"""
@@ -693,5 +717,667 @@ def test_vetoed_shells(vetoed_shells):
                  shell="/bin/fallback"),
             dict(name="user_with_empty_shell", uid=1003,
                  shell="/bin/default")
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_ldap(request, ldap_conn):
+    ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
+    ent_list.add_user("user1", 1001, 2001, loginShell="/bin/sh1")
+    ent_list.add_user("user2", 1002, 2002, loginShell="/bin/sh2")
+    ent_list.add_user("user3", 1003, 2003, loginShell="/bin/sh3")
+    # User without primary group
+    ent_list.add_user("user4", 1004, 2004, loginShell="/bin/sh4")
+    ent_list.add_group("group1", 2001)
+    ent_list.add_group("group2", 2002)
+    ent_list.add_group("group3", 2003)
+    ent_list.add_group("empty_group", 2010)
+    ent_list.add_group("one_user_group", 2011, ["user1"])
+    ent_list.add_group("two_user_group", 2012, ["user1", "user2"])
+    ent_list.add_group("three_user_group", 2013, ["user1", "user2", "user3"])
+    # Supplementary group for a user without primary group
+    ent_list.add_group("groupless_user_group", 2014, ["user4"])
+    create_ldap_fixture(request, ldap_conn, ent_list)
+
+
+@pytest.fixture
+def session_recording_none(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = none
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+def test_session_recording_none(session_recording_none):
+    """Test session recording "none" scope"""
+    ent.assert_passwd(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell="/bin/sh1"),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_all(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = all
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+def test_session_recording_all_nam(session_recording_all):
+    """Test session recording "all" scope with getpwnam"""
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        user3=dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        user4=dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+    ))
+    # Request a second time to verify positive caching
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        user3=dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        user4=dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+    ))
+
+
+def test_session_recording_all_uid(session_recording_all):
+    """Test session recording "all" scope with getpwuid"""
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        1003:dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        1004:dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+    })
+    # Request a second time to verify positive caching
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        1003:dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        1004:dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+    })
+
+
+def test_session_recording_all_ent(session_recording_all):
+    """Test session recording "all" scope with getpwent"""
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_empty(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+def test_session_recording_some_empty(session_recording_some_empty):
+    """Test session recording "some" scope with no users or groups"""
+    ent.assert_passwd(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell="/bin/sh1"),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_users(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            users = user1, user2
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+def test_session_recording_some_users_nam(session_recording_some_users):
+    """Test session recording "some" scope with user list and getpwnam"""
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_users_uid(session_recording_some_users):
+    """Test session recording "some" scope with user list and getpwuid"""
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_users_ent(session_recording_some_users):
+    """Test session recording "some" scope with user list and getpwent"""
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_users_overridden(request, ldap_conn,
+                                            session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            users = overridden_user1, user2
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+    subprocess.check_call(["sss_override", "user-add", "user1",
+                           "-n", "overridden_user1"])
+    subprocess.check_call(["sss_override", "user-add", "user2",
+                           "-n", "overridden_user2"])
+    restart_sssd()
+
+
+def test_session_recording_some_users_overridden_nam(
+                                    session_recording_some_users_overridden):
+    """
+    Test session recording "some" scope with user list containing some
+    overridden users, requested with getpwnam
+    """
+    ent.assert_each_passwd_by_name(dict(
+        overridden_user1=dict(name="overridden_user1", uid=1001,
+                              shell=config.SESSION_RECORDING_SHELL),
+        overridden_user2=dict(name="overridden_user2", uid=1002,
+                              shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_users_overridden_uid(session_recording_some_users_overridden):
+    """
+    Test session recording "some" scope with user list containing some
+    overridden users, requested with getpwuid
+    """
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="overridden_user1", uid=1001,
+                  shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="overridden_user2", uid=1002,
+                  shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_users_overridden_ent(session_recording_some_users_overridden):
+    """
+    Test session recording "some" scope with user list containing some
+    overridden users, requested with getpwent
+    """
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="overridden_user1", uid=1001,
+                 shell=config.SESSION_RECORDING_SHELL),
+            dict(name="overridden_user2", uid=1002,
+                 shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_groups1(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = one_user_group, two_user_group
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+@pytest.fixture
+def session_recording_some_groups2(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = three_user_group
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+@pytest.fixture
+def session_recording_some_groups3(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = groupless_user_group
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+@pytest.fixture
+def session_recording_some_groups4(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = group1, group3
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+def test_session_recording_some_groups1_nam(session_recording_some_groups1):
+    """Test session recording "some" scope with group list and getpwnam"""
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_groups1_uid(session_recording_some_groups1):
+    """Test session recording "some" scope with group list and getpwuid"""
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_groups1_ent(session_recording_some_groups1):
+    """Test session recording "some" scope with group list and getpwent"""
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+def test_session_recording_some_groups2_nam(session_recording_some_groups2):
+    """Test session recording "some" scope with group list and getpwnam"""
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        user3=dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_groups2_uid(session_recording_some_groups2):
+    """Test session recording "some" scope with group list and getpwuid"""
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+        1003:dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_groups2_ent(session_recording_some_groups2):
+    """Test session recording "some" scope with group list and getpwent"""
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+def test_session_recording_some_groups3_nam(session_recording_some_groups3):
+    """Test session recording "some" scope with group list and getpwnam"""
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell="/bin/sh1"),
+        user2=dict(name="user2", uid=1002, shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+    ))
+
+
+def test_session_recording_some_groups3_uid(session_recording_some_groups3):
+    """Test session recording "some" scope with group list and getpwuid"""
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell="/bin/sh1"),
+        1002:dict(name="user2", uid=1002, shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+    })
+
+
+def test_session_recording_some_groups3_ent(session_recording_some_groups3):
+    """Test session recording "some" scope with group list and getpwent"""
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell="/bin/sh1"),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell=config.SESSION_RECORDING_SHELL),
+        )
+    )
+
+
+def test_session_recording_some_groups4_nam(session_recording_some_groups4):
+    """Test session recording "some" scope with group list and getpwnam"""
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_groups4_uid(session_recording_some_groups4):
+    """Test session recording "some" scope with group list and getpwuid"""
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_groups4_ent(session_recording_some_groups4):
+    """Test session recording "some" scope with group list and getpwent"""
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_groups_overridden1(request, ldap_conn,
+                                              session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = overridden_group1, group2
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+    subprocess.check_call(["sss_override", "group-add", "group1",
+                           "-n", "overridden_group1"])
+    subprocess.check_call(["sss_override", "group-add", "group2",
+                           "-n", "overridden_group2"])
+    restart_sssd()
+
+
+def test_session_recording_some_groups_overridden1_nam(
+                                    session_recording_some_groups_overridden1):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden groups, and users requested with getpwnam
+    """
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_groups_overridden1_uid(
+                                    session_recording_some_groups_overridden1):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden groups, and users requested with getpwuid
+    """
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_groups_overridden1_ent(
+                                    session_recording_some_groups_overridden1):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden groups, and users requested with getpwent
+    """
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_groups_overridden2(request, ldap_conn,
+                                              session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = one_user_group_overridden, two_user_group
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+    subprocess.check_call(["sss_override", "group-add", "one_user_group",
+                           "-n", "one_user_group_overridden"])
+    subprocess.check_call(["sss_override", "group-add", "two_user_group",
+                           "-n", "two_user_group_overridden"])
+    restart_sssd()
+
+
+def test_session_recording_some_groups_overridden2_nam(
+                                    session_recording_some_groups_overridden2):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden groups, and users requested with getpwnam
+    """
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_groups_overridden2_uid(
+                                    session_recording_some_groups_overridden2):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden groups, and users requested with getpwuid
+    """
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_groups_overridden2_ent(
+                                    session_recording_some_groups_overridden2):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden groups, and users requested with getpwent
+    """
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_groups_overridden3(request, ldap_conn,
+                                              session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            groups = group2
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+    subprocess.check_call(["sss_override", "group-add", "group1",
+                           "-g", "2002"])
+    subprocess.check_call(["sss_override", "group-add", "group2",
+                           "-g", "2001"])
+    restart_sssd()
+
+
+def test_session_recording_some_groups_overridden3_nam(
+                                    session_recording_some_groups_overridden3):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden group, and users requested with getpwnam
+    """
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell="/bin/sh3"),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_groups_overridden3_uid(
+                                    session_recording_some_groups_overridden3):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden group, and users requested with getpwuid
+    """
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell="/bin/sh3"),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_groups_overridden3_ent(
+                                    session_recording_some_groups_overridden3):
+    """
+    Test session recording "some" scope with group list containing some
+    overridden group, and users requested with getpwent
+    """
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell="/bin/sh3"),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
+        )
+    )
+
+
+@pytest.fixture
+def session_recording_some_users_and_groups(request, ldap_conn, session_recording_ldap):
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307) + \
+        unindent("""\
+            [session_recording]
+            scope = some
+            users = user3
+            groups = one_user_group
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+
+
+def test_session_recording_some_users_and_groups_nam(
+                                    session_recording_some_users_and_groups):
+    """
+    Test session recording "some" scope with user and group lists and getpwnam
+    """
+    ent.assert_each_passwd_by_name(dict(
+        user1=dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        user2=dict(name="user2", uid=1002, shell="/bin/sh2"),
+        user3=dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        user4=dict(name="user4", uid=1004, shell="/bin/sh4"),
+    ))
+
+
+def test_session_recording_some_users_and_groups_uid(
+                                    session_recording_some_users_and_groups):
+    """
+    Test session recording "some" scope with user and group lists and getpwuid
+    """
+    ent.assert_each_passwd_by_uid({
+        1001:dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+        1002:dict(name="user2", uid=1002, shell="/bin/sh2"),
+        1003:dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+        1004:dict(name="user4", uid=1004, shell="/bin/sh4"),
+    })
+
+
+def test_session_recording_some_users_and_groups_ent(
+                                    session_recording_some_users_and_groups):
+    """
+    Test session recording "some" scope with user and group lists and getpwent
+    """
+    ent.assert_passwd_list(
+        ent.contains_only(
+            dict(name="user1", uid=1001, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user2", uid=1002, shell="/bin/sh2"),
+            dict(name="user3", uid=1003, shell=config.SESSION_RECORDING_SHELL),
+            dict(name="user4", uid=1004, shell="/bin/sh4"),
         )
     )
