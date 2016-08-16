@@ -894,6 +894,22 @@ libsss_util_la_SOURCES += \
 endif
 libsss_util_la_LDFLAGS = -avoid-version
 
+noinst_LTLIBRARIES += sss_ldb_debug.la
+sss_ldb_debug_la_SOURCES= \
+    src/util/sss_ldb_debug.c \
+    $(NULL)
+sss_ldb_debug_la_LIBADD = \
+    $(LIBADD_DL) \
+    $(LDB_LIBS) \
+    libsss_debug.la \
+    $(NULL)
+sss_ldb_debug_la_LDFLAGS = \
+    -shared \
+    -module \
+    -avoid-version \
+    -rpath $(abs_top_builddir) \
+    $(NULL)
+
 pkglib_LTLIBRARIES += libsss_semanage.la
 libsss_semanage_la_CFLAGS = \
     $(AM_CFLAGS) \

@@ -110,6 +110,7 @@ struct so {
 #ifdef HAVE_CONFIG_LIB
     { "libsss_config.so", { LIBPFX"libsss_config.so", NULL } },
 #endif
+    { "sss_ldb_debug.so", { LIBPFX"sss_ldb_debug.so", NULL } },
     { NULL }
 };
 
