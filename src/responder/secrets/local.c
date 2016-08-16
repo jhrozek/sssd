@@ -511,6 +511,7 @@ struct tevent_req *local_secret_req(TALLOC_CTX *mem_ctx,
         body_is_json = false;
         content_type = "application/octet-stream";
     } else {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Invalid or missing Content-Type\n");
         ret = EINVAL;
         goto done;
     }
@@ -571,6 +572,8 @@ struct tevent_req *local_secret_req(TALLOC_CTX *mem_ctx,
         plen = strlen(req_path);
 
         if (req_path[plen - 1] != '/') {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "The container path must end with a slash\n");
             ret = EINVAL;
             goto done;
         }
@@ -615,7 +618,12 @@ int generate_master_key(const char *filename, size_t size)
     if (ret) return ret;
 
     fd = open(filename, O_CREAT|O_EXCL|O_WRONLY, 0600);
-    if (fd == -1) return errno;
+    if (fd == -1) {
+        ret = errno;
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot open %s: %s\n", filename, strerror(ret));
+        return ret;
+    }
 
     rsize = sss_atomic_write_s(fd, buf, size);
     close(fd);
@@ -659,6 +667,8 @@ int local_secrets_provider_handle(struct sec_ctx *sctx,
 
     ret = ldb_connect(lctx->ldb, dbpath, 0, NULL);
     if (ret != LDB_SUCCESS) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot open %s: %d\n", dbpath, ret);
         talloc_free(lctx->ldb);
         return EIO;
     }
