@@ -2920,10 +2920,13 @@ static int memberof_mod(struct ldb_module *module, struct ldb_request *req)
     mod_ctx->ghel = ldb_msg_find_element(mod_ctx->msg, DB_GHOST);
 
     /* continue with normal ops if there are no members and no ghosts */
-    if (mod_ctx->membel == NULL && mod_ctx->ghel == NULL) {
+    if ((mod_ctx->membel == NULL && mod_ctx->ghel == NULL) ||
+        (mod_ctx->membel == NULL && mod_ctx->ghel != NULL &&
+         mod_ctx->ghel->num_values == 0)) {
         mod_ctx->terminate = true;
         return mbof_orig_mod(mod_ctx);
     }
+
 
     /* can't do anything,
      * must check first what's on the entry */
