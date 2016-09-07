@@ -1412,6 +1412,245 @@ static errno_t sdap_ad_tokengroups_initgr_posix_recv(struct tevent_req *req)
     return EOK;
 }
 
+struct sdap_ad_get_domain_local_groups_state {
+    struct tevent_context *ev;
+    //struct sdap_id_ctx *ctx;
+    struct sdap_id_conn_ctx *conn;
+    struct sdap_options *opts;
+    struct sdap_id_op *op;
+    struct sysdb_ctx *sysdb;
+    struct sss_domain_info *dom;
+    int dp_error;
+
+    struct sdap_search_base **search_bases;
+    struct sysdb_attrs **groups;
+    size_t num_groups;
+    hash_table_t *group_hash;
+};
+
+static void
+sdap_ad_get_domain_local_groups_connect_done(struct tevent_req *subreq);
+static void sdap_ad_get_domain_local_groups_done(struct tevent_req *subreq);
+
+struct tevent_req *
+sdap_ad_get_domain_local_groups_send(TALLOC_CTX *mem_ctx,
+                                     struct tevent_context *ev,
+                                     struct sdap_id_conn_ctx *conn,
+                                     struct sdap_options *opts,
+                                     struct sysdb_ctx *sysdb,
+                                     struct sss_domain_info *dom,
+                                     struct sdap_search_base **search_bases,
+                                     struct sysdb_attrs **groups,
+                                     size_t num_groups)
+{
+    struct sdap_ad_get_domain_local_groups_state *state;
+    struct tevent_req *req;
+    struct tevent_req *subreq;
+    errno_t ret;
+
+    req = tevent_req_create(mem_ctx, &state,
+                            struct sdap_ad_get_domain_local_groups_state);
+    if (req == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
+        return NULL;
+    }
+
+    state->ev = ev;
+    state->conn = conn;
+    state->opts = opts;
+    state->sysdb = sysdb;
+    state->dom = dom;
+    state->search_bases = search_bases;
+    state->groups = groups;
+    state->num_groups = num_groups;
+
+    ret = sss_hash_create(state, 32, &state->group_hash);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sss_hash_create failed.\n");
+        goto fail;
+    }
+
+    state->op = sdap_id_op_create(state, state->conn->conn_cache);
+    if (state->op == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create failed\n");
+        ret = ENOMEM;
+        goto fail;
+    }
+
+    subreq = sdap_id_op_connect_send(state->op, state, &ret);
+    if (subreq == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_connect_send failed.\n");
+        goto fail;
+    }
+
+    tevent_req_set_callback(subreq,
+                            sdap_ad_get_domain_local_groups_connect_done, req);
+
+    return req;
+
+fail:
+    tevent_req_error(req, ret);
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static void
+sdap_ad_get_domain_local_groups_connect_done(struct tevent_req *subreq)
+{
+
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sdap_ad_get_domain_local_groups_state *state = tevent_req_data(req,
+                                  struct sdap_ad_get_domain_local_groups_state);
+    int dp_error = DP_ERR_FATAL;
+    int ret;
+
+    ret = sdap_id_op_connect_recv(subreq, &dp_error);
+    talloc_zfree(subreq);
+
+    if (ret != EOK) {
+        state->dp_error = dp_error;
+        tevent_req_error(req, ret);
+        return;
+    }
+    subreq = rfc2307bis_nested_groups_send(state, state->ev, state->opts,
+                                           state->sysdb, state->dom,
+                                           sdap_id_op_handle(state->op),
+                                           state->search_bases,
+                                           state->groups, state->num_groups,
+                                           state->group_hash, 0);
+    if (subreq == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "rfc2307bis_nested_groups_send failed.\n");
+        state->dp_error = DP_ERR_FATAL;
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+
+    tevent_req_set_callback(subreq,
+                            sdap_ad_get_domain_local_groups_done, req);
+
+    return;
+}
+
+struct sdap_nested_group {
+    struct sysdb_attrs *group;
+    struct sysdb_attrs **ldap_parents;
+    size_t parents_count;
+};
+
+static void sdap_ad_get_domain_local_groups_done(struct tevent_req *subreq)
+{
+
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sdap_ad_get_domain_local_groups_state *state = tevent_req_data(req,
+                                  struct sdap_ad_get_domain_local_groups_state);
+    int ret;
+    int hret;
+    unsigned long count;
+    hash_value_t *values;
+    struct sysdb_attrs **groups = NULL;
+    struct sdap_nested_group *gr;
+    size_t c;
+    size_t d;
+    char **groupnamelist;
+    const char *sysdb_username;
+    size_t parents_count = 0;
+    size_t pc;
+
+    ret = rfc2307bis_nested_groups_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    /* FIXME: the resolved groups, if any, must still be saved. */
+    hret = hash_values(state->group_hash, &count, &values);
+    if (hret != HASH_SUCCESS) {
+        DEBUG(SSSDBG_OP_FAILURE, "hash_values failed.\n");
+        ret = EIO;
+        goto done;
+    }
+
+    for (c = 0; c < count; c++) {
+        gr = talloc_get_type(values[c].ptr, struct sdap_nested_group);
+        parents_count += gr->parents_count;
+    }
+
+    if (parents_count == 0) {
+        DEBUG(SSSDBG_TRACE_ALL, "No domain local groups found.\n");
+        ret = EOK;
+        goto done;
+    }
+
+    groups = talloc_array(state, struct sysdb_attrs *, parents_count);
+    if (groups == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "talloc_array failed.\n");
+        ret = ENOMEM;
+        goto done;
+    }
+
+    pc = 0;
+    for (c = 0; c < count; c++) {
+        gr = talloc_get_type(values[c].ptr,
+                             struct sdap_nested_group);
+        for (d = 0; d < gr->parents_count; d++) {
+            groups[pc++] = gr->ldap_parents[d];
+        }
+    }
+    talloc_zfree(values);
+
+    ret = sdap_nested_groups_store(state->sysdb, state->dom, state->opts,
+                                   groups, parents_count);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "Could not save groups [%d]: %s\n",
+                  ret, strerror(ret));
+        goto done;
+    }
+
+    ret = sysdb_attrs_primary_fqdn_list(state->dom, state,
+                                groups, parents_count,
+                                state->opts->group_map[SDAP_AT_GROUP_NAME].name,
+                                &groupnamelist);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_primary_fqdn_list failed.\n");
+        goto done;
+    }
+
+    ret = sysdb_attrs_get_string(state->groups[0], SYSDB_NAME, &sysdb_username);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "sysdb_attrs_get_string failed to get SYSDB_NAME.\n");
+        goto done;
+    }
+
+    DEBUG(SSSDBG_TRACE_INTERNAL, "Updating domain local memberships for %s\n",
+                                 sysdb_username);
+    ret = sysdb_update_members(state->dom, sysdb_username, SYSDB_MEMBER_USER,
+                               (const char *const *) groupnamelist, NULL);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_update_members failed.\n");
+        goto done;
+    }
+
+    ret = EOK;
+done:
+    if (ret == EOK) {
+        tevent_req_done(req);
+    } else {
+        tevent_req_error(req, ret);
+    }
+
+    return;
+}
+
+errno_t sdap_ad_get_domain_local_groups_recv(struct tevent_req *req)
+{
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+    return EOK;
+}
+
 struct sdap_ad_tokengroups_initgroups_state {
     bool use_id_mapping;
     struct sss_domain_info *domain;
