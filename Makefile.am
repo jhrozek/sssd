@@ -35,7 +35,6 @@ endif
 
 sssdlibexecdir = $(libexecdir)/sssd
 sssdlibdir = $(libdir)/sssd
-sssddefaultconfdir = $(sssdlibdir)/conf
 ldblibdir = @ldblibdir@
 if BUILD_KRB5_LOCATOR_PLUGIN
 krb5plugindir = @krb5pluginpath@
@@ -85,7 +84,6 @@ pkgconfigdir = $(libdir)/pkgconfig
 krb5rcachedir = @krb5rcachedir@
 sudolibdir = @sudolibpath@
 polkitdir = @polkitdir@
-pamconfdir = $(sysconfdir)/pam.d
 systemtap_tapdir = @tapset_dir@
 
 secdbpath = @secdbpath@
@@ -464,7 +462,6 @@ AM_CPPFLAGS = \
     -DSSSDDATADIR=\"$(sssddatadir)\" \
     -DSSSD_LIBEXEC_PATH=\"$(sssdlibexecdir)\" \
     -DSSSD_CONF_DIR=\"$(sssdconfdir)\" \
-    -DSSSD_DEFAULT_CONF_DIR=\"$(sssddefaultconfdir)\" \
     -DSSS_NSS_MCACHE_DIR=\"$(mcpath)\" \
     -DSSS_NSS_SOCKET_NAME=\"$(pipepath)/nss\" \
     -DSSS_PAM_SOCKET_NAME=\"$(pipepath)/pam\" \
@@ -1464,12 +1461,6 @@ dist_noinst_DATA += \
     src/sss_client/COPYING \
     src/sss_client/COPYING.LESSER \
     src/m4
-
-dist_sssddefaultconf_DATA = \
-    src/examples/sssd.conf
-
-dist_pamconf_DATA = \
-    src/examples/sssd-shadowutils
 
 ######################
 # Command-line Tools #
@@ -3972,7 +3963,6 @@ SSSD_USER_DIRS = \
     $(DESTDIR)$(gpocachepath) \
     $(DESTDIR)$(sssdconfdir) \
     $(DESTDIR)$(sssdconfdir)/conf.d \
-    $(DESTDIR)$(sssddefaultconfdir) \
     $(DESTDIR)$(logpath) \
     $(NULL)
 
