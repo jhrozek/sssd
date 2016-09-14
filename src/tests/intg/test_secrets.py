@@ -140,3 +140,12 @@ def test_containers(setup_for_secrets, secrets_cli):
     cli.create_container("mycontainer/")
     cli.set_secret("mycontainer/foo", "containedfooval")
     assert cli.get_secret("mycontainer/foo") == "containedfooval"
+
+    # Removing a non-empty container should not succeed
+    with pytest.raises(HTTPError) as err409:
+        cli.del_secret("mycontainer/")
+    assert err409.value.message.startswith("409")
+
+    # Try removing the secret first, then the container
+    cli.del_secret("mycontainer/foo")
+    cli.del_secret("mycontainer/")
