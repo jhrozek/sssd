@@ -29,6 +29,7 @@
 struct local_context {
     struct ldb_context *ldb;
     struct sec_data master_key;
+    int max_containers_nested_level;
 };
 
 static int local_decrypt(struct local_context *lctx, TALLOC_CTX *mem_ctx,
@@ -332,6 +333,26 @@ done:
     return ret;
 }
 
+static int local_db_check_containers_nested_level(struct local_context *lctx,
+                                                  struct ldb_dn *leaf_dn)
+{
+    int nested_level;
+
+    /* We need do not care for the synthetic containers that constitute the
+     * base path (cn=<uidnumber>,cn=user,cn=secrets). */
+    nested_level = ldb_dn_get_comp_num(leaf_dn) - 3;
+    if (nested_level > lctx->max_containers_nested_level) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot create a nested container of depth %d as the maximum"
+              "allowed number of nested containers is %d.\n",
+              nested_level, lctx->max_containers_nested_level);
+
+        return ERR_SEC_INVALID_NESTED_CONTAINER_LEVEL;
+    }
+
+    return EOK;
+}
+
 static int local_db_put_simple(TALLOC_CTX *mem_ctx,
                                struct local_context *lctx,
                                const char *req_path,
@@ -445,6 +466,9 @@ static int local_db_create(TALLOC_CTX *mem_ctx,
 
     /* make sure containers exist */
     ret = local_db_check_containers(msg, lctx, msg->dn);
+    if (ret != EOK) goto done;
+
+    ret = local_db_check_containers_nested_level(lctx, msg->dn);
     if (ret != EOK) goto done;
 
     ret = ldb_msg_add_string(msg, "type", "container");
@@ -707,6 +731,8 @@ int local_secrets_provider_handle(struct sec_ctx *sctx,
         talloc_free(lctx->ldb);
         return EIO;
     }
+
+    lctx->max_containers_nested_level = sctx->max_containers_nested_level;
 
     lctx->master_key.data = talloc_size(lctx, MKEY_SIZE);
     if (!lctx->master_key.data) return ENOMEM;
