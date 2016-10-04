@@ -231,15 +231,23 @@ static int parse_child_response(TALLOC_CTX *mem_ctx,
     krb5_error_code krberr;
 
     /* operation result code */
+    DEBUG(SSSDBG_TRACE_INTERNAL, "buffer size: %ld\n", size);
     SAFEALIGN_COPY_UINT32_CHECK(&res, buf + p, size, &p);
+
+    DEBUG(SSSDBG_TRACE_INTERNAL, "return code: %"PRIu32"\n", res);
 
     /* krb5 error code */
     safealign_memcpy(&krberr, buf+p, sizeof(krberr), &p);
+    DEBUG(SSSDBG_TRACE_INTERNAL, "krb5 error code: %d\n", krberr);
 
     /* ccache name size */
     SAFEALIGN_COPY_UINT32_CHECK(&len, buf + p, size, &p);
+    DEBUG(SSSDBG_TRACE_INTERNAL, "ccache length: %"PRIu32"\n", len);
 
-    if (len > size - p) return EINVAL;
+    if (len > size - p) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "cache size too big!\n");
+        return EINVAL;
+    }
 
     ccn = talloc_size(mem_ctx, sizeof(char) * (len + 1));
     if (ccn == NULL) {
@@ -251,6 +259,7 @@ static int parse_child_response(TALLOC_CTX *mem_ctx,
 
     if (p + sizeof(time_t) > size) {
         talloc_free(ccn);
+        DEBUG(SSSDBG_CRIT_FAILURE, "buffer too big for time_t!\n");
         return EINVAL;
     }
     safealign_memcpy(&expire_time, buf+p, sizeof(time_t), &p);
