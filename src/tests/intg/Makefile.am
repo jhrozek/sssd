@@ -18,6 +18,7 @@ dist_noinst_DATA = \
     test_netgroup.py \
     secrets.py \
     test_secrets.py \
+    ldap_local_override_test.py \
     $(NULL)
 
 config.py: config.py.m4
@@ -43,12 +44,16 @@ passwd: root
 group:
 	echo "root:x:0:" > $@
 
+pam_sss_service:
+	$(MKDIR_P) pam_service_dir
+	echo "$(DESTDIR)$(pamlibdir)/pam_sss.so" > pam_service_dir/$@
+
 CLEANFILES=config.py config.pyc passwd group
 
 clean-local:
 	rm -Rf root
 
-intgcheck-installed: config.py passwd group
+intgcheck-installed: config.py passwd group pam_sss_service
 	pipepath="$(DESTDIR)$(pipepath)"; \
 	if test $${#pipepath} -gt 80; then \
 	    echo "error: Pipe directory path too long," \
@@ -59,17 +64,20 @@ intgcheck-installed: config.py passwd group
 	cd "$(abs_srcdir)"; \
 	nss_wrapper=$$(pkg-config --libs nss_wrapper); \
 	uid_wrapper=$$(pkg-config --libs uid_wrapper); \
+	pam_wrapper=$$(pkg-config --libs pam_wrapper); \
 	PATH="$$(dirname -- $(SLAPD)):$$PATH" \
 	PATH="$(DESTDIR)$(sbindir):$(DESTDIR)$(bindir):$$PATH" \
 	PATH="$(abs_builddir):$(abs_srcdir):$$PATH" \
 	PYTHONPATH="$(abs_builddir):$(abs_srcdir)" \
 	LDB_MODULES_PATH="$(DESTDIR)$(ldblibdir)" \
-	LD_PRELOAD="$$nss_wrapper $$uid_wrapper" \
+	LD_PRELOAD="$$nss_wrapper $$uid_wrapper $$pam_wrapper" \
 	NSS_WRAPPER_PASSWD="$(abs_builddir)/passwd" \
 	NSS_WRAPPER_GROUP="$(abs_builddir)/group" \
 	NSS_WRAPPER_MODULE_SO_PATH="$(DESTDIR)$(nsslibdir)/libnss_sss.so.2" \
 	NSS_WRAPPER_MODULE_FN_PREFIX="sss" \
 	UID_WRAPPER=1 \
 	UID_WRAPPER_ROOT=1 \
+	PAM_WRAPPER=1 \
+	PAM_WRAPPER_SERVICE_DIR=$(abs_builddir)/test_pam_services
 	    fakeroot $(PYTHON2) $(PYTEST) -v --tb=native $(INTGCHECK_PYTEST_ARGS) .
 	rm -f $(DESTDIR)$(logpath)/*
