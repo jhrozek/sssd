@@ -48,3 +48,9 @@ AC_DEFUN([SSS_AC_EXPAND_LIB_DIR],
     ])
     sss_extra_libdir="$additional_libdir"
 ])
+
+dnl A backwards-compatible way of declaring AS_VAR_COPY
+dnl for example for CentOS-6
+m4_ifndef([AS_VAR_COPY],
+[m4_define([AS_VAR_COPY],
+[AS_LITERAL_IF([$1[]$2], [$1=$$2], [eval $1=\$$2])])])
