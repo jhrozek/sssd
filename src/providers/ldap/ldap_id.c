@@ -764,6 +764,10 @@ struct tevent_req *groups_get_send(TALLOC_CTX *memctx,
                                         "(&(%s=%s)(%s)(%s=*))",
                                         attr_name, clean_name, oc_list,
                                         ctx->opts->group_map[SDAP_AT_GROUP_NAME].name);
+    } else if (filter_type == BE_FILTER_IDNUM) {
+        state->filter = talloc_asprintf(state,
+                                        "(&(%s=%s)(%s))",
+                                        attr_name, clean_value, oc_list);
     } else {
         state->filter = talloc_asprintf(state,
                                         "(&(%s=%s)(%s)(%s=*)(&(%s=*)(!(%s=0))))",
