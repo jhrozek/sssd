@@ -256,9 +256,10 @@ struct cache_req_state {
     struct cache_req *cr;
 
     /* work data */
-    struct ldb_result *result;
     struct sss_domain_info *domain;
     struct sss_domain_info *selected_domain;
+    struct cache_req_result **result;
+    size_t num_results;
     bool check_next;
 };
 
@@ -479,21 +480,82 @@ static errno_t cache_req_next_domain(struct tevent_req *req)
     return ENOENT;
 }
 
+static errno_t
+cache_req_set_result(struct cache_req_state *state,
+                     struct sss_domain_info *domain,
+                     struct ldb_result *ldb_result)
+{
+    const char *name = state->cr->data->name.lookup;
+    struct cache_req_result **result = state->result;
+    struct cache_req_result *item = NULL;
+    size_t index;
+    size_t count;
+    errno_t ret;
+
+    CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
+                    "Found %u entries in domain %s\n",
+                    ldb_result->count, domain->name);
+
+    /* Create new result. */
+    item = talloc_zero(state, struct cache_req_result);
+    if (item == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    item->domain = domain;
+    item->ldb_result = talloc_steal(item, ldb_result);
+    item->count = ldb_result != NULL ? ldb_result->count : 0;
+    item->msgs = ldb_result != NULL ? ldb_result->msgs : NULL;
+
+    if (name != NULL) {
+        item->lookup_name = talloc_strdup(item, name);
+        if (item->lookup_name == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    /* Make space for new result. */
+    index = state->num_results;
+    count = state->num_results + 1;
+
+    result = talloc_realloc(state, result, struct cache_req_result *, count + 1);
+    if (result == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    result[index] = talloc_steal(result, item);
+    result[index + 1] = NULL;
+    state->result = result;
+    state->num_results = count;
+
+    ret = EOK;
+
+done:
+    if (ret != EOK) {
+        talloc_free(item);
+    }
+
+    return ret;
+}
+
 static void cache_req_done(struct tevent_req *subreq)
 {
     struct cache_req_state *state;
+    struct ldb_result *result;
     struct tevent_req *req;
     errno_t ret;
 
     req = tevent_req_callback_data(subreq, struct tevent_req);
     state = tevent_req_data(req, struct cache_req_state);
 
-    ret = cache_req_search_recv(state, subreq, &state->result);
+    ret = cache_req_search_recv(state, subreq, &result);
     talloc_zfree(subreq);
     if (ret == EOK) {
-        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr, "Finished: Success\n");
-        tevent_req_done(req);
-        return;
+        ret = cache_req_set_result(state, state->selected_domain, result);
+        goto done;
     }
 
     if (state->check_next == false) {
@@ -503,16 +565,31 @@ static void cache_req_done(struct tevent_req *subreq)
             return;
         }
 
-        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr, "Finished: Not found\n");
-        tevent_req_error(req, ret);
-        return;
+        goto done;
     }
 
     ret = cache_req_next_domain(req);
     if (ret != EAGAIN) {
+        goto done;
+    }
+
+    return;
+
+done:
+    switch (ret) {
+    case EOK:
+        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr, "Finished: Success\n");
+        tevent_req_done(req);
+        break;
+    case ENOENT:
+        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr, "Finished: Not found\n");
+        tevent_req_error(req, ret);
+        break;
+    default:
         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
                         "Finished: Error %d: %s\n", ret, sss_strerror(ret));
         tevent_req_error(req, ret);
+        break;
     }
 
     return;
@@ -520,36 +597,33 @@ static void cache_req_done(struct tevent_req *subreq)
 
 errno_t cache_req_recv(TALLOC_CTX *mem_ctx,
                        struct tevent_req *req,
-                       struct ldb_result **_result,
-                       struct sss_domain_info **_domain,
-                       char **_name)
+                       struct cache_req_result ***_result)
 {
-    struct cache_req_state *state = NULL;
-    char *name;
+    struct cache_req_state *state;
 
     state = tevent_req_data(req, struct cache_req_state);
 
     TEVENT_REQ_RETURN_ON_ERROR(req);
 
-    if (_name != NULL) {
-        if (state->cr->data->name.lookup == NULL) {
-            *_name = NULL;
-        } else {
-            name = talloc_strdup(mem_ctx, state->cr->data->name.lookup);
-            if (name == NULL) {
-                return ENOMEM;
-            }
-
-            *_name = name;
-        }
-    }
-
     if (_result != NULL) {
         *_result = talloc_steal(mem_ctx, state->result);
     }
 
-    if (_domain != NULL) {
-        *_domain = state->selected_domain;
+    return EOK;
+}
+
+errno_t cache_req_single_domain_recv(TALLOC_CTX *mem_ctx,
+                                     struct tevent_req *req,
+                                     struct cache_req_result **_result)
+{
+    struct cache_req_state *state;
+
+    state = tevent_req_data(req, struct cache_req_state);
+
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+
+    if (_result != NULL) {
+        *_result = talloc_steal(mem_ctx, state->result[0]);
     }
 
     return EOK;
