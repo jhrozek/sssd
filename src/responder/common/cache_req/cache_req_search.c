@@ -261,17 +261,22 @@ cache_req_search_send(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = cache_req_search_cache(state, cr, &state->result);
-    if (ret != EOK && ret != ENOENT) {
-        goto done;
-    }
+    /* Do not perform the first search if bypass cache is true. */
+    state->result = NULL;
+    status = CACHE_OBJECT_MISSING;
+    if (cr->plugin->bypass_cache == false) {
+        ret = cache_req_search_cache(state, cr, &state->result);
+        if (ret != EOK && ret != ENOENT) {
+            goto done;
+        }
 
-    status = cache_req_expiration_status(cr, state->result);
-    if (status == CACHE_OBJECT_VALID) {
-        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, cr,
-                        "Returning [%s] from cache\n", cr->debugobj);
-        ret = EOK;
-        goto done;
+        status = cache_req_expiration_status(cr, state->result);
+        if (status == CACHE_OBJECT_VALID) {
+            CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, cr,
+                            "Returning [%s] from cache\n", cr->debugobj);
+            ret = EOK;
+            goto done;
+        }
     }
 
     ret = cache_req_search_dp(req, status);
