@@ -2,7 +2,6 @@
 # LDAP integration test
 #
 # Copyright (c) 2015 Red Hat, Inc.
-# Author: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -26,6 +25,7 @@ import time
 import ldap
 import ldap.modlist
 import pytest
+import pypamtest
 
 import config
 import ds_openldap
@@ -34,6 +34,7 @@ import ldap_ent
 import sssd_id
 import sssd_ldb
 from util import unindent
+from util import run_shell
 
 LDAP_BASE_DN = "dc=example,dc=com"
 INTERACTIVE_TIMEOUT = 4
@@ -190,6 +191,7 @@ def create_conf_fixture(request, contents):
 
 def create_sssd_process():
     """Start the SSSD process"""
+    run_shell()
     if subprocess.call(["sssd", "-D", "-f"]) != 0:
         raise Exception("sssd start failed")
 
@@ -228,7 +230,7 @@ def create_sssd_fixture(request):
 @pytest.fixture
 def sanity_rfc2307(request, ldap_conn):
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
-    ent_list.add_user("user1", 1001, 2001)
+    ent_list.add_user("user1", 1001, 2001, userPassword="user1secret")
     ent_list.add_user("user2", 1002, 2002)
     ent_list.add_user("user3", 1003, 2003)
 
@@ -254,16 +256,11 @@ def expected_list_to_name_dict(entries):
     return dict((u["name"], u) for u in entries)
 
 
-@pytest.fixture
-def pwrap_setup(request, ldap_conn):
-    uid_wrapper = os.getenv("UID_WRAPPER")
-    if uid_wrapper is None:
-        raise ValueError("The uid_wrapper variable is unset\n")
+def test_ldap_auth(ldap_conn, sanity_rfc2307):
+    ent.assert_passwd_by_name("user1", dict(name="user1", uid=1001, gid=2001))
+    run_shell()
 
-    pwrap_runtimedir = os.getenv("PAM_WRAPPER_RUNTIME_DIR")
-    if pwrap_runtimedir is None:
-        raise ValueError("The PAM_WRAPPER_RUNTIME_DIR variable is unset\n")
-
-
-def test_ldap_auth(ldap_conn, sanity_rfc2307, pwrap_setup):
-    pass
+    #os.environ["PAM_WRAPPER"] = "1"
+    #tc = pypamtest.TestCase(pypamtest.PAMTEST_AUTHENTICATE, 0)
+    #res = pypamtest.run_pamtest("user1", "pam_sss_service", [tc])
+    #del os.environ["PAM_WRAPPER"]

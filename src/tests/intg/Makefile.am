@@ -1,3 +1,5 @@
+pamlibdir = @pammoddir@
+
 dist_noinst_DATA = \
     config.py.m4 \
     sssd_id.py \
@@ -78,6 +80,6 @@ intgcheck-installed: config.py passwd group pam_sss_service
 	UID_WRAPPER=1 \
 	UID_WRAPPER_ROOT=1 \
 	PAM_WRAPPER=1 \
-	PAM_WRAPPER_SERVICE_DIR=$(abs_builddir)/test_pam_services
+	PAM_WRAPPER_SERVICE_DIR=$(abs_builddir)/pam_service_dir \
 	    fakeroot $(PYTHON2) $(PYTEST) -v --tb=native $(INTGCHECK_PYTEST_ARGS) .
 	rm -f $(DESTDIR)$(logpath)/*
