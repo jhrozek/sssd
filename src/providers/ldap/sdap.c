@@ -1614,10 +1614,14 @@ sdap_get_primary_fqdn(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    primary_fqdn = sss_create_internal_fqname(tmp_ctx, shortname, dom->name);
-    if (primary_fqdn == NULL) {
-        ret = ENOMEM;
-        goto done;
+    if (strchr(shortname, '@') == NULL) {
+        primary_fqdn = sss_create_internal_fqname(tmp_ctx, shortname, dom->name);
+        if (primary_fqdn == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    } else {
+        primary_fqdn = shortname;
     }
 
     ret = EOK;
