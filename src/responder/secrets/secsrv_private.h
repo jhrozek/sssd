@@ -47,6 +47,8 @@ enum sec_http_status_codes {
     STATUS_406,
     STATUS_409,
     STATUS_500,
+    STATUS_504,
+    STATUS_507,
 };
 
 struct sec_proto_ctx {

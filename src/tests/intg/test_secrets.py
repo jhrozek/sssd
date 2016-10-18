@@ -84,6 +84,9 @@ def setup_for_secrets(request):
 
         [domain/local]
         id_provider = local
+
+        [secrets]
+        max_secrets = 10
     """).format(**locals())
 
     create_conf_fixture(request, conf)
@@ -136,6 +139,18 @@ def test_crd_ops(setup_for_secrets, secrets_cli):
         cli.del_secret("foo")
     assert str(err404.value).startswith("404")
 
+    # Don't allow storing more secrets after reaching the max
+    # number of entries.
+    MAX_SECRETS = 10
+
+    sec_value = "value"
+    for x in xrange(MAX_SECRETS):
+        cli.set_secret(str(x), sec_value)
+
+    with pytest.raises(HTTPError) as err507:
+        cli.set_secret(str(MAX_SECRETS), sec_value)
+    assert str(err507.value).startswith("507")
+
 
 def test_containers(setup_for_secrets, secrets_cli):
     """
@@ -160,3 +175,15 @@ def test_containers(setup_for_secrets, secrets_cli):
     # Try removing the secret first, then the container
     cli.del_secret("mycontainer/foo")
     cli.del_secret("mycontainer/")
+
+    # Don't allow creating a container after reaching the max nested level
+    DEFAULT_CONTAINERS_NEST_LEVEL = 4
+    container = "mycontainer"
+    for x in xrange(DEFAULT_CONTAINERS_NEST_LEVEL):
+        container += "%s/" % str(x)
+        cli.create_container(container)
+
+    container += "%s/" % str(DEFAULT_CONTAINERS_NEST_LEVEL)
+    with pytest.raises(HTTPError) as err406:
+        cli.create_container(container)
+    assert str(err406.value).startswith("406")
