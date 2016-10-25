@@ -31,6 +31,13 @@ enum cache_object_status {
 };
 
 /**
+ * Returns true if this domain is valid and can be used by cache req search.
+ */
+typedef bool
+(*cache_req_validate_domain_fn)(struct cache_req *cr,
+                                struct sss_domain_info *domain);
+
+/**
  * Create an object debug name that is used in debug messages to identify
  * this object.
  *
@@ -169,6 +176,7 @@ struct cache_req_plugin {
     enum cache_req_type upn_equivalent;
 
     /* Operations */
+    cache_req_validate_domain_fn validate_domain_fn;
     cache_req_prepare_domain_data_fn prepare_domain_data_fn;
     cache_req_create_debug_name_fn create_debug_name_fn;
     cache_req_global_ncache_add_fn global_ncache_add_fn;

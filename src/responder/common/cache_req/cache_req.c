@@ -127,6 +127,17 @@ cache_req_set_name(struct cache_req *cr, const char *name)
     return EOK;
 }
 
+static bool
+cache_req_validate_domain(struct cache_req *cr,
+                          struct sss_domain_info *domain)
+{
+    if (cr->plugin->validate_domain_fn == NULL) {
+        return true;
+    }
+
+    return cr->plugin->validate_domain_fn(cr, domain);
+}
+
 static errno_t
 cache_req_prepare_domain_data(struct cache_req *cr,
                               struct sss_domain_info *domain)
@@ -431,18 +442,32 @@ static errno_t cache_req_next_domain(struct tevent_req *req)
     struct cache_req_state *state;
     struct tevent_req *subreq;
     struct cache_req *cr;
+    uint32_t next_domain_flag;
+    bool is_domain_valid;
+    bool allow_no_fqn;
     errno_t ret;
 
     state = tevent_req_data(req, struct cache_req_state);
     cr = state->cr;
 
+    next_domain_flag = cr->plugin->get_next_domain_flags;
+    allow_no_fqn = cr->plugin->allow_missing_fqn;
+
     while (state->domain != NULL) {
-       /* If it is a domainless search, skip domains that require fully
-        * qualified names instead. */
-        while (state->domain != NULL && state->check_next
-                && state->domain->fqnames
-                && !cr->plugin->allow_missing_fqn) {
+        /* Check if this domain is valid for this request. */
+        is_domain_valid = cache_req_validate_domain(cr, state->domain);
+        if (!is_domain_valid) {
+            state->domain = get_next_domain(state->domain, next_domain_flag);
+            continue;
+        }
+
+        /* If not specified otherwise, we skip domains that require fully
+         * qualified names on domain less search. We do not descend into
+         * subdomains here since those are implicitly qualified.
+         */
+        if (state->check_next && !allow_no_fqn && state->domain->fqnames) {
             state->domain = get_next_domain(state->domain, 0);
+            continue;
         }
 
         state->selected_domain = state->domain;
