@@ -26,6 +26,8 @@
 #include "providers/fail_over.h"
 #include "providers/be_refresh.h"
 #include "providers/data_provider/dp.h"
+#include "providers/data_provider/dp.h"
+#include "providers/data_provider/dp_responder_iface.h"
 #include "util/child_common.h"
 #include "db/sysdb.h"
 

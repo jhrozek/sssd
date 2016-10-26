@@ -15,8 +15,8 @@ static int invoke_us_method(struct sbus_request *dbus_req, void *function_ptr);
 /* invokes a handler with a 'uss' DBus signature */
 static int invoke_uss_method(struct sbus_request *dbus_req, void *function_ptr);
 
-/* invokes a handler with a 'uuusss' DBus signature */
-static int invoke_uuusss_method(struct sbus_request *dbus_req, void *function_ptr);
+/* invokes a handler with a 'uuusssu' DBus signature */
+static int invoke_uuusssu_method(struct sbus_request *dbus_req, void *function_ptr);
 
 /* arguments for org.freedesktop.sssd.DataProvider.Client.Register */
 const struct sbus_arg_meta iface_dp_client_Register__in[] = {
@@ -264,6 +264,7 @@ const struct sbus_arg_meta iface_dp_getAccountInfo__in[] = {
     { "filter", "s" },
     { "domain", "s" },
     { "extra", "s" },
+    { "dp_optimize_level", "u" },
     { NULL, }
 };
 
@@ -326,7 +327,7 @@ const struct sbus_method_meta iface_dp__methods[] = {
         iface_dp_getAccountInfo__in,
         iface_dp_getAccountInfo__out,
         offsetof(struct iface_dp, getAccountInfo),
-        invoke_uuusss_method,
+        invoke_uuusssu_method,
     },
     { NULL, }
 };
@@ -378,8 +379,8 @@ static int invoke_uss_method(struct sbus_request *dbus_req, void *function_ptr)
                      arg_2);
 }
 
-/* invokes a handler with a 'uuusss' DBus signature */
-static int invoke_uuusss_method(struct sbus_request *dbus_req, void *function_ptr)
+/* invokes a handler with a 'uuusssu' DBus signature */
+static int invoke_uuusssu_method(struct sbus_request *dbus_req, void *function_ptr)
 {
     uint32_t arg_0;
     uint32_t arg_1;
@@ -387,7 +388,8 @@ static int invoke_uuusss_method(struct sbus_request *dbus_req, void *function_pt
     const char * arg_3;
     const char * arg_4;
     const char * arg_5;
-    int (*handler)(struct sbus_request *, void *, uint32_t, uint32_t, uint32_t, const char *, const char *, const char *) = function_ptr;
+    uint32_t arg_6;
+    int (*handler)(struct sbus_request *, void *, uint32_t, uint32_t, uint32_t, const char *, const char *, const char *, uint32_t) = function_ptr;
 
     if (!sbus_request_parse_or_finish(dbus_req,
                                DBUS_TYPE_UINT32, &arg_0,
@@ -396,6 +398,7 @@ static int invoke_uuusss_method(struct sbus_request *dbus_req, void *function_pt
                                DBUS_TYPE_STRING, &arg_3,
                                DBUS_TYPE_STRING, &arg_4,
                                DBUS_TYPE_STRING, &arg_5,
+                               DBUS_TYPE_UINT32, &arg_6,
                                DBUS_TYPE_INVALID)) {
          return EOK; /* request handled */
     }
@@ -406,7 +409,8 @@ static int invoke_uuusss_method(struct sbus_request *dbus_req, void *function_pt
                      arg_2,
                      arg_3,
                      arg_4,
-                     arg_5);
+                     arg_5,
+                     arg_6);
 }
 
 /* invokes a handler with a 'us' DBus signature */

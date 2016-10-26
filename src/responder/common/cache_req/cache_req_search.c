@@ -143,7 +143,8 @@ static errno_t cache_req_dpreq_params(TALLOC_CTX *mem_ctx,
                                       struct ldb_result *result,
                                       const char **_string,
                                       uint32_t *_id,
-                                      const char **_flag)
+                                      const char **_flag,
+                                      uint32_t *_dp_optimize_level)
 {
     errno_t ret;
 
@@ -305,12 +306,14 @@ static errno_t cache_req_search_dp(struct tevent_req *req,
     const char *extra_flag;
     const char *search_str;
     uint32_t search_id;
+    uint32_t dp_optimize_level;
     errno_t ret;
 
     state = tevent_req_data(req, struct cache_req_search_state);
 
     ret = cache_req_dpreq_params(state, state->cr, state->result,
-                                 &search_str, &search_id, &extra_flag);
+                                 &search_str, &search_id, &extra_flag,
+                                 &dp_optimize_level);
     if (ret != EOK) {
         return ret;
     }

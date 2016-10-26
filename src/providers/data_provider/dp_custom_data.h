@@ -50,6 +50,7 @@ struct dp_id_data {
     const char *filter_value;
     const char *extra_value;
     const char *domain;
+    uint32_t dp_optimize_level;
 };
 
 /* Reply private data. */

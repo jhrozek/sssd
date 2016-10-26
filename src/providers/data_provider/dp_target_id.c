@@ -257,7 +257,8 @@ errno_t dp_get_account_info_handler(struct sbus_request *sbus_req,
                                     uint32_t attr_type,
                                     const char *filter,
                                     const char *domain,
-                                    const char *extra)
+                                    const char *extra,
+                                    uint32_t dp_optimize_level)
 {
     struct dp_id_data *data;
     const char *key;
@@ -275,6 +276,7 @@ errno_t dp_get_account_info_handler(struct sbus_request *sbus_req,
     data->entry_type = entry_type;
     data->attr_type = attr_type;
     data->domain = domain;
+    data->dp_optimize_level = dp_optimize_level;
 
     if (!check_and_parse_filter(data, filter, extra)) {
         ret = EINVAL;
@@ -286,8 +288,9 @@ errno_t dp_get_account_info_handler(struct sbus_request *sbus_req,
           data->entry_type, be_req2str(data->entry_type),
           attr_type, filter);
 
-    key = talloc_asprintf(data, "%u:%u:%s:%s:%s", data->entry_type,
-                          data->attr_type, extra, domain, filter);
+    key = talloc_asprintf(data, "%u:%u:%u:%s:%s:%s", data->entry_type,
+                          data->attr_type, data->dp_optimize_level,
+                          extra, domain, filter);
     if (key == NULL) {
         ret = ENOMEM;
         goto done;

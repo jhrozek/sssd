@@ -77,6 +77,7 @@ struct tevent_req *users_get_send(TALLOC_CTX *memctx,
                                   int filter_type,
                                   const char *extra_value,
                                   int attrs_type,
+                                  enum dp_req_opt_level opt_level,
                                   bool noexist_delete)
 {
     struct tevent_req *req;
@@ -654,6 +655,7 @@ struct tevent_req *groups_get_send(TALLOC_CTX *memctx,
                                    const char *filter_value,
                                    int filter_type,
                                    int attrs_type,
+                                   enum dp_req_opt_level opt_level,
                                    bool noexist_delete,
                                    bool no_members)
 {
@@ -1426,6 +1428,7 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
                                 ar->filter_type,
                                 ar->extra_value,
                                 ar->attr_type,
+                                ar->dp_optimize_level,
                                 noexist_delete);
         break;
 
@@ -1435,6 +1438,7 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
                                  ar->filter_value,
                                  ar->filter_type,
                                  ar->attr_type,
+                                 ar->dp_optimize_level,
                                  noexist_delete, false);
         break;
 
@@ -1542,6 +1546,7 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
                                 ar->filter_type,
                                 ar->extra_value,
                                 ar->attr_type,
+                                ar->dp_optimize_level,
                                 noexist_delete);
         break;
 
@@ -1730,7 +1735,7 @@ static struct tevent_req *get_user_and_group_send(TALLOC_CTX *memctx,
                              state->filter_val, state->filter_type,
                              state->attrs_type, state->noexist_delete, false);
     if (subreq == NULL) {
-        DEBUG(SSSDBG_OP_FAILURE, "users_get_send failed.\n");
+        DEBUG(SSSDBG_OP_FAILURE, "groups_get_send failed.\n");
         ret = ENOMEM;
         goto fail;
     }

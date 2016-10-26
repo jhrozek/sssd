@@ -245,6 +245,7 @@ struct tevent_req *groups_get_send(TALLOC_CTX *memctx,
                                    const char *name,
                                    int filter_type,
                                    int attrs_type,
+                                   enum dp_req_opt_level opt_level,
                                    bool noexist_delete,
                                    bool no_members);
 int groups_get_recv(struct tevent_req *req, int *dp_error_out, int *sdap_ret);

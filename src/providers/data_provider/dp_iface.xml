@@ -70,6 +70,7 @@
             <arg name="filter" type="s" direction="in" />
             <arg name="domain" type="s" direction="in" />
             <arg name="extra" type="s" direction="in" />
+            <arg name="dp_optimize_level" type="u" direction="in" />
             <arg name="dp_error" type="q" direction="out" />
             <arg name="error" type="u" direction="out" />
             <arg name="error_message" type="s" direction="out" />
