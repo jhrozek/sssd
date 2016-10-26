@@ -5400,7 +5400,9 @@ static int nss_cmd_getbycert(enum sss_cli_command cmd, struct cli_ctx *cctx)
     }
 
     req = cache_req_user_by_cert_send(cctx, cctx->rctx->ev, cctx->rctx,
-                                      nctx->rctx->ncache, 0, NULL, derb64);
+                                      nctx->rctx->ncache, 0,
+                                      DP_REQ_OPT_MODSTAMP,
+                                      NULL, derb64);
     if (req == NULL) {
         return ENOMEM;
     }

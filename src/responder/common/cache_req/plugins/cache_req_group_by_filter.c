@@ -141,12 +141,14 @@ struct tevent_req *
 cache_req_group_by_filter_send(TALLOC_CTX *mem_ctx,
                                struct tevent_context *ev,
                                struct resp_ctx *rctx,
+                               enum dp_req_opt_level dp_optimize_level,
                                const char *domain,
                                const char *filter)
 {
     struct cache_req_data *data;
 
-    data = cache_req_data_name(mem_ctx, CACHE_REQ_GROUP_BY_FILTER, filter);
+    data = cache_req_data_name(mem_ctx, CACHE_REQ_GROUP_BY_FILTER,
+                               dp_optimize_level, filter);
     if (data == NULL) {
         return NULL;
     }

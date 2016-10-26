@@ -181,7 +181,7 @@ nss_get_by_name_send(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    data = cache_req_data_name(req, type, state->rawname);
+    data = cache_req_data_name(req, type, DP_REQ_OPT_MODSTAMP, state->rawname);
     if (data == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set cache request data!\n");
         ret = ENOMEM;
@@ -302,7 +302,7 @@ nss_get_by_id_send(TALLOC_CTX *mem_ctx,
 
     state->id = nss_protocol_parse_name(cli_ctx);
 
-    data = cache_req_data_id(req, type, state->id);
+    data = cache_req_data_id(req, type, DP_REQ_OPT_MODSTAMP, state->id);
     if (data == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set cache request data!\n");
         ret = ENOMEM;

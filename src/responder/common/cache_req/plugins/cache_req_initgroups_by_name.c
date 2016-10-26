@@ -194,12 +194,14 @@ cache_req_initgr_by_name_send(TALLOC_CTX *mem_ctx,
                               struct resp_ctx *rctx,
                               struct sss_nc_ctx *ncache,
                               int cache_refresh_percent,
+                              enum dp_req_opt_level dp_optimize_level,
                               const char *domain,
                               const char *name)
 {
     struct cache_req_data *data;
 
-    data = cache_req_data_name(mem_ctx, CACHE_REQ_INITGROUPS, name);
+    data = cache_req_data_name(mem_ctx, CACHE_REQ_INITGROUPS,
+                               dp_optimize_level, name);
     if (data == NULL) {
         return NULL;
     }

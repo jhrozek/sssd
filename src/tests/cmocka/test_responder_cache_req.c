@@ -73,6 +73,7 @@ struct test_group {
                                                                             \
     req = send_fn(req_mem_ctx, ctx->tctx->ev, ctx->rctx,                    \
                   ctx->ncache, crp,                                         \
+                  DP_REQ_OPT_MODSTAMP,                                      \
                   (dom == NULL ? NULL : dom->name), lookup);                \
     assert_non_null(req);                                                   \
     tevent_req_set_callback(req, done_fn, ctx);                             \
@@ -378,6 +379,7 @@ static void run_object_by_sid(struct cache_req_test_ctx *test_ctx,
 
     req = cache_req_object_by_sid_send(req_mem_ctx, test_ctx->tctx->ev,
             test_ctx->rctx, test_ctx->ncache, cache_refresh_percent,
+            DP_REQ_OPT_MODSTAMP,
             (domain == NULL ? NULL : domain->name), sid, attrs);
     assert_non_null(req);
     tevent_req_set_callback(req, cache_req_object_by_sid_test_done, test_ctx);
@@ -606,6 +608,7 @@ void test_user_by_name_multiple_domains_parse(void **state)
 
     req = cache_req_user_by_name_send(req_mem_ctx, test_ctx->tctx->ev,
                                       test_ctx->rctx, test_ctx->ncache, 0,
+                                      DP_REQ_OPT_MODSTAMP,
                                       NULL, input_fqn);
     assert_non_null(req);
     tevent_req_set_callback(req, cache_req_user_by_name_test_done, test_ctx);
@@ -1119,6 +1122,7 @@ void test_group_by_name_multiple_domains_parse(void **state)
 
     req = cache_req_group_by_name_send(req_mem_ctx, test_ctx->tctx->ev,
                                        test_ctx->rctx, test_ctx->ncache, 0,
+                                       DP_REQ_OPT_MODSTAMP,
                                        NULL, input_fqn);
     assert_non_null(req);
     tevent_req_set_callback(req, cache_req_group_by_name_test_done, test_ctx);
@@ -1421,6 +1425,7 @@ void test_user_by_recent_filter_valid(void **state)
     /* User TEST_USER is created with a DP callback. */
     req = cache_req_user_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         test_ctx->tctx->dom->name,
                                         TEST_USER_PREFIX);
     assert_non_null(req);
@@ -1463,6 +1468,7 @@ void test_users_by_recent_filter_valid(void **state)
     /* User TEST_USER1 and TEST_USER2 are created with a DP callback. */
     req = cache_req_user_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         test_ctx->tctx->dom->name,
                                         TEST_USER_PREFIX);
     assert_non_null(req);
@@ -1524,6 +1530,7 @@ void test_users_by_filter_filter_old(void **state)
 
     req = cache_req_user_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         test_ctx->tctx->dom->name,
                                         TEST_USER_PREFIX);
     assert_non_null(req);
@@ -1559,6 +1566,7 @@ void test_users_by_filter_notfound(void **state)
 
     req = cache_req_user_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         test_ctx->tctx->dom->name,
                                         "nosuchuser*");
     assert_non_null(req);
@@ -1592,6 +1600,7 @@ static void test_users_by_filter_multiple_domains_notfound(void **state)
 
     req = cache_req_user_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         domain->name,
                                         "nosuchuser*");
     assert_non_null(req);
@@ -1636,6 +1645,7 @@ void test_group_by_recent_filter_valid(void **state)
     /* Group TEST_GROUP is created with a DP callback. */
     req = cache_req_group_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                          test_ctx->rctx,
+                                         DP_REQ_OPT_MODSTAMP,
                                          test_ctx->tctx->dom->name,
                                          TEST_USER_PREFIX);
     assert_non_null(req);
@@ -1680,6 +1690,7 @@ void test_groups_by_recent_filter_valid(void **state)
     /* Group TEST_GROUP1 and TEST_GROUP2 are created with a DP callback. */
     req = cache_req_group_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                          test_ctx->rctx,
+                                         DP_REQ_OPT_MODSTAMP,
                                          test_ctx->tctx->dom->name,
                                          TEST_USER_PREFIX);
     assert_non_null(req);
@@ -1738,6 +1749,7 @@ void test_groups_by_filter_notfound(void **state)
 
     req = cache_req_group_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         test_ctx->tctx->dom->name,
                                         "nosuchgroup*");
     assert_non_null(req);
@@ -1770,6 +1782,7 @@ void test_groups_by_filter_multiple_domains_notfound(void **state)
 
     req = cache_req_group_by_filter_send(req_mem_ctx, test_ctx->tctx->ev,
                                         test_ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         domain->name,
                                         "nosuchgroup*");
     assert_non_null(req);

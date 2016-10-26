@@ -107,12 +107,14 @@ cache_req_user_by_cert_send(TALLOC_CTX *mem_ctx,
                             struct resp_ctx *rctx,
                             struct sss_nc_ctx *ncache,
                             int cache_refresh_percent,
+                            enum dp_req_opt_level dp_optimize_level,
                             const char *domain,
                             const char *pem_cert)
 {
     struct cache_req_data *data;
 
-    data = cache_req_data_cert(mem_ctx, CACHE_REQ_USER_BY_CERT, pem_cert);
+    data = cache_req_data_cert(mem_ctx, CACHE_REQ_USER_BY_CERT,
+                               dp_optimize_level, pem_cert);
     if (data == NULL) {
         return NULL;
     }

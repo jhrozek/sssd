@@ -99,7 +99,9 @@ int ifp_users_find_by_name(struct sbus_request *sbus_req,
     }
 
     req = cache_req_user_by_name_send(sbus_req, ctx->rctx->ev, ctx->rctx,
-                                      ctx->rctx->ncache, 0, NULL, name);
+                                      ctx->rctx->ncache, 0,
+                                      DP_REQ_OPT_MODSTAMP,
+                                      NULL, name);
     if (req == NULL) {
         return ENOMEM;
     }
@@ -168,7 +170,9 @@ int ifp_users_find_by_id(struct sbus_request *sbus_req,
     }
 
     req = cache_req_user_by_id_send(sbus_req, ctx->rctx->ev, ctx->rctx,
-                                    ctx->rctx->ncache, 0, NULL, id);
+                                    ctx->rctx->ncache, 0,
+                                    DP_REQ_OPT_MODSTAMP,
+                                    NULL, id);
     if (req == NULL) {
         return ENOMEM;
     }
@@ -253,7 +257,8 @@ int ifp_users_find_by_cert(struct sbus_request *sbus_req, void *data,
     }
 
     req = cache_req_user_by_cert_send(sbus_req, ctx->rctx->ev, ctx->rctx,
-                                      ctx->rctx->ncache, 0, NULL, derb64);
+                                      ctx->rctx->ncache, 0,
+                                      DP_REQ_OPT_MODSTAMP, NULL, derb64);
     if (req == NULL) {
         return ENOMEM;
     }
@@ -357,6 +362,7 @@ static int ifp_users_list_by_name_step(struct ifp_list_ctx *list_ctx)
     req = cache_req_user_by_filter_send(list_ctx,
                                         list_ctx->ctx->rctx->ev,
                                         list_ctx->ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         list_ctx->dom->name,
                                         list_ctx->filter);
     if (req == NULL) {
@@ -441,6 +447,7 @@ int ifp_users_list_by_domain_and_name(struct sbus_request *sbus_req,
     }
 
     req = cache_req_user_by_filter_send(list_ctx, ctx->rctx->ev, ctx->rctx,
+                                        DP_REQ_OPT_MODSTAMP,
                                         domain, filter);
     if (req == NULL) {
         return ENOMEM;
@@ -685,7 +692,9 @@ int ifp_users_user_update_groups_list(struct sbus_request *sbus_req,
     }
 
     req = cache_req_initgr_by_name_send(sbus_req, ctx->rctx->ev, ctx->rctx,
-                                        ctx->rctx->ncache, 0, domain->name,
+                                        ctx->rctx->ncache, 0,
+                                        DP_REQ_OPT_MODSTAMP,
+                                        domain->name,
                                         username);
     if (req == NULL) {
         return ENOMEM;

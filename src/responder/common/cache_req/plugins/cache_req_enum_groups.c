@@ -104,11 +104,13 @@ cache_req_enum_groups_send(TALLOC_CTX *mem_ctx,
                            struct resp_ctx *rctx,
                            struct sss_nc_ctx *ncache,
                            int cache_refresh_percent,
+                           enum dp_req_opt_level dp_optimize_level,
                            const char *domain)
 {
     struct cache_req_data *data;
 
-    data = cache_req_data_enum(mem_ctx, CACHE_REQ_ENUM_GROUPS);
+    data = cache_req_data_enum(mem_ctx, CACHE_REQ_ENUM_GROUPS,
+                               dp_optimize_level);
     if (data == NULL) {
         return NULL;
     }

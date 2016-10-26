@@ -47,6 +47,32 @@ enum cache_req_type {
     CACHE_REQ_SENTINEL
 };
 
+/*
+ * Request optimization of saving the data provider results. The data provider
+ * might "downgrade" the optimization for example if the back end doesn't
+ * support modifyTimestamps, but never "upgrade" it to more aggressive.
+ */
+enum dp_req_opt_level {
+    /*
+     * Never optimize anything, always save all data in both the synchronous
+     * cache and the timestamp cache. Suitable for authentication lookups
+     * such as initgroups from the PAM responder
+     */
+    DP_REQ_OPT_NONE,
+    /*
+     * Compare the returned attribute values with what is stored in the
+     * synchronous cache. Only update the timestamp cache if none of the
+     * attributes differ
+     */
+    DP_REQ_OPT_ATTR_VAL,
+    /* Only update the timestamp cache if the modifyTimestamp attribute values
+     * are the same between the cached object and the remote object. If the
+     * modstamp value differs, compare the attribute values as if
+     * CREQ_OPT_ATTR_VAL was selected
+     */
+    DP_REQ_OPT_MODSTAMP,
+};
+
 /* Input data. */
 
 struct cache_req_data;
@@ -54,27 +80,32 @@ struct cache_req_data;
 struct cache_req_data *
 cache_req_data_name(TALLOC_CTX *mem_ctx,
                     enum cache_req_type type,
+                    enum dp_req_opt_level dp_optimize_level,
                     const char *name);
 
 struct cache_req_data *
 cache_req_data_id(TALLOC_CTX *mem_ctx,
                   enum cache_req_type type,
+                  enum dp_req_opt_level dp_optimize_level,
                   uint32_t id);
 
 struct cache_req_data *
 cache_req_data_cert(TALLOC_CTX *mem_ctx,
                     enum cache_req_type type,
+                    enum dp_req_opt_level dp_optimize_level,
                     const char *cert);
 
 struct cache_req_data *
 cache_req_data_sid(TALLOC_CTX *mem_ctx,
                    enum cache_req_type type,
+                   enum dp_req_opt_level dp_optimize_level,
                    const char *sid,
                    const char **attrs);
 
 struct cache_req_data *
 cache_req_data_enum(TALLOC_CTX *mem_ctx,
-                    enum cache_req_type type);
+                    enum cache_req_type type,
+                    enum dp_req_opt_level dp_optimize_level);
 
 /* Output data. */
 
@@ -114,7 +145,6 @@ cache_req_copy_limited_result(TALLOC_CTX *mem_ctx,
                               uint32_t limit);
 
 /* Generic request. */
-
 struct tevent_req *cache_req_send(TALLOC_CTX *mem_ctx,
                                   struct tevent_context *ev,
                                   struct resp_ctx *rctx,
@@ -139,6 +169,7 @@ cache_req_user_by_name_send(TALLOC_CTX *mem_ctx,
                             struct resp_ctx *rctx,
                             struct sss_nc_ctx *ncache,
                             int cache_refresh_percent,
+                            enum dp_req_opt_level dp_optimize_level,
                             const char *domain,
                             const char *name);
 
@@ -151,6 +182,7 @@ cache_req_user_by_id_send(TALLOC_CTX *mem_ctx,
                           struct resp_ctx *rctx,
                           struct sss_nc_ctx *ncache,
                           int cache_refresh_percent,
+                          enum dp_req_opt_level dp_optimize_level,
                           const char *domain,
                           uid_t uid);
 
@@ -163,6 +195,7 @@ cache_req_user_by_cert_send(TALLOC_CTX *mem_ctx,
                             struct resp_ctx *rctx,
                             struct sss_nc_ctx *ncache,
                             int cache_refresh_percent,
+                            enum dp_req_opt_level dp_optimize_level,
                             const char *domain,
                             const char *pem_cert);
 
@@ -175,6 +208,7 @@ cache_req_group_by_name_send(TALLOC_CTX *mem_ctx,
                              struct resp_ctx *rctx,
                              struct sss_nc_ctx *ncache,
                              int cache_refresh_percent,
+                             enum dp_req_opt_level dp_optimize_level,
                              const char *domain,
                              const char *name);
 
@@ -187,6 +221,7 @@ cache_req_group_by_id_send(TALLOC_CTX *mem_ctx,
                            struct resp_ctx *rctx,
                            struct sss_nc_ctx *ncache,
                            int cache_refresh_percent,
+                           enum dp_req_opt_level dp_optimize_level,
                            const char *domain,
                            gid_t gid);
 
@@ -199,6 +234,7 @@ cache_req_initgr_by_name_send(TALLOC_CTX *mem_ctx,
                               struct resp_ctx *rctx,
                               struct sss_nc_ctx *ncache,
                               int cache_refresh_percent,
+                              enum dp_req_opt_level dp_optimize_level,
                               const char *domain,
                               const char *name);
 
@@ -209,6 +245,7 @@ struct tevent_req *
 cache_req_user_by_filter_send(TALLOC_CTX *mem_ctx,
                               struct tevent_context *ev,
                               struct resp_ctx *rctx,
+                              enum dp_req_opt_level dp_optimize_level,
                               const char *domain,
                               const char *filter);
 
@@ -219,6 +256,7 @@ struct tevent_req *
 cache_req_group_by_filter_send(TALLOC_CTX *mem_ctx,
                               struct tevent_context *ev,
                               struct resp_ctx *rctx,
+                              enum dp_req_opt_level dp_optimize_level,
                               const char *domain,
                               const char *filter);
 
@@ -231,6 +269,7 @@ cache_req_object_by_sid_send(TALLOC_CTX *mem_ctx,
                              struct resp_ctx *rctx,
                              struct sss_nc_ctx *ncache,
                              int cache_refresh_percent,
+                             enum dp_req_opt_level dp_optimize_level,
                              const char *domain,
                              const char *sid,
                              const char **attrs);
@@ -244,6 +283,7 @@ cache_req_enum_users_send(TALLOC_CTX *mem_ctx,
                           struct resp_ctx *rctx,
                           struct sss_nc_ctx *ncache,
                           int cache_refresh_percent,
+                          enum dp_req_opt_level dp_optimize_level,
                           const char *domain);
 
 #define cache_req_enum_users_recv(mem_ctx, req, _result) \
@@ -255,6 +295,7 @@ cache_req_enum_groups_send(TALLOC_CTX *mem_ctx,
                           struct resp_ctx *rctx,
                           struct sss_nc_ctx *ncache,
                           int cache_refresh_percent,
+                          enum dp_req_opt_level dp_optimize_level,
                           const char *domain);
 
 #define cache_req_enum_groups_recv(mem_ctx, req, _result) \

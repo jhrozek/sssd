@@ -25,6 +25,7 @@
 static struct cache_req_data *
 cache_req_data_create(TALLOC_CTX *mem_ctx,
                       enum cache_req_type type,
+                      enum dp_req_opt_level dp_optimize_level,
                       struct cache_req_data *input)
 {
     struct cache_req_data *data;
@@ -37,6 +38,7 @@ cache_req_data_create(TALLOC_CTX *mem_ctx,
     }
 
     data->type = type;
+    data->dp_optimize_level = dp_optimize_level;
 
     switch (type) {
     case CACHE_REQ_USER_BY_NAME:
@@ -127,42 +129,46 @@ done:
 struct cache_req_data *
 cache_req_data_name(TALLOC_CTX *mem_ctx,
                     enum cache_req_type type,
+                    enum dp_req_opt_level dp_optimize_level,
                     const char *name)
 {
     struct cache_req_data input = {0};
 
     input.name.input = name;
 
-    return cache_req_data_create(mem_ctx, type, &input);
+    return cache_req_data_create(mem_ctx, type, dp_optimize_level, &input);
 }
 
 struct cache_req_data *
 cache_req_data_id(TALLOC_CTX *mem_ctx,
                   enum cache_req_type type,
+                  enum dp_req_opt_level dp_optimize_level,
                   uint32_t id)
 {
     struct cache_req_data input = {0};
 
     input.id = id;
 
-    return cache_req_data_create(mem_ctx, type, &input);
+    return cache_req_data_create(mem_ctx, type, dp_optimize_level, &input);
 }
 
 struct cache_req_data *
 cache_req_data_cert(TALLOC_CTX *mem_ctx,
                     enum cache_req_type type,
+                    enum dp_req_opt_level dp_optimize_level,
                     const char *cert)
 {
     struct cache_req_data input = {0};
 
     input.cert = cert;
 
-    return cache_req_data_create(mem_ctx, type, &input);
+    return cache_req_data_create(mem_ctx, type, dp_optimize_level, &input);
 }
 
 struct cache_req_data *
 cache_req_data_sid(TALLOC_CTX *mem_ctx,
                    enum cache_req_type type,
+                   enum dp_req_opt_level dp_optimize_level,
                    const char *sid,
                    const char **attrs)
 {
@@ -171,14 +177,15 @@ cache_req_data_sid(TALLOC_CTX *mem_ctx,
     input.sid = sid;
     input.attrs = attrs;
 
-    return cache_req_data_create(mem_ctx, type, &input);
+    return cache_req_data_create(mem_ctx, type, dp_optimize_level, &input);
 }
 
 struct cache_req_data *
 cache_req_data_enum(TALLOC_CTX *mem_ctx,
-                    enum cache_req_type type)
+                    enum cache_req_type type,
+                    enum dp_req_opt_level dp_optimize_level)
 {
     struct cache_req_data input = {0};
 
-    return cache_req_data_create(mem_ctx, type, &input);
+    return cache_req_data_create(mem_ctx, type, dp_optimize_level, &input);
 }

@@ -59,6 +59,7 @@ struct cache_req {
 /* Input data. */
 struct cache_req_data {
     enum cache_req_type type;
+    enum dp_req_opt_level dp_optimize_level;
     struct {
         const char *input;  /* Original input. */
         const char *name;   /* Parsed name or UPN. */

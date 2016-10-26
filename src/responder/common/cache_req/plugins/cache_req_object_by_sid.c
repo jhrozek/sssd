@@ -104,13 +104,15 @@ cache_req_object_by_sid_send(TALLOC_CTX *mem_ctx,
                              struct resp_ctx *rctx,
                              struct sss_nc_ctx *ncache,
                              int cache_refresh_percent,
+                             enum dp_req_opt_level dp_optimize_level,
                              const char *domain,
                              const char *sid,
                              const char **attrs)
 {
     struct cache_req_data *data;
 
-    data = cache_req_data_sid(mem_ctx, CACHE_REQ_OBJECT_BY_SID, sid, attrs);
+    data = cache_req_data_sid(mem_ctx, CACHE_REQ_OBJECT_BY_SID,
+                              dp_optimize_level, sid, attrs);
     if (data == NULL) {
         return NULL;
     }

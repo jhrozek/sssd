@@ -131,12 +131,14 @@ cache_req_group_by_id_send(TALLOC_CTX *mem_ctx,
                            struct resp_ctx *rctx,
                            struct sss_nc_ctx *ncache,
                            int cache_refresh_percent,
+                           enum dp_req_opt_level dp_optimize_level,
                            const char *domain,
                            gid_t gid)
 {
     struct cache_req_data *data;
 
-    data = cache_req_data_id(mem_ctx, CACHE_REQ_GROUP_BY_ID, gid);
+    data = cache_req_data_id(mem_ctx, CACHE_REQ_GROUP_BY_ID,
+                             dp_optimize_level, gid);
     if (data == NULL) {
         return NULL;
     }
