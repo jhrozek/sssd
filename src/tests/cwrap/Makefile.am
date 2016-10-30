@@ -62,6 +62,12 @@ SSSD_CACHE_REQ_OBJ = \
     ../../../src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c \
     $(NULL)
 
+SSSD_RESP_IFACE_OBJ = \
+    ../../../src/responder/common/resp_iface.c \
+    ../../../src/responder/common/resp_iface.h \
+    ../../../src/responder/common/resp_iface_generated.c \
+    $(NULL)
+
 SSSD_RESPONDER_OBJ = \
     ../../../src/responder/common/negcache_files.c \
     ../../../src/responder/common/negcache.c \
@@ -75,6 +81,7 @@ SSSD_RESPONDER_OBJ = \
     ../../../src/responder/common/data_provider/rdp_client.c \
     ../../../src/monitor/monitor_iface_generated.c \
     ../../../src/providers/data_provider_req.c \
+    $(SSSD_RESP_IFACE_OBJ) \
     $(SSSD_CACHE_REQ_OBJ) \
     $(NULL)
 
@@ -156,6 +163,9 @@ endif
 
 responder_common_tests_SOURCES =\
     test_responder_common.c \
+    ../../../src/responder/common/resp_iface.c \
+    ../../../src/responder/common/resp_iface.h \
+    ../../../src/responder/common/resp_iface_generated.c \
     ../../../src/responder/common/negcache_files.c \
     ../../../src/responder/common/negcache.c \
     ../../../src/responder/common/data_provider/rdp_message.c \
@@ -163,6 +173,8 @@ responder_common_tests_SOURCES =\
     ../../../src/responder/common/responder_common.c \
     ../../../src/responder/common/responder_packet.c \
     ../../../src/responder/common/responder_cmd.c \
+    ../../../src/tests/cmocka/common_mock_resp_dp.c \
+    $(SSSD_CACHE_REQ_OBJ) \
     $(NULL)
 responder_common_tests_CFLAGS = \
     $(AM_CFLAGS) \

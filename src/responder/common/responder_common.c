@@ -38,6 +38,7 @@
 #include "confdb/confdb.h"
 #include "sbus/sssd_dbus.h"
 #include "responder/common/responder.h"
+#include "responder/common/resp_iface.h"
 #include "responder/common/responder_packet.h"
 #include "providers/data_provider.h"
 #include "monitor/monitor_interfaces.h"
@@ -558,6 +559,7 @@ static int sss_dp_init(struct resp_ctx *rctx,
 {
     struct be_conn *be_conn;
     int ret;
+    struct sbus_iface_map *resp_sbus_iface;
 
     be_conn = talloc_zero(rctx, struct be_conn);
     if (!be_conn) return ENOMEM;
@@ -584,6 +586,20 @@ static int sss_dp_init(struct resp_ctx *rctx,
         ret = sbus_conn_register_iface_map(be_conn->conn, sbus_iface, rctx);
         if (ret != EOK) {
             DEBUG(SSSDBG_FATAL_FAILURE, "Failed to register D-Bus interface.\n");
+            return ret;
+        }
+    }
+
+    resp_sbus_iface = resp_get_sbus_interface();
+    if (resp_sbus_iface != NULL) {
+        ret = sbus_conn_register_iface(be_conn->conn,
+                                       resp_sbus_iface->vtable,
+                                       resp_sbus_iface->path,
+                                       rctx);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_FATAL_FAILURE,
+                  "Cannot register generic responder iface at %s: %d\n",
+                  resp_sbus_iface->path, ret);
             return ret;
         }
     }
@@ -1254,4 +1270,53 @@ void responder_set_fd_limit(rlim_t fd_limit)
               "Could not determine fd limits. "
                "Proceeding with system values\n");
     }
+}
+
+static void set_domain_state_by_name(struct resp_ctx *rctx,
+                                     const char *domain_name,
+                                     enum sss_domain_state state)
+{
+    struct sss_domain_info *dom;
+
+    if (domain_name == NULL) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "BUG: NULL domain name\n");
+        return;
+    }
+
+    DEBUG(SSSDBG_TRACE_LIBS, "Setting state of domain %s\n", domain_name);
+
+    for (dom = rctx->domains;
+         dom != NULL;
+         dom = get_next_domain(dom, SSS_GND_ALL_DOMAINS)) {
+
+        if (strcasecmp(dom->name, domain_name) == 0) {
+            break;
+        }
+    }
+
+    if (dom != NULL) {
+        sss_domain_set_state(dom, state);
+    }
+}
+
+int sss_resp_domain_valid(struct sbus_request *req,
+                          void *data,
+                          const char *domain_name)
+{
+    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
+
+    DEBUG(SSSDBG_TRACE_LIBS, "Enabling domain %s\n", domain_name);
+    set_domain_state_by_name(rctx, domain_name, DOM_ACTIVE);
+    return iface_responder_backend_DomainValid_finish(req);
+}
+
+int sss_resp_domain_invalid(struct sbus_request *req,
+                            void *data,
+                            const char *domain_name)
+{
+    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
+
+    DEBUG(SSSDBG_TRACE_LIBS, "Disabling domain %s\n", domain_name);
+    set_domain_state_by_name(rctx, domain_name, DOM_DISABLED);
+    return iface_responder_backend_DomainInvalid_finish(req);
 }
