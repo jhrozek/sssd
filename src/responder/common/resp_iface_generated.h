@@ -15,6 +15,8 @@
 #define IFACE_RESPONDER_BACKEND "org.freedesktop.sssd.responder.Backend"
 #define IFACE_RESPONDER_BACKEND_DOMAININVALID "DomainInvalid"
 #define IFACE_RESPONDER_BACKEND_DOMAINVALID "DomainValid"
+#define IFACE_RESPONDER_BACKEND_RESETNEGCACHEUSERS "ResetNegcacheUsers"
+#define IFACE_RESPONDER_BACKEND_RESETNEGCACHEGROUPS "ResetNegcacheGroups"
 
 /* ------------------------------------------------------------------------
  * DBus handlers
@@ -39,6 +41,8 @@ struct iface_responder_backend {
     struct sbus_vtable vtable; /* derive from sbus_vtable */
     int (*DomainInvalid)(struct sbus_request *req, void *data, const char *arg_name);
     int (*DomainValid)(struct sbus_request *req, void *data, const char *arg_name);
+    int (*ResetNegcacheUsers)(struct sbus_request *req, void *data);
+    int (*ResetNegcacheGroups)(struct sbus_request *req, void *data);
 };
 
 /* finish function for DomainInvalid */
@@ -46,6 +50,12 @@ int iface_responder_backend_DomainInvalid_finish(struct sbus_request *req);
 
 /* finish function for DomainValid */
 int iface_responder_backend_DomainValid_finish(struct sbus_request *req);
+
+/* finish function for ResetNegcacheUsers */
+int iface_responder_backend_ResetNegcacheUsers_finish(struct sbus_request *req);
+
+/* finish function for ResetNegcacheGroups */
+int iface_responder_backend_ResetNegcacheGroups_finish(struct sbus_request *req);
 
 /* ------------------------------------------------------------------------
  * DBus Interface Metadata

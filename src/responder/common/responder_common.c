@@ -1320,3 +1320,19 @@ int sss_resp_domain_invalid(struct sbus_request *req,
     set_domain_state_by_name(rctx, domain_name, DOM_DISABLED);
     return iface_responder_backend_DomainInvalid_finish(req);
 }
+
+int sss_resp_reset_ncache_users(struct sbus_request *req, void *data)
+{
+    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
+
+    sss_ncache_reset_users(rctx->ncache);
+    return iface_responder_backend_ResetNegcacheUsers_finish(req);
+}
+
+int sss_resp_reset_ncache_groups(struct sbus_request *req, void *data)
+{
+    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
+
+    sss_ncache_reset_groups(rctx->ncache);
+    return iface_responder_backend_ResetNegcacheGroups_finish(req);
+}

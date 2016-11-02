@@ -33,6 +33,18 @@ int iface_responder_backend_DomainValid_finish(struct sbus_request *req)
                                          DBUS_TYPE_INVALID);
 }
 
+int iface_responder_backend_ResetNegcacheUsers_finish(struct sbus_request *req)
+{
+   return sbus_request_return_and_finish(req,
+                                         DBUS_TYPE_INVALID);
+}
+
+int iface_responder_backend_ResetNegcacheGroups_finish(struct sbus_request *req)
+{
+   return sbus_request_return_and_finish(req,
+                                         DBUS_TYPE_INVALID);
+}
+
 /* methods for org.freedesktop.sssd.responder.Backend */
 const struct sbus_method_meta iface_responder_backend__methods[] = {
     {
@@ -48,6 +60,20 @@ const struct sbus_method_meta iface_responder_backend__methods[] = {
         NULL, /* no out_args */
         offsetof(struct iface_responder_backend, DomainValid),
         invoke_s_method,
+    },
+    {
+        "ResetNegcacheUsers", /* name */
+        NULL, /* no in_args */
+        NULL, /* no out_args */
+        offsetof(struct iface_responder_backend, ResetNegcacheUsers),
+        NULL, /* no invoker */
+    },
+    {
+        "ResetNegcacheGroups", /* name */
+        NULL, /* no in_args */
+        NULL, /* no out_args */
+        offsetof(struct iface_responder_backend, ResetNegcacheGroups),
+        NULL, /* no invoker */
     },
     { NULL, }
 };

@@ -23,6 +23,8 @@ struct iface_responder_backend iface_responder_backend = {
     { &iface_responder_backend_meta, 0 },
     .DomainValid = sss_resp_domain_valid,
     .DomainInvalid = sss_resp_domain_invalid,
+    .ResetNegcacheUsers = sss_resp_reset_ncache_users,
+    .ResetNegcacheGroups = sss_resp_reset_ncache_groups,
 };
 
 static struct sbus_iface_map iface_map[] = {

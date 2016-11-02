@@ -9,5 +9,9 @@
         <method name="DomainValid">
             <arg name="name" type="s" direction="in" />
         </method>
+        <method name="ResetNegcacheUsers">
+        </method>
+        <method name="ResetNegcacheGroups">
+        </method>
     </interface>
 </node>
