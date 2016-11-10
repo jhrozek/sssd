@@ -127,6 +127,7 @@ struct so {
     { "libsss_ad_tests.so", { LIBPFX"libdlopen_test_providers.so",
                               LIBPFX"libsss_ad_tests.so", NULL } },
 #endif
+    { "pam_test_sss.so", { LIBPFX"pam_test_sss.so", NULL } },
     { NULL }
 };
 
