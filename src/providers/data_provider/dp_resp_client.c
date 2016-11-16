@@ -26,6 +26,7 @@
 #include "providers/data_provider.h"
 #include "providers/data_provider/dp_private.h"
 #include "responder/common/resp_iface.h"
+#include "src/responder/nss/nss_iface.h"
 
 /* List of DP clients that deal with users or groups */
 /* FIXME - it would be much cleaner to implement sbus signals
@@ -120,4 +121,59 @@ void dp_sbus_disable_domain(struct data_provider *provider,
           "Ordering responders to disable a domain\n");
     sss_domain_set_state(dom, DOM_DISABLED);
     return dp_sbus_set_domain_status(provider, dom);
+}
+
+static void dp_sbus_reset_ncache(struct data_provider *provider,
+                                 struct sss_domain_info *dom,
+                                 const char *method)
+{
+    DBusMessage *msg;
+
+    msg = dbus_message_new_method_call(NULL,
+                                       RESP_IFACE_PATH,
+                                       IFACE_RESPONDER_BACKEND,
+                                       method);
+    if (msg == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
+        return;
+    }
+
+    dispatch_cli_msg(provider, msg, user_clients);
+    dbus_message_unref(msg);
+    return;
+}
+
+void dp_sbus_reset_users_ncache(struct data_provider *provider,
+                                struct sss_domain_info *dom)
+{
+    return dp_sbus_reset_ncache(provider,
+                                dom,
+                                IFACE_RESPONDER_BACKEND_RESETNEGCACHEUSERS);
+}
+
+void dp_sbus_reset_groups_ncache(struct data_provider *provider,
+                                 struct sss_domain_info *dom)
+{
+    return dp_sbus_reset_ncache(provider,
+                                dom,
+                                IFACE_RESPONDER_BACKEND_RESETNEGCACHEGROUPS);
+}
+
+static void dp_sbus_reset_memcache(struct data_provider *provider,
+                                   const char *method)
+{
+    DBusMessage *msg;
+
+    msg = dbus_message_new_method_call(NULL,
+                                       NSS_MEMORYCACHE_PATH,
+                                       IFACE_NSS_MEMORYCACHE,
+                                       method);
+    if (msg == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
+        return;
+    }
+
+    dispatch_cli_msg(provider, msg, user_clients);
+    dbus_message_unref(msg);
+    return;
 }

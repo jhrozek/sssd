@@ -166,4 +166,9 @@ void dp_sbus_enable_domain(struct data_provider *provider,
 void dp_sbus_disable_domain(struct data_provider *provider,
                             struct sss_domain_info *dom);
 
+void dp_sbus_reset_users_ncache(struct data_provider *provider,
+                                struct sss_domain_info *dom);
+void dp_sbus_reset_groups_ncache(struct data_provider *provider,
+                                 struct sss_domain_info *dom);
+
 #endif /* _DP_H_ */
