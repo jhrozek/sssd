@@ -177,3 +177,21 @@ static void dp_sbus_reset_memcache(struct data_provider *provider,
     dbus_message_unref(msg);
     return;
 }
+
+void dp_sbus_reset_users_memcache(struct data_provider *provider)
+{
+    return dp_sbus_reset_memcache(provider,
+                                  IFACE_NSS_MEMORYCACHE_INVALIDATEALLUSERS);
+}
+
+void dp_sbus_reset_groups_memcache(struct data_provider *provider)
+{
+    return dp_sbus_reset_memcache(provider,
+                                  IFACE_NSS_MEMORYCACHE_INVALIDATEALLGROUPS);
+}
+
+void dp_sbus_reset_initgr_memcache(struct data_provider *provider)
+{
+    return dp_sbus_reset_memcache(provider,
+                                  IFACE_NSS_MEMORYCACHE_INVALIDATEALLINITGRRECORDS);
+}
