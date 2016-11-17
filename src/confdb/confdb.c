@@ -962,6 +962,15 @@ static int confdb_get_domain_internal(struct confdb_ctx *cdb,
             goto done;
         }
     }
+
+
+    if (strcasecmp(domain->provider, "files") == 0) {
+        /* files provider is the only one that defaults to enumeration
+         * by default
+         */
+        domain->enumerate = true;
+    }
+
     if (!domain->enumerate) {
         DEBUG(SSSDBG_TRACE_FUNC, "No enumeration for [%s]!\n", domain->name);
     }
