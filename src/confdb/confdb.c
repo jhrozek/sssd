@@ -969,6 +969,7 @@ static int confdb_get_domain_internal(struct confdb_ctx *cdb,
          * by default
          */
         domain->enumerate = true;
+        domain->pwfield = "x";
     }
 
     if (!domain->enumerate) {
