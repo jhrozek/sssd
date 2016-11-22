@@ -1266,6 +1266,7 @@ sssd_SOURCES = \
     src/util/nscd.c \
     src/tools/files.c \
     src/tools/selinux.c \
+    src/util/inotify.c \
     $(NULL)
 sssd_LDADD = \
     $(SSSD_LIBS) \
