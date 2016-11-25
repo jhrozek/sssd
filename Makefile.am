@@ -1487,9 +1487,6 @@ dist_noinst_DATA += \
 dist_sssddefaultconf_DATA = \
     src/examples/sssd.conf
 
-dist_pamconf_DATA = \
-    src/examples/sssd-shadowutils
-
 ######################
 # Command-line Tools #
 ######################
