@@ -143,6 +143,12 @@ static bool
 cache_req_validate_domain(struct cache_req *cr,
                           struct sss_domain_info *domain)
 {
+    if (sss_domain_get_state(domain) == DOM_DISABLED) {
+        DEBUG(SSSDBG_TRACE_FUNC,
+              "Skipping disabled domain %s\n", domain->name);
+        return false;
+    }
+
     if (!cr->plugin->require_enumeration) {
         return true;
     }
