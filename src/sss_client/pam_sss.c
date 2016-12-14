@@ -1806,7 +1806,8 @@ static int pam_sss(enum sss_cli_command task, pam_handle_t *pamh,
                     }
                 }
 
-                if (strcmp(pi.pam_service, "gdm-smartcard") == 0) {
+                if (strcmp(pi.pam_service, "gdm-smartcard") == 0
+                        || strcmp(pi.pam_service, "gnome-screensaver") == 0) {
                     ret = check_login_token_name(pamh, &pi, quiet_mode);
                     if (ret != PAM_SUCCESS) {
                         D(("check_login_token_name failed.\n"));
