@@ -1798,6 +1798,7 @@ static int pam_sss(enum sss_cli_command task, pam_handle_t *pamh,
                     if (pam_status != PAM_SUCCESS) {
                         D(("send_and_receive returned [%d] during pre-auth",
                            pam_status));
+
                         /*
                          * Since we are only interested in the result message
                          * and will always use password authentication
@@ -1813,6 +1814,11 @@ static int pam_sss(enum sss_cli_command task, pam_handle_t *pamh,
                         D(("check_login_token_name failed.\n"));
                         return ret;
                     }
+                }
+
+                /* We need a user name at this stage */
+                if (pi.pam_user == NULL || *pi.pam_user == '\0') {
+                    return PAM_CRED_INSUFFICIENT;
                 }
 
                 ret = get_authtok_for_authentication(pamh, &pi, flags);
