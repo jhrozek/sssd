@@ -1755,10 +1755,6 @@ void sdap_handle_account_info(struct be_req *breq, struct sdap_id_ctx *ctx,
     struct be_acct_req *ar;
     struct tevent_req *req;
 
-    if (be_is_offline(ctx->be)) {
-        return sdap_handler_done(breq, DP_ERR_OFFLINE, EAGAIN, "Offline");
-    }
-
     ar = talloc_get_type(be_req_get_data(breq), struct be_acct_req);
     if (ar == NULL) {
         return sdap_handler_done(breq, DP_ERR_FATAL,

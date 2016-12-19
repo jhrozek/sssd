@@ -1210,14 +1210,6 @@ void sdap_pam_auth_handler(struct be_req *breq)
                           struct sdap_auth_ctx);
     pd = talloc_get_type(be_req_get_data(breq), struct pam_data);
 
-    if (be_is_offline(ctx->be)) {
-        DEBUG(SSSDBG_CONF_SETTINGS,
-              "Backend is marked offline, retry later!\n");
-        pd->pam_status = PAM_AUTHINFO_UNAVAIL;
-        dp_err = DP_ERR_OFFLINE;
-        goto done;
-    }
-
     pd->pam_status = PAM_SYSTEM_ERR;
 
     switch (pd->cmd) {
