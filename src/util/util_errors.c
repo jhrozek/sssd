@@ -105,6 +105,7 @@ struct err_string error_to_str[] = {
     { "The secret payload size is too large" }, /* ERR_SEC_PAYLOAD_SIZE_IS_TOO_LARGE */
     { "No authentication methode available" }, /* ERR_NO_AUTH_METHOD_AVAILABLE */
     { "Smartcard authentication not supported" }, /* ERR_SC_AUTH_NOT_SUPPORTED */
+    { "The path to KCM-secrets storage is malformed" }, /* ERR_SEC_MALFORMED_KCM_PATH */
     { "Malformed input KCM packet" }, /* ERR_KCM_MALFORMED_IN_PKT */
     { "KCM operation not implemented" }, /* ERR_KCM_OP_NOT_IMPLEMENTED */
     { "End of credential cache reached" }, /* ERR_KCM_CC_END */

@@ -101,7 +101,21 @@ int sec_get_provider(struct sec_ctx *sctx, const char *name,
                      struct provider_handle **out_handle);
 int sec_add_provider(struct sec_ctx *sctx, struct provider_handle *handle);
 
-#define SEC_BASEPATH "/secrets/"
+#define SEC_BASEPATH            "/secrets/"
+
+#define SEC_KCM_PFX             "/kcm/"
+#define KCM_PERSISTENT_SCOPE    "persistent/"
+#define KCM_SESSION_SCOPE       "session/"
+
+/* login sessions can only contain alphanumerical characters */
+#define KCM_PERSISTENT_SESSION  "_PERSISTENT_"
+
+/* The KCM responder must "impersonate" the owner of the credentials.
+ * Only a trusted UID can do that -- root by default, but unit
+ * tests might choose otherwise */
+#ifndef KCM_PEER_UID
+#define KCM_PEER_UID            0
+#endif /* KCM_PEER_UID */
 
 /* providers.c */
 int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,

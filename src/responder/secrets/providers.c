@@ -19,6 +19,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "util/strtonum.h"
 #include "responder/secrets/secsrv_private.h"
 #include "responder/secrets/secsrv_local.h"
 #include "responder/secrets/secsrv_proxy.h"
@@ -42,31 +43,189 @@ static int sec_map_url_to_user_path(struct sec_req_ctx *secreq,
         return ENOMEM;
     }
 
-    DEBUG(SSSDBG_TRACE_LIBS, "User-specific path is [%s]\n", *mapped_path);
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "User-specific secrets path is [%s]\n", *mapped_path);
     return EOK;
 }
 
-int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
-                    struct provider_handle **handle)
+/* The base for storing ccaches is:
+ *  http://localhost/kcm/persistent/$uid
+ *
+ * Under $base, there are two containers:
+ *  /default    - stores the name of the default ccache for this UID
+ *  /ccache     - stores the ccaches
+ *  /ntlm       - stores NTLM creds [Not implement yet]
+ *
+ * Each ccache has a name and an UUID. On the secrets level, the 'secret'
+ * is a concatenation of the stringified UUID and the name.
+ */
+
+static errno_t check_kcm_uid(const char **relpath,
+                             uid_t *_uid)
 {
-    struct sec_ctx *sctx;
+    const int max_uid_len = 12;
+    uint32_t uid;
+    char *endptr;
+    const char *str_end;
+    size_t str_uid_len;
+    char str_uid[max_uid_len];
+
+    str_end = strchr(*relpath, '/');
+    if (str_end == NULL) {
+        return EINVAL;
+    }
+    str_uid_len = str_end - *relpath;
+
+    if (str_uid_len >= max_uid_len) {
+        /* Just make sure we don't overflow the buffer, if the number
+         * is larger than UINT32_MAX is checked with strtouint32_t
+         */
+        return E2BIG;
+    }
+    strncpy(str_uid, *relpath, str_uid_len);
+    str_uid[str_uid_len] = '\0';
+
+    errno = 0;
+    uid = strtouint32(str_uid, &endptr, 10);
+    if (errno != 0) {
+        return errno;
+    } else if (*endptr) {
+        return EINVAL;
+    }
+
+    *_uid = uid;
+    *relpath = str_end;
+    return EOK;
+}
+
+/*
+ * Internally, we map the incoming path to:
+ * SEC_KCM_PFX/$session/$impersonated_uid/$relpath
+ *
+ * Where:
+ *  - $session is currently always KCM_PERSISTENT_SESSION. When we support
+ *    logind sessions, it would be the name of the session.
+ *  - $impersonated is the UID of the client who called into the KCM server
+ *  - $relpath is the /default or /ccache or /ntlm containers
+ *
+ */
+static int kcm_map_url_to_user_path(struct sec_req_ctx *secreq,
+                                    char **mapped_path)
+{
+    uid_t impersonated;
+    errno_t ret;
+    const char *relpath;
+    const char *session;
+
+    /* At this point we know the path begins with SEC_KCM_PFX */
+    relpath = secreq->parsed_url.path + sizeof(SEC_KCM_PFX) - 1;
+
+    if (strncmp(relpath,
+                KCM_PERSISTENT_SCOPE,
+                sizeof(KCM_PERSISTENT_SCOPE)-1) == 0) {
+        session = KCM_PERSISTENT_SESSION;
+        relpath += sizeof(KCM_PERSISTENT_SCOPE) - 1;
+    } else if (strncmp(relpath,
+                       KCM_SESSION_SCOPE,
+                       sizeof(KCM_SESSION_SCOPE)-1) == 0) {
+        relpath += sizeof(KCM_SESSION_SCOPE) - 1;
+        DEBUG(SSSDBG_CRIT_FAILURE, "Session scopes are not supported yet\n");
+        return ENOTSUP;
+    } else {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Invalid KCM path %s\n", relpath);
+        return EINVAL;
+    }
+
+    /* Now we know the path begins with the right scope and we moved relpath to
+     * point to (hopefull) UID
+     */
+    ret = check_kcm_uid(&relpath, &impersonated);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    *mapped_path =
+        talloc_asprintf(secreq,
+                        SEC_KCM_PFX"%s/%"SPRIuid"/%s",
+                        session, impersonated, relpath);
+    if (!*mapped_path) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Failed to map request to user specific url\n");
+        return ENOMEM;
+    }
+
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "User-specific KCM path is [%s]\n", *mapped_path);
+    return EOK;
+}
+
+static int sec_req_get_provider(struct sec_ctx *sctx,
+                                const char *provider,
+                                struct provider_handle **handle)
+{
+    int ret;
+
+    ret = sec_get_provider(sctx, provider, handle);
+    if (ret == ENOENT) {
+        if (strcasecmp(provider, "LOCAL") == 0) {
+            ret = local_secrets_provider_handle(sctx, handle);
+        } else if (strcasecmp(provider, "PROXY") == 0) {
+            ret = proxy_secrets_provider_handle(sctx, handle);
+        } else {
+            DEBUG(SSSDBG_FATAL_FAILURE,
+                  "Unknown provider type: %s\n", provider);
+            ret = EIO;
+        }
+        if (ret == EOK) {
+            ret = sec_add_provider(sctx, *handle);
+        }
+    }
+
+    return ret;
+}
+
+static int kcm_routing(TALLOC_CTX *mem_ctx,
+                       struct sec_ctx *sctx,
+                       struct sec_req_ctx *secreq,
+                       struct provider_handle **handle)
+{
+    int ret;
+    uid_t c_euid;
+
+    c_euid = client_euid(secreq->cctx->creds);
+    if (c_euid != KCM_PEER_UID) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "UID %"SPRIuid" is not allowed to access the "SEC_KCM_PFX" hive\n",
+              c_euid);
+        return EACCES;
+    }
+
+    ret = kcm_map_url_to_user_path(secreq, &secreq->mapped_path);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "Cannot map KCM URL to internal path\n");
+        return ret;
+    }
+
+    /* ccaches are always stored in the local provider */
+    ret = sec_req_get_provider(sctx, "LOCAL", handle);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot get local provider\n");
+        return ret;
+    }
+
+    return EOK;
+}
+
+static int secrets_routing(TALLOC_CTX *mem_ctx,
+                           struct sec_ctx *sctx,
+                           struct sec_req_ctx *secreq,
+                           struct provider_handle **handle)
+{
     char **sections;
     char *def_provider;
     char *provider;
     int num_sections;
     int ret;
-
-    sctx = talloc_get_type(secreq->cctx->rctx->pvt_ctx, struct sec_ctx);
-
-    /* patch must start with /secrets/ for now */
-    ret = strncasecmp(secreq->parsed_url.path,
-                      SEC_BASEPATH, sizeof(SEC_BASEPATH) - 1);
-    if (ret != 0) {
-        DEBUG(SSSDBG_CRIT_FAILURE,
-              "Path [%s] does not start with "SEC_BASEPATH"\n",
-              secreq->parsed_url.path);
-        return EPERM;
-    }
 
     ret = sec_map_url_to_user_path(secreq, &secreq->mapped_path);
     if (ret) return ret;
@@ -133,23 +292,40 @@ int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
     DEBUG(SSSDBG_TRACE_INTERNAL,
           "Request provider is [%s]\n", provider);
 
-    ret = sec_get_provider(sctx, provider, handle);
-    if (ret == ENOENT) {
-        if (strcasecmp(provider, "LOCAL") == 0) {
-            ret = local_secrets_provider_handle(sctx, handle);
-        } else if (strcasecmp(provider, "PROXY") == 0) {
-            ret = proxy_secrets_provider_handle(sctx, handle);
-        } else {
-            DEBUG(SSSDBG_FATAL_FAILURE,
-                  "Unknown provider type: %s\n", provider);
-            ret = EIO;
-        }
-        if (ret == EOK) {
-            ret = sec_add_provider(sctx, *handle);
-        }
+    ret = sec_req_get_provider(sctx, provider, handle);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot load provider %s\n", provider);
+        return ret;
     }
 
-    return ret;
+    return EOK;
+}
+
+int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
+                    struct provider_handle **handle)
+{
+    struct sec_ctx *sctx;
+    int ret;
+
+    sctx = talloc_get_type(secreq->cctx->rctx->pvt_ctx, struct sec_ctx);
+
+    /* path must start with /secrets/ for now */
+    ret = strncasecmp(secreq->parsed_url.path,
+                      SEC_KCM_PFX, sizeof(SEC_KCM_PFX) - 1);
+    if (ret == 0) {
+        return kcm_routing(mem_ctx, sctx, secreq, handle);
+    }
+
+    ret = strncasecmp(secreq->parsed_url.path,
+                      SEC_BASEPATH, sizeof(SEC_BASEPATH) - 1);
+    if (ret == 0) {
+        return secrets_routing(mem_ctx, sctx, secreq, handle);
+    }
+
+    DEBUG(SSSDBG_CRIT_FAILURE,
+          "Path [%s] does not start with "SEC_BASEPATH" or "SEC_KCM_PFX"\n",
+           secreq->parsed_url.path);
+    return EPERM;
 }
 
 int sec_provider_recv(struct tevent_req *req) {

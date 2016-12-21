@@ -29,6 +29,7 @@ import pytest
 from requests import HTTPError
 
 from util import unindent
+from util import run_shell
 from secrets import SecretsLocalClient
 
 
@@ -96,6 +97,8 @@ def setup_for_secrets(request):
         [secrets]
         max_secrets = 10
         max_payload_size = 2
+        debug_level = 10
+        timeout = 3000
     """).format(**locals())
 
     create_conf_fixture(request, conf)
@@ -354,3 +357,22 @@ def test_containers(setup_for_secrets, secrets_cli):
     with pytest.raises(HTTPError) as err406:
         cli.create_container(container)
     assert str(err406.value).startswith("406")
+
+@pytest.fixture
+def kcm_cli(request):
+    sock_path = os.path.join(config.RUNSTATEDIR, "secrets.socket")
+    cli = SecretsLocalClient(container='kcm', sock_path=sock_path)
+    return cli
+
+def test_kcm_store(setup_for_secrets, kcm_cli):
+    """
+    Test operations in the /kcm hive
+    """
+    cli = kcm_cli
+
+    run_shell()
+
+    # Listing a totally empty database yields a 404 error, no secrets are there
+    with pytest.raises(HTTPError) as err404:
+        secrets = cli.list_secrets()
+    assert str(err404.value).startswith("404")

@@ -54,9 +54,14 @@ class SecretsHttpClient(object):
     secrets_sock_path = '/var/run/secrets.socket'
     secrets_container = 'secrets'
 
-    def __init__(self, content_type='application/json', sock_path=None):
+    def __init__(self,
+                 content_type='application/json',
+                 sock_path=None,
+                 container=None):
         if sock_path is None:
             sock_path = self.secrets_sock_path
+        if container is None:
+            container = self.secrets_container
 
         self.content_type = content_type
         self.session = requests.Session()
@@ -65,7 +70,7 @@ class SecretsHttpClient(object):
         self.url = 'http+unix://' + \
             quote(sock_path, safe='') + \
             '/' + \
-            self.secrets_container
+            container
         self._last_response = None
 
     def _join_url(self, resource):
