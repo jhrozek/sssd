@@ -33,6 +33,18 @@ static int sec_map_url_to_user_path(struct sec_req_ctx *secreq,
     c_euid = client_euid(secreq->cctx->creds);
 
     /* change path to be user specific */
+    /*
+     * The following code is for the /secrets hive
+     * For KCM we need something different:
+     * For common user credentials the KCM Server would use a URI like:
+     * /kcm/users/1234/1234/X  where X is the residual and the client sees a
+     * KRB5CCNAME of KCM:1234:X
+     * However to support sessions we would probably need something like:
+     * KRB5CCNAME of KCM:session:XYZ:ABC or maybe just KCM:XYZ:ABC where
+     * XYZ does not start with a number.
+     * In KCm we need to decide if different users can share this session.
+     * SSS: My first reaction is a resounding NO answer, so I would store
+     * this as /kcm/users/1234/XYZ/ABC */
     *mapped_path =
         talloc_asprintf(secreq, SEC_BASEPATH"users/%"SPRIuid"/%s",
                         c_euid,
@@ -309,7 +321,6 @@ int sec_req_routing(TALLOC_CTX *mem_ctx, struct sec_req_ctx *secreq,
 
     sctx = talloc_get_type(secreq->cctx->rctx->pvt_ctx, struct sec_ctx);
 
-    /* path must start with /secrets/ for now */
     ret = strncasecmp(secreq->parsed_url.path,
                       SEC_KCM_PFX, sizeof(SEC_KCM_PFX) - 1);
     if (ret == 0) {

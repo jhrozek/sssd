@@ -26,6 +26,26 @@
 #include "responder/kcm/kcmsrv_ccache.h"
 #include "responder/kcm/kcmsrv_ccache_be.h"
 
+/* JSON format:
+ *  - version, top level attribute
+ *
+ *
+ *
+ *  {
+ *      "version": <number>,
+ *      "principal": {
+ *          "realm": "string",
+ *          "componenets": [ "elem1", "elem2", ...]
+ *      },
+ *      "creds": [
+ *          {
+ *              "uuid": <data>,
+ *              "payload": <data>,
+ *          },
+ *          ...
+ *      ]
+ *  }
+ */
 struct kcm_ccache_owner {
     uid_t uid;
     gid_t gid;

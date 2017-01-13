@@ -1484,19 +1484,25 @@ sssd_kcm_SOURCES = \
     src/responder/kcm/kcmsrv_cmd.c \
     src/responder/kcm/kcmsrv_ccache.c \
     src/responder/kcm/kcmsrv_ccache_mem.c \
+    src/responder/kcm/kcmsrv_ccache_secrets.c \
     src/responder/kcm/kcmsrv_ops.c \
     src/util/sss_sockets.c \
     src/util/sss_krb5.c \
     src/util/sss_iobuf.c \
+    src/util/tev_curl.c \
     $(SSSD_RESPONDER_OBJ) \
     $(NULL)
 sssd_kcm_CFLAGS = \
     $(AM_CFLAGS) \
     $(KRB5_CFLAGS) \
     $(UUID_CFLAGS) \
+    $(CURL_CFLAGS) \
+    $(JANSSON_CFLAGS) \
     $(NULL)
 sssd_kcm_LDADD = \
     $(KRB5_LIBS) \
+    $(CURL_LIBS) \
+    $(JANSSON_LIBS) \
     $(SSSD_LIBS) \
     $(UUID_LIBS) \
     $(SYSTEMD_DAEMON_LIBS) \

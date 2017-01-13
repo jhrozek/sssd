@@ -359,3 +359,15 @@ def test_kdestroy_nocache(setup_for_kcm):
     assert out == 0
     out = testenv.k5util.kdestroy()
     assert out == 0
+
+
+def test_renewal(setup_for_kcm):
+    pass
+
+
+def test_ccache_restart_kcm(setup_for_kcm):
+    pass
+
+
+def test_quota(setup_for_kcm):
+    pass

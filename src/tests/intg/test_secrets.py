@@ -411,15 +411,13 @@ def kcm_cli(request):
     cli = SecretsLocalClient(container='kcm', sock_path=sock_path)
     return cli
 
-def test_kcm_store(setup_for_secrets, kcm_cli):
-    """
-    Test operations in the /kcm hive
-    """
-    cli = kcm_cli
-
-    run_shell()
-
-    # Listing a totally empty database yields a 404 error, no secrets are there
-    with pytest.raises(HTTPError) as err404:
-        secrets = cli.list_secrets()
-    assert str(err404.value).startswith("404")
+#def test_kcm_store(setup_for_secrets, kcm_cli):
+#    """
+#    Test operations in the /kcm hive
+#    """
+#    cli = kcm_cli
+#
+#    # Listing a totally empty database yields a 404 error, no secrets are there
+#    with pytest.raises(HTTPError) as err404:
+#        secrets = cli.list_secrets()
+#    assert str(err404.value).startswith("404")

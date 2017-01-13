@@ -79,6 +79,12 @@ bool kcm_cc_access(struct kcm_ccache *cc,
  * Since the kcm_ccache structure is opaque, the kcmsrv_ccache
  * layer contains a number of getsetters to read and write
  * properties of the kcm_ccache structure
+ *
+ * TODO for secrets:
+ * quota:
+ *  - modifyTS
+ *  - separate namespace, accessible for KCM
+ *  - quota, reap old ccache aggresively
  */
 const char *kcm_cc_get_name(struct kcm_ccache *cc);
 errno_t kcm_cc_get_uuid(struct kcm_ccache *cc, uuid_t _uuid);
