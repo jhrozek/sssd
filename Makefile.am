@@ -311,6 +311,9 @@ check_PROGRAMS = \
 if HAVE_CMOCKA
 check_PROGRAMS += dummy-child
 endif # HAVE_CMOCKA
+if BUILD_WITH_LIBCURL
+check_PROGRAMS += tcurl-test-tool
+endif # BUILD_WITH_LIBCURL
 
 PYTHON_TESTS =
 
@@ -2119,6 +2122,23 @@ krb5_child_test_LDADD = \
     $(SSSD_INTERNAL_LTLIBS) \
     libsss_test_common.la
 
+if BUILD_WITH_LIBCURL
+tcurl_test_tool_SOURCES = \
+    src/tests/tcurl_test_tool.c \
+    src/util/tev_curl.c \
+    src/util/sss_iobuf.c \
+    $(NULL)
+tcurl_test_tool_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(CURL_CFLAGS) \
+    $(NULL)
+tcurl_test_tool_LDADD = \
+    $(CURL_LIBS) \
+    $(SSSD_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    $(NULL)
+endif
+
 if BUILD_DBUS_TESTS
 
 sbus_tests_SOURCES = \
@@ -3261,6 +3281,7 @@ intgcheck-prepare:
 	    --without-semanage \
 	    $(INTGCHECK_CONFIGURE_FLAGS); \
 	$(MAKE) $(AM_MAKEFLAGS); \
+	$(MAKE) $(AM_MAKEFLAGS) tcurl-test-tool || echo "libcurl tests will be disabled"; \
 	: Force single-thread install to workaround concurrency issues; \
 	$(MAKE) $(AM_MAKEFLAGS) -j1 install; \
 	: Remove .la files from LDB module directory to avoid loader warnings; \
