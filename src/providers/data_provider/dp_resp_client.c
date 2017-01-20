@@ -25,7 +25,7 @@
 #include "sbus/sssd_dbus.h"
 #include "providers/data_provider.h"
 #include "providers/data_provider/dp_private.h"
-#include "responder/common/resp_iface.h"
+#include "responder/common/iface/responder_iface.h"
 #include "src/responder/nss/nss_iface.h"
 
 /* List of DP clients that deal with users or groups */
@@ -44,83 +44,83 @@ static enum dp_clients user_clients[] = {
     DP_CLIENT_SENTINEL
 };
 
-static void dispatch_cli_msg(struct data_provider *provider,
-                             struct DBusMessage *msg,
-                             enum dp_clients *client_list)
+static void send_msg_to_all_clients(struct data_provider *provider,
+                                    struct DBusMessage *msg)
 {
-    struct dp_client *dp_cli_list[DP_CLIENT_SENTINEL] = { NULL };
+    struct dp_client *cli;
+    int i;
 
-    if (client_list != NULL) {
-        for (int i = 0; client_list[i] != DP_CLIENT_SENTINEL; i++) {
-            dp_cli_list[i] = provider->clients[i];
+    for (i = 0; provider->clients[i] != NULL; i++) {
+        cli = provider->clients[i];
+        if (cli != NULL) {
+           sbus_conn_send_reply(dp_client_conn(cli), msg);
         }
-    } else {
-        memcpy(dp_cli_list, provider->clients, sizeof(dp_cli_list));
-    }
-
-    for (int i = 0; i < DP_CLIENT_SENTINEL; i++) {
-        struct dp_client *cli = dp_cli_list[i];
-
-        if (cli == NULL) {
-            continue;
-        }
-
-        sbus_conn_send_reply(dp_client_conn(cli), msg);
     }
 }
 
-static void dp_sbus_set_domain_status(struct data_provider *provider,
-                                      struct sss_domain_info *dom)
+static void send_msg_to_selected_clients(struct data_provider *provider,
+                                         struct DBusMessage *msg,
+                                         enum dp_clients *clients)
+{
+    struct dp_client *cli;
+    int i;
+
+    for (i = 0; clients[i] != DP_CLIENT_SENTINEL; i++) {
+        cli = provider->clients[clients[i]];
+        if (cli != NULL) {
+            sbus_conn_send_reply(dp_client_conn(cli), msg);
+        }
+    }
+}
+
+static void dp_sbus_set_domain_state(struct data_provider *provider,
+                                     struct sss_domain_info *dom,
+                                     enum sss_domain_state state)
 {
     DBusMessage *msg;
-    dbus_bool_t dbret;
-    const char *meth;
+    const char *method;
 
-    if (sss_domain_get_state(dom) == DOM_DISABLED) {
-        meth = IFACE_RESPONDER_BACKEND_DOMAININVALID;
-    } else {
-        meth = IFACE_RESPONDER_BACKEND_DOMAINVALID;
+    switch (state) {
+    case DOM_ACTIVE:
+        DEBUG(SSSDBG_TRACE_FUNC, "Ordering responders to enable domain %s\n",
+              dom->name);
+        method = IFACE_RESPONDER_DOMAIN_ENABLE;
+        break;
+    case DOM_DISABLED:
+        DEBUG(SSSDBG_TRACE_FUNC, "Ordering responders to disable domain %s\n",
+              dom->name);
+        method = IFACE_RESPONDER_DOMAIN_DISABLE;
+        break;
+    case DOM_INACTIVE:
+        /* No action here. */
+        return;
     }
 
-    msg = dbus_message_new_method_call(NULL,
-                                       RESP_IFACE_PATH,
-                                       IFACE_RESPONDER_BACKEND,
-                                       meth);
+    sss_domain_set_state(dom, state);
+
+    msg = sbus_create_message(NULL, NULL, RESPONDER_PATH,
+                              IFACE_RESPONDER_DOMAIN, method,
+                              DBUS_TYPE_STRING, &dom->name);
     if (msg == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
         return;
     }
 
-    dbret = dbus_message_append_args(msg,
-                                     DBUS_TYPE_STRING, &dom->name,
-                                     DBUS_TYPE_INVALID);
-    if (!dbret) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
-        dbus_message_unref(msg);
-        return;
-    }
-
-    dispatch_cli_msg(provider, msg, NULL);
-    dbus_message_unref(msg);
+    send_msg_to_all_clients(provider, msg);
+    talloc_free(msg);
     return;
 }
 
 void dp_sbus_enable_domain(struct data_provider *provider,
                            struct sss_domain_info *dom)
 {
-    DEBUG(SSSDBG_TRACE_FUNC,
-          "Ordering responders to enable a domain\n");
-    sss_domain_set_state(dom, DOM_ACTIVE);
-    return dp_sbus_set_domain_status(provider, dom);
+    return dp_sbus_set_domain_state(provider, dom, DOM_ACTIVE);
 }
 
 void dp_sbus_disable_domain(struct data_provider *provider,
                             struct sss_domain_info *dom)
 {
-    DEBUG(SSSDBG_TRACE_FUNC,
-          "Ordering responders to disable a domain\n");
-    sss_domain_set_state(dom, DOM_DISABLED);
-    return dp_sbus_set_domain_status(provider, dom);
+    return dp_sbus_set_domain_state(provider, dom, DOM_DISABLED);
 }
 
 static void dp_sbus_reset_ncache(struct data_provider *provider,
@@ -129,52 +129,47 @@ static void dp_sbus_reset_ncache(struct data_provider *provider,
 {
     DBusMessage *msg;
 
-    msg = dbus_message_new_method_call(NULL,
-                                       RESP_IFACE_PATH,
-                                       IFACE_RESPONDER_BACKEND,
-                                       method);
+    msg = sbus_create_message(NULL, NULL, RESPONDER_PATH,
+                              IFACE_RESPONDER_NCACHE, method);
     if (msg == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
         return;
     }
 
-    dispatch_cli_msg(provider, msg, user_clients);
-    dbus_message_unref(msg);
+    send_msg_to_selected_clients(provider, msg, user_clients);
+    talloc_free(msg);
     return;
 }
 
 void dp_sbus_reset_users_ncache(struct data_provider *provider,
                                 struct sss_domain_info *dom)
 {
-    return dp_sbus_reset_ncache(provider,
-                                dom,
-                                IFACE_RESPONDER_BACKEND_RESETNEGCACHEUSERS);
+    return dp_sbus_reset_ncache(provider, dom,
+                                IFACE_RESPONDER_NCACHE_RESETUSERS);
 }
 
 void dp_sbus_reset_groups_ncache(struct data_provider *provider,
                                  struct sss_domain_info *dom)
 {
-    return dp_sbus_reset_ncache(provider,
-                                dom,
-                                IFACE_RESPONDER_BACKEND_RESETNEGCACHEGROUPS);
+    return dp_sbus_reset_ncache(provider, dom,
+                                IFACE_RESPONDER_NCACHE_RESETGROUPS);
 }
 
 static void dp_sbus_reset_memcache(struct data_provider *provider,
                                    const char *method)
 {
+    static enum dp_clients clients[] = {DPC_NSS, DP_CLIENT_SENTINEL};
     DBusMessage *msg;
 
-    msg = dbus_message_new_method_call(NULL,
-                                       NSS_MEMORYCACHE_PATH,
-                                       IFACE_NSS_MEMORYCACHE,
-                                       method);
+    msg = sbus_create_message(NULL, NULL, NSS_MEMORYCACHE_PATH,
+                              IFACE_NSS_MEMORYCACHE, method);
     if (msg == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
         return;
     }
 
-    dispatch_cli_msg(provider, msg, user_clients);
-    dbus_message_unref(msg);
+    send_msg_to_selected_clients(provider, msg, clients);
+    talloc_free(msg);
     return;
 }
 
@@ -193,5 +188,5 @@ void dp_sbus_reset_groups_memcache(struct data_provider *provider)
 void dp_sbus_reset_initgr_memcache(struct data_provider *provider)
 {
     return dp_sbus_reset_memcache(provider,
-                                  IFACE_NSS_MEMORYCACHE_INVALIDATEALLINITGRRECORDS);
+                          IFACE_NSS_MEMORYCACHE_INVALIDATEALLINITGROUPS);
 }

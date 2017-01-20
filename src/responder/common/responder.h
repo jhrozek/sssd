@@ -363,16 +363,4 @@ char *sss_resp_create_fqname(TALLOC_CTX *mem_ctx,
                              bool name_is_upn,
                              const char *orig_name);
 
-
-int sss_resp_domain_valid(struct sbus_request *req,
-                          void *data,
-                          const char *domain_name);
-
-int sss_resp_domain_invalid(struct sbus_request *req,
-                            void *data,
-                            const char *domain_name);
-
-int sss_resp_reset_ncache_users(struct sbus_request *req, void *data);
-int sss_resp_reset_ncache_groups(struct sbus_request *req, void *data);
-
 #endif /* __SSS_RESPONDER_H__ */

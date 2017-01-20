@@ -16,23 +16,28 @@
 */
 
 #include "sbus/sssd_dbus.h"
-#include "responder/common/resp_iface.h"
+#include "responder/common/iface/responder_iface.h"
 #include "responder/common/responder.h"
 
-struct iface_responder_backend iface_responder_backend = {
-    { &iface_responder_backend_meta, 0 },
-    .DomainValid = sss_resp_domain_valid,
-    .DomainInvalid = sss_resp_domain_invalid,
-    .ResetNegcacheUsers = sss_resp_reset_ncache_users,
-    .ResetNegcacheGroups = sss_resp_reset_ncache_groups,
+struct iface_responder_domain iface_responder_domain = {
+    { &iface_responder_domain_meta, 0 },
+    .Enable = sss_resp_domain_valid,
+    .Disable = sss_resp_domain_invalid,
+};
+
+struct iface_responder_ncache iface_responder_ncache = {
+    { &iface_responder_domain_meta, 0 },
+    .ResetUsers = sss_resp_reset_ncache_users,
+    .ResetGroups = sss_resp_reset_ncache_groups,
 };
 
 static struct sbus_iface_map iface_map[] = {
-    { RESP_IFACE_PATH, &iface_responder_backend.vtable },
+    { RESPONDER_PATH, &iface_responder_domain.vtable },
+    { RESPONDER_PATH, &iface_responder_ncache.vtable },
     { NULL, NULL }
 };
 
-struct sbus_iface_map *resp_get_sbus_interface()
+struct sbus_iface_map *responder_get_sbus_interface()
 {
     return iface_map;
 }

@@ -515,9 +515,11 @@ SSSD_CACHE_REQ_OBJ = \
 	src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c \
 	$(NULL)
 
-SSSD_RESP_IFACE_OBJ = \
-    src/responder/common/resp_iface.c \
-    src/responder/common/resp_iface_generated.c \
+SSSD_RESPONDER_IFACE_OBJ = \
+    src/responder/common/iface/responder_iface.c \
+    src/responder/common/iface/responder_domain.c \
+    src/responder/common/iface/responder_ncache.c \
+    src/responder/common/iface/responder_iface_generated.c \
     $(NULL)
 
 SSSD_RESPONDER_OBJ = \
@@ -533,7 +535,7 @@ SSSD_RESPONDER_OBJ = \
     src/responder/common/data_provider/rdp_client.c \
     src/monitor/monitor_iface_generated.c \
     src/providers/data_provider_req.c \
-    $(SSSD_RESP_IFACE_OBJ) \
+    $(SSSD_RESPONDER_IFACE_OBJ) \
     $(SSSD_CACHE_REQ_OBJ) \
     $(NULL)
 
@@ -642,11 +644,11 @@ dist_noinst_HEADERS = \
     src/monitor/monitor.h \
     src/monitor/monitor_interfaces.h \
     src/monitor/monitor_iface_generated.h \
-    src/responder/common/resp_iface_generated.h \
     src/responder/common/responder.h \
     src/responder/common/responder_packet.h \
     src/responder/common/responder_sbus.h \
-    src/responder/common/resp_iface.h \
+    src/responder/common/iface/responder_iface.h \
+    src/responder/common/iface/responder_iface_generated.h \
     src/responder/common/cache_req/cache_req.h \
     src/responder/common/cache_req/cache_req_plugin.h \
     src/responder/common/cache_req/cache_req_private.h \
@@ -1230,7 +1232,7 @@ CODEGEN_XML = \
     $(srcdir)/src/providers/proxy/proxy_iface.xml \
     $(srcdir)/src/responder/ifp/ifp_iface.xml \
     $(srcdir)/src/responder/nss/nss_iface.xml \
-    $(srcdir)/src/responder/common/resp_iface.xml \
+    $(srcdir)/src/responder/common/iface/responder_iface.xml \
     $(NULL)
 
 SBUS_CODEGEN = src/sbus/sbus_codegen
@@ -2030,7 +2032,7 @@ responder_socket_access_tests_SOURCES = \
     src/responder/common/responder_cmd.c \
     src/responder/common/data_provider/rdp_message.c \
     src/responder/common/data_provider/rdp_client.c \
-    $(SSSD_RESP_IFACE_OBJ) \
+    $(SSSD_RESPONDER_IFACE_OBJ) \
     $(NULL)
 responder_socket_access_tests_CFLAGS = \
     $(AM_CFLAGS) \
@@ -2118,7 +2120,7 @@ TEST_MOCK_RESP_OBJ = \
      src/responder/common/data_provider/rdp_client.c \
      src/responder/common/responder_utils.c \
      $(SSSD_CACHE_REQ_OBJ) \
-     $(SSSD_RESP_IFACE_OBJ) \
+     $(SSSD_RESPONDER_IFACE_OBJ) \
      $(NULL)
 
 TEST_MOCK_PROVIDER_OBJ = \
