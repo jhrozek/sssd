@@ -26,11 +26,6 @@ static errno_t
 files_check_account_input(struct dp_id_data *data,
                           struct sss_domain_info *domain)
 {
-    /* For now we support only core attrs. */
-    if (data->attr_type != BE_ATTR_CORE) {
-        goto fail;
-    }
-
     switch (data->entry_type & BE_REQ_TYPE_MASK) {
     case BE_REQ_USER:
         switch (data->filter_type) {
