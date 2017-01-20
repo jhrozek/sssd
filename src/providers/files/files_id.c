@@ -22,16 +22,13 @@
 #include "providers/data_provider/dp.h"
 #include "providers/files/files_private.h"
 
-static struct dp_reply_std
-files_account_info_handler(struct dp_id_data *data,
-                           struct sss_domain_info *domain)
+static errno_t
+files_check_account_input(struct dp_id_data *data,
+                          struct sss_domain_info *domain)
 {
-    struct dp_reply_std reply;
-
     /* For now we support only core attrs. */
     if (data->attr_type != BE_ATTR_CORE) {
-        dp_reply_std_set(&reply, DP_ERR_FATAL, EINVAL, "Invalid attr type");
-        return reply;
+        goto fail;
     }
 
     switch (data->entry_type & BE_REQ_TYPE_MASK) {
@@ -74,12 +71,10 @@ files_account_info_handler(struct dp_id_data *data,
     /* All data is in fact returned from responder cache for now,
      * we completely rely on the inotify-induced enumeration
      */
-    dp_reply_std_set(&reply, DP_ERR_OK, EOK, NULL);
-    return reply;
+    return EOK;
 
 fail:
-    dp_reply_std_set(&reply, DP_ERR_FATAL, EINVAL, "Invalid request type");
-    return reply;
+    return EINVAL;
 }
 
 struct files_account_info_handler_state {
@@ -94,6 +89,7 @@ files_account_info_handler_send(TALLOC_CTX *mem_ctx,
 {
     struct files_account_info_handler_state *state;
     struct tevent_req *req;
+    errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state,
                             struct files_account_info_handler_state);
@@ -102,7 +98,8 @@ files_account_info_handler_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    state->reply = files_account_info_handler(data, id_ctx->domain);
+    ret = files_check_account_input(data, id_ctx->domain);
+    dp_reply_std_set(&state->reply, DP_ERR_DECIDE, ret, NULL);
 
     /* TODO For backward compatibility we always return EOK to DP now. */
     tevent_req_done(req);
