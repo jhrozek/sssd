@@ -112,10 +112,6 @@ errno_t
 nss_protocol_parse_sid(struct cli_ctx *cli_ctx,
                        const char **_sid);
 
-const char *
-nss_get_pwfield(struct nss_ctx *nctx,
-                struct sss_domain_info *dom);
-
 /* Create response packet. */
 
 errno_t

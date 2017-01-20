@@ -351,14 +351,3 @@ nss_protocol_parse_sid(struct cli_ctx *cli_ctx,
 
     return EOK;
 }
-
-const char *
-nss_get_pwfield(struct nss_ctx *nctx,
-               struct sss_domain_info *dom)
-{
-    if (dom->pwfield != NULL) {
-        return dom->pwfield;
-    }
-
-    return nctx->pwfield;
-}
