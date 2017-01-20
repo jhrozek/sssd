@@ -123,7 +123,7 @@ static void debug_flags(uint32_t flags, const char *file)
     char msgbuf[1024];
     size_t total = 0;
 
-    if ((debug_level & SSSDBG_TRACE_LIBS) == false) {
+    if (!DEBUG_IS_SET(SSSDBG_TRACE_LIBS)) {
         return;
     }
 
