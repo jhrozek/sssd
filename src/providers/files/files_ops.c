@@ -240,41 +240,35 @@ done:
 
 static errno_t delete_all_users(struct sss_domain_info *dom)
 {
+    TALLOC_CTX *tmp_ctx;
+    struct ldb_dn *base_dn;
     errno_t ret;
-    TALLOC_CTX *tmp_ctx = NULL;
-    struct ldb_result *res;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Out of memory!\n");
         return ENOMEM;
     }
 
-    ret = sysdb_enumpwent(tmp_ctx, dom, &res);
-    if (ret != EOK) {
+    base_dn = sysdb_user_base_dn(tmp_ctx, dom);
+    if (base_dn == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory!\n");
+        ret = ENOMEM;
         goto done;
     }
 
-    for (unsigned i = 0; i < res->count; i++) {
-        uid_t uid;
-
-        uid = ldb_msg_find_attr_as_uint64(res->msgs[i], SYSDB_UIDNUM, 0);
-        if (uid == 0) {
-            continue;
-        }
-
-        DEBUG(SSSDBG_TRACE_INTERNAL,
-              "Removing user with UID: %"SPRIuid"\n", uid);
-        ret = sysdb_delete_user(dom, NULL, uid);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Could not remove user with UID: %"SPRIuid"\n", uid);
-            continue;
-        }
+    ret = sysdb_delete_recursive(dom->sysdb, base_dn, true);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "Unable to delete users subtree [%d]: %s\n",
+              ret, sss_strerror(ret));
+        goto done;
     }
 
     ret = EOK;
+
 done:
     talloc_free(tmp_ctx);
+
     return ret;
 }
 
@@ -454,42 +448,35 @@ done:
 
 static errno_t delete_all_groups(struct sss_domain_info *dom)
 {
+    TALLOC_CTX *tmp_ctx;
+    struct ldb_dn *base_dn;
     errno_t ret;
-    TALLOC_CTX *tmp_ctx = NULL;
-    struct ldb_result *res;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Out of memory!\n");
         return ENOMEM;
     }
 
-    ret = sysdb_enumgrent(tmp_ctx, dom, &res);
-    if (ret != EOK) {
+    base_dn = sysdb_group_base_dn(tmp_ctx, dom);
+    if (base_dn == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory!\n");
+        ret = ENOMEM;
         goto done;
     }
 
-    for (unsigned i = 0; i < res->count; i++) {
-        gid_t gid;
-
-        gid = ldb_msg_find_attr_as_uint64(res->msgs[i], SYSDB_GIDNUM, 0);
-        if (gid == 0) {
-            /* FIXME - later we need to support root as well */
-            continue;
-        }
-
-        DEBUG(SSSDBG_TRACE_INTERNAL,
-              "Removing group with GID: %"SPRIgid"\n", gid);
-        ret = sysdb_delete_group(dom, NULL, gid);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Could not remove group with GID: %"SPRIgid"\n", gid);
-            continue;
-        }
+    ret = sysdb_delete_recursive(dom->sysdb, base_dn, true);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "Unable to delete groups subtree [%d]: %s\n",
+              ret, sss_strerror(ret));
+        goto done;
     }
 
     ret = EOK;
+
 done:
     talloc_free(tmp_ctx);
+
     return ret;
 }
 
