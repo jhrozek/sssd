@@ -218,9 +218,10 @@
                             </para>
                             <para>
                                 <phrase condition="have_systemd">
-                                    By default, all services are disabled and the administrator
-                                    must enable the ones allowed to be used by executing:
-                                    "systemctl enable sssd-@service@.socket".
+                                    By default, all services are enabled.
+                                    In case the Administrator wants to persistently disable
+                                    one of them, it can be done by running:
+                                    "systemctl mask sssd-@service@.socket"
                                 </phrase>
                             </para>
                         </listitem>

@@ -3963,6 +3963,7 @@ endif
 init_SCRIPTS =
 systemdunit_DATA =
 systemdconf_DATA =
+sssd_dependent_services =
 if HAVE_SYSTEMD_UNIT
     systemdunit_DATA += \
         src/sysv/systemd/sssd.service \
@@ -3974,11 +3975,15 @@ if HAVE_SYSTEMD_UNIT
         src/sysv/systemd/sssd-secrets.socket \
         src/sysv/systemd/sssd-secrets.service \
         $(NULL)
+
+sssd_dependent_services += sssd-nss.socket sssd-pam.socket
 if BUILD_AUTOFS
     systemdunit_DATA += \
         src/sysv/systemd/sssd-autofs.socket \
         src/sysv/systemd/sssd-autofs.service \
         $(NULL)
+
+sssd_dependent_services += sssd-autofs.socket
 endif
 if BUILD_IFP
     systemdunit_DATA += \
@@ -3990,18 +3995,24 @@ if BUILD_PAC_RESPONDER
         src/sysv/systemd/sssd-pac.socket \
         src/sysv/systemd/sssd-pac.service \
         $(NULL)
+
+sssd_dependent_services += sssd-pac.socket
 endif
 if BUILD_SSH
     systemdunit_DATA += \
         src/sysv/systemd/sssd-ssh.socket \
         src/sysv/systemd/sssd-ssh.service \
         $(NULL)
+
+sssd_dependent_services += sssd-ssh.socket
 endif
 if BUILD_SUDO
     systemdunit_DATA += \
         src/sysv/systemd/sssd-sudo.socket \
         src/sysv/systemd/sssd-sudo.service \
         $(NULL)
+
+sssd_dependent_services += sssd-sudo.socket
 endif
 if WITH_JOURNALD
     systemdconf_DATA += \
@@ -4044,7 +4055,8 @@ edit_cmd = $(SED) \
         -e 's|@libexecdir[@]|$(libexecdir)|g' \
         -e 's|@pipepath[@]|$(pipepath)|g' \
         -e 's|@prefix[@]|$(prefix)|g' \
-        -e 's|@SSSD_USER[@]|$(SSSD_USER)|g'
+        -e 's|@SSSD_USER[@]|$(SSSD_USER)|g' \
+        -e 's|@sssd_dependent_services[@]|${sssd_dependent_services}|g'
 
 replace_script = \
     @rm -f $@ $@.tmp; \
