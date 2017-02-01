@@ -552,6 +552,10 @@ static void mock_input_pam(TALLOC_CTX *mem_ctx, const char *name,
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_WRAPPER);
     will_return(__wrap_sss_packet_get_body, buf);
     will_return(__wrap_sss_packet_get_body, buf_size);
+
+    if (name != NULL) {
+        mock_parse_inp(name, NULL, EOK);
+    }
 }
 
 static void mock_input_pam_cert(TALLOC_CTX *mem_ctx, const char *name,
@@ -598,6 +602,10 @@ static void mock_input_pam_cert(TALLOC_CTX *mem_ctx, const char *name,
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_WRAPPER);
     will_return(__wrap_sss_packet_get_body, buf);
     will_return(__wrap_sss_packet_get_body, buf_size);
+
+    if (name != NULL) {
+        mock_parse_inp(name, NULL, EOK);
+    }
 }
 
 static int test_pam_simple_check(uint32_t status, uint8_t *body, size_t blen)
