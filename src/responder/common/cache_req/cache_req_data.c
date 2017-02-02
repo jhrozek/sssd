@@ -318,3 +318,10 @@ cache_req_data_svc(TALLOC_CTX *mem_ctx,
 
     return cache_req_data_create(mem_ctx, type, &input);
 }
+
+void
+cache_req_data_set_bypass_cache(struct cache_req_data *data,
+                                bool bypass_cache)
+{
+    data->bypass_cache = bypass_cache;
+}
