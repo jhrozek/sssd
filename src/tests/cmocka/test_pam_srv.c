@@ -343,7 +343,7 @@ static int pam_test_setup(void **state)
 }
 
 #ifdef HAVE_NSS
-static int pam_test_setup_no_verification(void **state)
+int pam_test_setup_no_verification(void **state)
 {
     struct sss_test_conf_param dom_params[] = {
         { "enumerate", "false" },
@@ -368,7 +368,7 @@ static int pam_test_setup_no_verification(void **state)
 }
 #endif /* HAVE_NSS */
 
-static int pam_cached_test_setup(void **state)
+int pam_cached_test_setup(void **state)
 {
     struct sss_test_conf_param dom_params[] = {
         { "enumerate", "false" },
@@ -558,7 +558,8 @@ static void mock_input_pam(TALLOC_CTX *mem_ctx, const char *name,
 }
 
 static void mock_input_pam_cert(TALLOC_CTX *mem_ctx, const char *name,
-                                const char *pin, const char *service)
+                                const char *pin, const char *service,
+                                const char *cert)
 {
     size_t buf_size;
     uint8_t *m_buf;
@@ -601,6 +602,8 @@ static void mock_input_pam_cert(TALLOC_CTX *mem_ctx, const char *name,
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_WRAPPER);
     will_return(__wrap_sss_packet_get_body, buf);
     will_return(__wrap_sss_packet_get_body, buf_size);
+
+    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb, discard_const(cert));
 
     if (name) {
         mock_parse_inp(name, NULL, EOK);
@@ -1592,11 +1595,10 @@ void test_pam_preauth_cert_nomatch(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, NULL);
+    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, NULL, NULL);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_PREAUTH);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb, NULL);
 
     set_cmd_cb(test_pam_simple_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_PREAUTH,
@@ -1614,12 +1616,10 @@ void test_pam_preauth_cert_match(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, NULL);
+    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, NULL, TEST_TOKEN_CERT);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_PREAUTH);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb,
-                      discard_const(TEST_TOKEN_CERT));
 
     set_cmd_cb(test_pam_cert_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_PREAUTH,
@@ -1638,12 +1638,10 @@ void test_pam_preauth_cert_match_gdm_smartcard(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, "gdm-smartcard");
+    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, "gdm-smartcard", TEST_TOKEN_CERT);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_PREAUTH);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb,
-                      discard_const(TEST_TOKEN_CERT));
 
     set_cmd_cb(test_pam_cert_check_gdm_smartcard);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_PREAUTH,
@@ -1661,12 +1659,10 @@ void test_pam_preauth_cert_match_wrong_user(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, NULL);
+    mock_input_pam_cert(pam_test_ctx, "pamuser", NULL, NULL, TEST_TOKEN_CERT);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_PREAUTH);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_wrong_user_cb,
-                      discard_const(TEST_TOKEN_CERT));
 
     set_cmd_cb(test_pam_simple_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_PREAUTH,
@@ -1685,12 +1681,10 @@ void test_pam_preauth_cert_no_logon_name(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, NULL, NULL, NULL);
+    mock_input_pam_cert(pam_test_ctx, NULL, NULL, NULL, TEST_TOKEN_CERT);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_PREAUTH);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb,
-                      discard_const(TEST_TOKEN_CERT));
 
     set_cmd_cb(test_pam_cert_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_PREAUTH,
@@ -1729,11 +1723,10 @@ void test_pam_preauth_cert_no_logon_name_no_match(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, NULL, NULL, NULL);
+    mock_input_pam_cert(pam_test_ctx, NULL, NULL, NULL, NULL);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_PREAUTH);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb, NULL);
 
     set_cmd_cb(test_pam_user_unknown_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_PREAUTH,
@@ -1751,12 +1744,10 @@ void test_pam_cert_auth(void **state)
 
     set_cert_auth_param(pam_test_ctx->pctx, NSS_DB);
 
-    mock_input_pam_cert(pam_test_ctx, "pamuser", "123456", NULL);
+    mock_input_pam_cert(pam_test_ctx, "pamuser", "123456", NULL, TEST_TOKEN_CERT);
 
     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_AUTHENTICATE);
     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
-    mock_account_recv(0, 0, NULL, test_lookup_by_cert_cb,
-                      discard_const(TEST_TOKEN_CERT));
 
     set_cmd_cb(test_pam_simple_check);
     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_AUTHENTICATE,
@@ -1966,104 +1957,9 @@ int main(int argc, const char *argv[])
     };
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_pam_authenticate,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_setcreds,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_acct_mgmt,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_open_session,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_close_session,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_chauthtok,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_chauthtok_prelim,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_auth_no_hash,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_auth_success,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_auth_wrong_pw,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_auth_success_2fa,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_auth_failed_2fa,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                              test_pam_offline_auth_success_2fa_with_cached_2fa,
-                              pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                               test_pam_offline_auth_failed_2fa_with_cached_2fa,
-                               pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                               test_pam_offline_auth_success_pw_with_cached_2fa,
-                               pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                                test_pam_offline_auth_failed_pw_with_cached_2fa,
-                                pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                      test_pam_offline_auth_success_combined_pw_with_cached_2fa,
-                      pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                       test_pam_offline_auth_failed_combined_pw_with_cached_2fa,
-                       pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                    test_pam_offline_auth_failed_wrong_2fa_size_with_cached_2fa,
-                    pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_chauthtok_prelim,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_offline_chauthtok,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth_no_logon_name,
-                                        pam_test_setup, pam_test_teardown),
-        //cmocka_unit_test_setup_teardown(test_pam_cached_auth_success,
-        //                                pam_cached_test_setup,
-        //                                pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_cached_auth_wrong_pw,
-                                        pam_cached_test_setup,
-                                        pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_cached_auth_opt_timeout,
-                                        pam_cached_test_setup,
-                                        pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_cached_auth_timeout,
-                                        pam_cached_test_setup,
-                                        pam_test_teardown),
-        //cmocka_unit_test_setup_teardown(test_pam_cached_auth_success_combined_pw_with_cached_2fa,
-        //                                pam_cached_test_setup,
-        //                                pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_cached_auth_failed_combined_pw_with_cached_2fa,
-                                        pam_cached_test_setup,
-                                        pam_test_teardown),
-/* p11_child is not built without NSS */
-#ifdef HAVE_NSS
-        cmocka_unit_test_setup_teardown(test_pam_preauth_cert_nocert,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth_cert_nomatch,
-                                        pam_test_setup, pam_test_teardown),
+        /*cmocka_unit_test_setup_teardown(test_pam_preauth_cert_nomatch,
+                                        pam_test_setup, pam_test_teardown),*/
         cmocka_unit_test_setup_teardown(test_pam_preauth_cert_match,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth_cert_match_gdm_smartcard,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth_cert_match_wrong_user,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth_cert_no_logon_name,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_preauth_no_cert_no_logon_name,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(
-                                   test_pam_preauth_cert_no_logon_name_no_match,
-                                   pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_cert_auth,
-                                        pam_test_setup, pam_test_teardown),
-        cmocka_unit_test_setup_teardown(test_pam_cert_auth,
-                                        pam_test_setup_no_verification,
-                                        pam_test_teardown),
-#endif /* HAVE_NSS */
-
-        cmocka_unit_test_setup_teardown(test_filter_response,
                                         pam_test_setup, pam_test_teardown),
     };
 
