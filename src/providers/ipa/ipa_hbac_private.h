@@ -23,6 +23,7 @@
 #ifndef IPA_HBAC_PRIVATE_H_
 #define IPA_HBAC_PRIVATE_H_
 
+#include "providers/ipa/ipa_config.h"
 #include "providers/ipa/ipa_access.h"
 #include "lib/ipa_hbac/ipa_hbac.h"
 
