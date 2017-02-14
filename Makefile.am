@@ -287,11 +287,9 @@ if HAVE_CMOCKA
         simple-access-tests \
         krb5_common_test \
         test_iobuf \
+        sss_certmap_test \
         $(NULL)
 
-if HAVE_NSS
-non_interactive_cmocka_based_tests +=  sss_certmap_test
-endif #HAVE_NSS
 
 if HAVE_LIBRESOLV
 non_interactive_cmocka_based_tests += test_resolv_fake
@@ -1795,6 +1793,7 @@ libsss_certmap_la_SOURCES = \
     src/lib/certmap/sss_certmap_attr_names.c \
     src/lib/certmap/sss_certmap_krb5_match.c \
     src/lib/certmap/sss_certmap_ldap_mapping.c \
+    src/lib/certmap/sss_cert_content_common.c \
     src/util/util_ext.c \
     src/util/cert/cert_common.c \
     $(NULL)
@@ -3416,7 +3415,6 @@ test_inotify_LDADD = \
     libsss_test_common.la \
     $(NULL)
 
-if HAVE_NSS
 sss_certmap_test_SOURCES = \
     src/tests/cmocka/test_certmap.c \
     src/lib/certmap/sss_certmap_attr_names.c \
@@ -3434,7 +3432,6 @@ sss_certmap_test_LDADD = \
     libsss_test_common.la \
     libsss_certmap.la \
     $(NULL)
-endif
 
 if BUILD_KCM
 test_kcm_json_SOURCES = \

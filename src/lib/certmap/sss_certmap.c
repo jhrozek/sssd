@@ -314,6 +314,8 @@ done:
 static int get_dn_str(struct sss_certmap_ctx *ctx, const char *conversion,
                       const char **rdn_list, char **result)
 {
+    return rdn_list_2_dn_str(ctx, conversion, rdn_list, result);
+#if 0
     char *str = NULL;
     size_t c;
     int ret;
@@ -390,6 +392,7 @@ done:
     }
 
     return ret;
+#endif
 }
 
 static int expand_san_blob(struct sss_certmap_ctx *ctx, enum san_opt san_opt,

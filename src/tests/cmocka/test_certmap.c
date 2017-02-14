@@ -40,6 +40,11 @@
 #include "util/crypto/nss/nss_util.h"
 #endif
 
+#ifdef HAVE_LIBCRYPTO
+#include <openssl/crypto.h>
+#endif
+
+
 struct priv_sss_debug {
     int level;
 };
@@ -802,7 +807,6 @@ FIXME:
     assert_string_equal(content->subject_rdn_list[3], "CN=t u");
     assert_string_equal(content->subject_rdn_list[4],
                                                     "E=test.user@email.domain");
-                     //"CN=t u/emailAddress=test.user@email.domain");
     assert_null(content->subject_rdn_list[5]);
 
     assert_non_null(content->san_list);
@@ -1385,6 +1389,8 @@ static void test_sss_certmap_get_search_filter(void **state)
     assert_non_null(filter);
     assert_string_equal(filter, "(userCertificate;binary=" TEST_CERT2_BIN")");
     assert_null(domains);
+
+    sss_certmap_free_ctx(ctx);
 }
 
 int main(int argc, const char *argv[])
@@ -1437,6 +1443,10 @@ int main(int argc, const char *argv[])
 #ifdef HAVE_NSS
     /* Cleanup NSS and NSPR to make valgrind happy. */
     nspr_nss_cleanup();
+#endif
+
+#ifdef HAVE_LIBCRYPTO
+    CRYPTO_cleanup_all_ex_data(); /* to make valgrind happy */
 #endif
 
     return rv;

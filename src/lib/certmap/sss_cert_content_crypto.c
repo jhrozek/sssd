@@ -19,14 +19,636 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <errno.h>
+#include "config.h"
 
+#include <talloc.h>
+#include <openssl/x509v3.h>
+
+#include "util/crypto/sss_crypto.h"
+#include "util/cert.h"
 #include "lib/certmap/sss_certmap.h"
 #include "lib/certmap/sss_certmap_int.h"
+
+enum san_opt openssl_name_type_to_san_opt(int type)
+{
+    switch (type) {
+    case GEN_OTHERNAME:
+        return SAN_OTHER_NAME;
+    case GEN_EMAIL:
+        return SAN_RFC822_NAME;
+    case GEN_DNS:
+        return SAN_DNS_NAME;
+    case GEN_X400:
+        return SAN_X400_ADDRESS;
+    case GEN_DIRNAME:
+        return SAN_DIRECTORY_NAME;
+    case GEN_EDIPARTY:
+        return SAN_EDIPART_NAME;
+    case GEN_URI:
+        return SAN_URI;
+    case GEN_IPADD:
+        return SAN_IP_ADDRESS;
+    case GEN_RID:
+        return SAN_REGISTERED_ID;
+    default:
+        return SAN_INVALID;
+    }
+}
+
+static int add_string_other_name_to_san_list(TALLOC_CTX *mem_ctx,
+                                             enum san_opt san_opt,
+                                             OTHERNAME *other_name,
+                                             struct san_list **item)
+{
+    struct san_list *i = NULL;
+    int ret;
+    char oid_buf[128]; /* FIXME: any other size ?? */
+    int len;
+    unsigned char *p;
+
+    len = OBJ_obj2txt(oid_buf, sizeof(oid_buf), other_name->type_id, 1);
+    if (len <= 0) {
+        return EINVAL;
+    }
+
+    i = talloc_zero(mem_ctx, struct san_list);
+    if (i == NULL) {
+        return ENOMEM;
+    }
+    i->san_opt = san_opt;
+
+    i->other_name_oid = talloc_strndup(i, oid_buf, len);
+    if (i->other_name_oid == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    len = i2d_ASN1_TYPE(other_name->value, NULL);
+    if (len <= 0) {
+        ret = EINVAL;
+        goto done;
+    }
+
+    i->bin_val = talloc_size(mem_ctx, len);
+    if (i->bin_val == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    /* i2d_TYPE increment the second argument so that it points to the end of
+     * the written data hence we cannot use i->bin_val directly. */
+    p = i->bin_val;
+    i->bin_val_len = i2d_ASN1_TYPE(other_name->value, &p);
+
+    ret = 0;
+
+done:
+    if (ret == 0) {
+        *item = i;
+    } else {
+        talloc_free(i);
+    }
+
+    return ret;
+}
+
+static int add_nt_princ_to_san_list(TALLOC_CTX *mem_ctx,
+                                    enum san_opt san_opt,
+                                    GENERAL_NAME *current,
+                                    struct san_list **item)
+{
+    struct san_list *i = NULL;
+    int ret;
+    OTHERNAME *other_name = current->d.otherName;
+
+    if (ASN1_TYPE_get(other_name->value) != V_ASN1_UTF8STRING) {
+        return EINVAL;
+    }
+
+    i = talloc_zero(mem_ctx, struct san_list);
+    if (i == NULL) {
+        return ENOMEM;
+    }
+    i->san_opt = san_opt;
+
+    i->val = talloc_strndup(i,
+                 (char *) ASN1_STRING_data(other_name->value->value.utf8string),
+                 ASN1_STRING_length(other_name->value->value.utf8string));
+    if (i->val == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = get_short_name(i, i->val, '@', &(i->short_name));
+    if (ret != 0) {
+        goto done;
+    }
+
+    ret = 0;
+
+done:
+    if (ret == 0) {
+        *item = i;
+    } else {
+        talloc_free(i);
+    }
+
+    return ret;
+}
+
+static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
+                                        enum san_opt san_opt,
+                                        GENERAL_NAME *current,
+                                        struct san_list **item)
+{
+    return EINVAL;
+}
+
+static int add_ip_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,
+                              uint8_t *data, size_t len,
+                              struct san_list **item)
+{
+    struct san_list *i = NULL;
+
+    i = talloc_zero(mem_ctx, struct san_list);
+    if (i == NULL) {
+        return ENOMEM;
+    }
+    i->san_opt = san_opt;
+
+    i->val = talloc_strndup(i, (char *) data, len);
+    if (i->val == NULL) {
+        talloc_free(i);
+        return ENOMEM;
+    }
+
+    *item = i;
+    return 0;
+}
+
+static int get_rdn_list(TALLOC_CTX *mem_ctx, X509_NAME *name,
+                        const char ***rdn_list)
+{
+    int ret;
+    size_t c;
+    const char **list = NULL;
+    X509_NAME_ENTRY *e;
+    ASN1_STRING *rdn_str;
+    ASN1_OBJECT *rdn_name;
+    BIO *bio_mem = NULL;
+    char *tmp_str;
+    long tmp_str_size;
+
+    int nid;
+    const char *sn;
+
+    bio_mem = BIO_new(BIO_s_mem());
+    if (bio_mem == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    list = talloc_zero_array(mem_ctx, const char *,
+                             X509_NAME_entry_count(name) + 1);
+    if (list == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    for (c = 0; c < X509_NAME_entry_count(name); c++) {
+        e = X509_NAME_get_entry(name, c);
+        rdn_str = X509_NAME_ENTRY_get_data(e);
+
+        ret = ASN1_STRING_print_ex(bio_mem, rdn_str,ASN1_STRFLGS_RFC2253);
+        if (ret < 0) {
+            ret = EIO;
+            goto done;
+        }
+
+        tmp_str_size = BIO_get_mem_data(bio_mem, &tmp_str);
+        if (tmp_str_size == 0) {
+            ret = EINVAL;
+            goto done;
+        }
+
+        rdn_name = X509_NAME_ENTRY_get_object(e);
+        nid = OBJ_obj2nid(rdn_name);
+        sn = OBJ_nid2sn(nid);
+
+        list[c] = talloc_asprintf(list, "%s=%.*s", openssl_2_nss_attr_name(sn),
+                                                   (int) tmp_str_size, tmp_str);
+        BIO_reset(bio_mem);
+        if (list[c] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    ret = 0;
+
+done:
+    BIO_free_all(bio_mem);
+    if (ret == 0) {
+        *rdn_list = list;
+    } else {
+        talloc_free(list);
+    }
+
+    return ret;
+}
+
+static int add_rdn_list_to_san_list(TALLOC_CTX *mem_ctx,
+                                    enum san_opt san_opt,
+                                    X509_NAME *name,
+                                    struct san_list **item)
+{
+    struct san_list *i = NULL;
+    int ret;
+
+    i = talloc_zero(mem_ctx, struct san_list);
+    if (i == NULL) {
+        return ENOMEM;
+    }
+    i->san_opt = san_opt;
+
+    ret = get_rdn_list(i, name, &(i->rdn_list));
+    if (ret != 0) {
+        talloc_free(i);
+        return ret;
+    }
+
+    *item = i;
+    return 0;
+}
+
+static int add_oid_to_san_list(TALLOC_CTX *mem_ctx,
+                               enum san_opt san_opt,
+                               ASN1_OBJECT *oid,
+                               struct san_list **item)
+{
+    return EINVAL;
+}
+
+static int get_san(TALLOC_CTX *mem_ctx, X509 *cert, struct san_list **san_list)
+{
+    STACK_OF(GENERAL_NAME) *extsan = NULL;
+    GENERAL_NAME *current;
+    size_t c;
+    int ret;
+    int crit;
+    struct san_list *list = NULL;
+    struct san_list *item = NULL;
+    struct san_list *item_s = NULL;
+    struct san_list *item_p = NULL;
+    struct san_list *item_pb = NULL;
+    int len;
+    unsigned char *data;
+    unsigned char *p;
+
+    extsan = X509_get_ext_d2i(cert, NID_subject_alt_name, &crit, NULL);
+    if (extsan == NULL) {
+        if (crit == -1) { /* extension could not be found */
+            return EOK;
+        } else {
+            return EINVAL;
+        }
+    }
+
+    for (c = 0; c < sk_GENERAL_NAME_num(extsan); c++) {
+        current = sk_GENERAL_NAME_value(extsan, c);
+        switch (current->type) {
+        case GEN_OTHERNAME:
+            ret = add_string_other_name_to_san_list(mem_ctx,
+                                                    SAN_STRING_OTHER_NAME,
+                                                    current->d.otherName,
+                                                    &item_s);
+            if (ret != 0) {
+                goto done;
+            }
+            DLIST_ADD(list, item_s);
+
+            item_p = NULL;
+            if (strcmp(item_s->other_name_oid, NT_PRINCIPAL_OID) == 0) {
+                ret = add_nt_princ_to_san_list(mem_ctx, SAN_NT, current,
+                                               &item_p);
+                if (ret != 0) {
+                    goto done;
+                }
+                DLIST_ADD(list, item_p);
+            } else if (strcmp(item_s->other_name_oid, PKINIT_OID) == 0) {
+                ret = add_pkinit_princ_to_san_list(mem_ctx, SAN_PKINIT,
+                                                   current, &item_p);
+                if (ret != 0) {
+                    goto done;
+                }
+                DLIST_ADD(list, item_p);
+            }
+
+            if (item_p != NULL) {
+                ret = add_principal_to_san_list(mem_ctx, SAN_PRINCIPAL,
+                                                item_p->val, &item_pb);
+                if (ret != 0) {
+                    goto done;
+                }
+                DLIST_ADD(list, item_pb);
+            }
+
+            break;
+            break;
+        case GEN_EMAIL:
+            ret = add_to_san_list(mem_ctx, false,
+                                  openssl_name_type_to_san_opt(current->type),
+                                  ASN1_STRING_data(current->d.rfc822Name),
+                                  ASN1_STRING_length(current->d.rfc822Name),
+                                  &item);
+            if (ret != 0) {
+                goto done;
+            }
+
+            ret = get_short_name(item, item->val, '@', &(item->short_name));
+            if (ret != 0) {
+                goto done;
+            }
+
+            DLIST_ADD(list, item);
+            break;
+        case GEN_DNS:
+            ret = add_to_san_list(mem_ctx, false,
+                                  openssl_name_type_to_san_opt(current->type),
+                                  ASN1_STRING_data(current->d.dNSName),
+                                  ASN1_STRING_length(current->d.dNSName),
+                                  &item);
+            if (ret != 0) {
+                goto done;
+            }
+
+            ret = get_short_name(item, item->val, '.', &(item->short_name));
+            if (ret != 0) {
+                goto done;
+            }
+
+            DLIST_ADD(list, item);
+            break;
+        case GEN_URI:
+            ret = add_to_san_list(mem_ctx, false,
+                      openssl_name_type_to_san_opt(current->type),
+                      ASN1_STRING_data(current->d.uniformResourceIdentifier),
+                      ASN1_STRING_length(current->d.uniformResourceIdentifier),
+                      &item);
+            if (ret != 0) {
+                goto done;
+            }
+            break;
+        case GEN_IPADD:
+            ret = add_ip_to_san_list(mem_ctx,
+                                    openssl_name_type_to_san_opt(current->type),
+                                    ASN1_STRING_data(current->d.iPAddress),
+                                    ASN1_STRING_length(current->d.iPAddress),
+                                    &item);
+            if (ret != 0) {
+                goto done;
+            }
+            DLIST_ADD(list, item);
+            break;
+        case GEN_DIRNAME:
+            ret = add_rdn_list_to_san_list(mem_ctx,
+                                    openssl_name_type_to_san_opt(current->type),
+                                    current->d.directoryName, &item);
+            if (ret != 0) {
+                goto done;
+            }
+            DLIST_ADD(list, item);
+            break;
+        case GEN_RID:
+            ret = add_oid_to_san_list(mem_ctx,
+                                    openssl_name_type_to_san_opt(current->type),
+                                    current->d.registeredID, &item);
+            if (ret != 0) {
+                goto done;
+            }
+            DLIST_ADD(list, item);
+            break;
+        case GEN_X400:
+            len = i2d_ASN1_TYPE(current->d.x400Address, NULL);
+            if (len <= 0) {
+                ret = EINVAL;
+                goto done;
+            }
+
+            data = talloc_size(mem_ctx, len);
+            if (data == NULL) {
+                ret = ENOMEM;
+                goto done;
+            }
+
+            /* i2d_TYPE increment the second argument so that it points to the end of
+             * the written data hence we cannot use i->bin_val directly. */
+            p = data;
+            len = i2d_ASN1_TYPE(current->d.x400Address, &p);
+
+            ret = add_to_san_list(mem_ctx, true,
+                                  openssl_name_type_to_san_opt(current->type),
+                                  data, len, &item);
+            if (ret != 0) {
+                goto done;
+            }
+            DLIST_ADD(list, item);
+            break;
+        case GEN_EDIPARTY:
+            len = i2d_EDIPARTYNAME(current->d.ediPartyName, NULL);
+            if (len <= 0) {
+                ret = EINVAL;
+                goto done;
+            }
+
+            data = talloc_size(mem_ctx, len);
+            if (data == NULL) {
+                ret = ENOMEM;
+                goto done;
+            }
+
+            /* i2d_TYPE increment the second argument so that it points to the end of
+             * the written data hence we cannot use i->bin_val directly. */
+            p = data;
+            len = i2d_EDIPARTYNAME(current->d.ediPartyName, &data);
+
+            ret = add_to_san_list(mem_ctx, true,
+                                  openssl_name_type_to_san_opt(current->type),
+                                  data, len, &item);
+            if (ret != 0) {
+                goto done;
+            }
+            DLIST_ADD(list, item);
+            break;
+        default:
+            ret = EINVAL;
+            goto done;
+        }
+   }
+
+done:
+    GENERAL_NAMES_free(extsan);
+
+    if (ret == EOK) {
+        *san_list = list;
+    }
+
+    return ret;
+}
+
+static int get_extended_key_usage_oids(TALLOC_CTX *mem_ctx,
+                                       X509 *cert,
+                                       const char ***_oids)
+{
+    const char **oids_list = NULL;
+    size_t c;
+    int ret;
+    char oid_buf[128]; /* FIXME: any other size ?? */
+    int len;
+    EXTENDED_KEY_USAGE *extusage = NULL;
+
+
+    extusage = X509_get_ext_d2i(cert, NID_ext_key_usage, NULL, NULL);
+    if (extusage == NULL) {
+        return EIO;
+    }
+
+    oids_list = talloc_zero_array(mem_ctx, const char *,
+                                  sk_ASN1_OBJECT_num(extusage) + 1);
+    if (oids_list == NULL) {
+        return ENOMEM;
+    }
+
+    for (c = 0; c < sk_ASN1_OBJECT_num(extusage); c++) {
+        len = OBJ_obj2txt(oid_buf, sizeof(oid_buf),
+                          sk_ASN1_OBJECT_value(extusage, c) , 1);
+        if (len < 0) {
+            return EIO;
+        }
+
+        oids_list[c] = talloc_strndup(oids_list, oid_buf, len);
+        if(oids_list[c] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    ret = 0;
+
+done:
+    sk_ASN1_OBJECT_pop_free(extusage, ASN1_OBJECT_free);
+    if (ret == 0) {
+        *_oids = oids_list;
+    } else {
+        talloc_free(oids_list);
+    }
+
+    return ret;
+
+}
 
 int sss_cert_get_content(TALLOC_CTX *mem_ctx,
                          const uint8_t *der_blob, size_t der_size,
                          struct sss_cert_content **content)
 {
-    return EINVAL;
+    int ret;
+    struct sss_cert_content *cont = NULL;
+    X509 *cert = NULL;
+    const unsigned char *der;
+    BIO *bio_mem = NULL;
+    X509_NAME *tmp_name;
+
+    if (der_blob == NULL || der_size == 0) {
+        return EINVAL;
+    }
+
+    cont = talloc_zero(mem_ctx, struct sss_cert_content);
+    if (cont == NULL) {
+        return ENOMEM;
+    }
+
+    bio_mem = BIO_new(BIO_s_mem());
+    if (bio_mem == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    der = (const unsigned char *) der_blob;
+    cert = d2i_X509(NULL, &der, (int) der_size);
+    if (cert == NULL) {
+        ret = EINVAL;
+        goto done;
+    }
+
+    tmp_name = X509_get_issuer_name(cert);
+
+    ret = get_rdn_list(cont, tmp_name, &cont->issuer_rdn_list);
+    if (ret != 0) {
+        goto done;
+    }
+
+    ret = rdn_list_2_dn_str(cont, NULL, cont->issuer_rdn_list,
+                            &cont->issuer_str);
+    if (ret != 0) {
+        goto done;
+    }
+
+    tmp_name = X509_get_subject_name(cert);
+
+    ret = get_rdn_list(cont, tmp_name, &cont->subject_rdn_list);
+    if (ret != 0) {
+        goto done;
+    }
+
+    ret = rdn_list_2_dn_str(cont, NULL, cont->subject_rdn_list,
+                            &cont->subject_str);
+    if (ret != 0) {
+        goto done;
+    }
+
+    ret = X509_check_purpose(cert, -1, -1);
+    if (ret < 0) {
+        ret = EIO;
+        goto done;
+    }
+     if (!(cert->ex_flags & EXFLAG_KUSAGE)) {
+        ret = EINVAL;
+        goto done;
+    }
+    cont->key_usage = cert->ex_kusage;
+
+    ret = get_extended_key_usage_oids(cont, cert,
+                                      &(cont->extended_key_usage_oids));
+    if (ret != 0) {
+        goto done;
+    }
+
+    ret = get_san(cont, cert, &(cont->san_list));
+    if (ret != 0) {
+        goto done;
+    }
+
+    cont->cert_der = talloc_memdup(cont, der_blob, der_size);
+    if (cont->cert_der == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    cont->cert_der_size = der_size;
+
+    ret = EOK;
+
+done:
+
+    X509_free(cert);
+    BIO_free_all(bio_mem);
+    CRYPTO_cleanup_all_ex_data();
+
+    if (ret == EOK) {
+        *content = cont;
+    } else {
+        talloc_free(cont);
+    }
+
+    return ret;
 }
