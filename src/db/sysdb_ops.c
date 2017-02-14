@@ -5006,3 +5006,85 @@ done:
     talloc_free(tmp_ctx);
     return ret;
 }
+
+enum sysdb_entry_type {
+    TYPE_USER=0,
+    TYPE_GROUP
+};
+
+static int sysdb_invalidate_cache_entry(struct sss_domain_info *domain,
+                                        const char *name,
+                                        enum sysdb_entry_type entry_type)
+{
+    TALLOC_CTX *tmp_ctx;
+    struct sysdb_ctx *sysdb = domain->sysdb;
+    struct ldb_dn *entry_dn = NULL;
+    struct sysdb_attrs *attrs = NULL;
+    errno_t ret;
+
+    tmp_ctx = talloc_new(NULL);
+    if (!tmp_ctx) {
+        return ENOMEM;
+    }
+
+    switch (entry_type) {
+        case TYPE_USER:
+            entry_dn = sysdb_user_dn(tmp_ctx, domain, name);
+            break;
+        case TYPE_GROUP:
+            entry_dn = sysdb_group_dn(tmp_ctx, domain, name);
+            break;
+        default:
+            DEBUG(SSSDBG_MINOR_FAILURE, "Wrong sysdb_entry_type.\n");
+    }
+
+    if (entry_dn == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    attrs = sysdb_new_attrs(tmp_ctx);
+    if (attrs == NULL) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "Could not create sysdb attributes\n");
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = sysdb_attrs_add_time_t(attrs, SYSDB_CACHE_EXPIRE, 1);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Could not add expiration time to attributes\n");
+        goto done;
+    }
+
+    ret = sysdb_set_cache_entry_attr(sysdb->ldb, entry_dn,
+                                     attrs, SYSDB_MOD_REP);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Cannot set attrs for %s, %d [%s]\n",
+              ldb_dn_get_linearized(entry_dn), ret, sss_strerror(ret));
+        goto done;
+    }
+
+    DEBUG(SSSDBG_FUNC_DATA,
+          "Cache entry [%s] has been invalidated.\n",
+          ldb_dn_get_linearized(entry_dn));
+
+    ret = EOK;
+
+done:
+    talloc_zfree(tmp_ctx);
+    return ret;
+}
+
+int sysdb_invalidate_user_cache_entry(struct sss_domain_info *domain,
+                                      const char *name)
+{
+    return sysdb_invalidate_cache_entry(domain, name, TYPE_USER);
+}
+
+int sysdb_invalidate_group_cache_entry(struct sss_domain_info *domain,
+                                       const char *name)
+{
+    return sysdb_invalidate_cache_entry(domain, name, TYPE_GROUP);
+}

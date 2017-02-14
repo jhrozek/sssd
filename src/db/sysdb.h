@@ -868,6 +868,13 @@ int sysdb_search_netgroup_by_name(TALLOC_CTX *mem_ctx,
                                   const char **attrs,
                                   struct ldb_message **msg);
 
+/* Invalidate user entry in domain cache */
+int sysdb_invalidate_user_cache_entry(struct sss_domain_info *domain,
+                                      const char *name);
+
+/* Invalidate group entry in domain cache */
+int sysdb_invalidate_group_cache_entry(struct sss_domain_info *domain,
+                                       const char *name);
 /* Replace entry attrs */
 int sysdb_set_entry_attr(struct sysdb_ctx *sysdb,
                          struct ldb_dn *entry_dn,
