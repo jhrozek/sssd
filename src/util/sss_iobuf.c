@@ -7,8 +7,8 @@
  * @brief The iobuf structure that holds the data, its capacity and
  * a pointer to the data.
  *
- * @see sss_iobuf_init()
- * @see sss_iobuf_tc()
+ * @see sss_iobuf_init_empty()
+ * @see sss_iobuf_init_readonly()
  */
 struct sss_iobuf {
     uint8_t *data;          /* Start of the data buffer */
