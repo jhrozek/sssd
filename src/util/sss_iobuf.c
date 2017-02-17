@@ -71,6 +71,7 @@ size_t sss_iobuf_get_len(struct sss_iobuf *iobuf)
     if (iobuf == NULL) {
         return 0;
     }
+
     return iobuf->dp;
 }
 
@@ -79,6 +80,7 @@ size_t sss_iobuf_get_capacity(struct sss_iobuf *iobuf)
     if (iobuf == NULL) {
         return 0;
     }
+
     return iobuf->capacity;
 }
 
@@ -87,6 +89,7 @@ size_t sss_iobuf_get_size(struct sss_iobuf *iobuf)
     if (iobuf == NULL) {
         return 0;
     }
+
     return iobuf->size;
 }
 
@@ -95,6 +98,7 @@ uint8_t *sss_iobuf_get_data(struct sss_iobuf *iobuf)
     if (iobuf == NULL) {
         return NULL;
     }
+
     return iobuf->data;
 }
 
@@ -146,6 +150,7 @@ static errno_t ensure_bytes(struct sss_iobuf *iobuf,
 
     iobuf->data = newdata;
     iobuf->size = newsize;
+
     return EOK;
 }
 
@@ -194,5 +199,6 @@ errno_t sss_iobuf_write_len(struct sss_iobuf *iobuf,
     }
 
     safealign_memcpy(iobuf_ptr(iobuf), buf, len, &iobuf->dp);
+
     return EOK;
 }
