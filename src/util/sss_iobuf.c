@@ -18,21 +18,6 @@ struct sss_iobuf {
     size_t capacity;        /* Maximum capacity */
 };
 
-static void iobuf_init(struct sss_iobuf *iobuf,
-                       uint8_t *data,
-                       size_t size,
-                       size_t capacity)
-{
-    if (capacity == 0) {
-        capacity = SIZE_MAX/2;
-    }
-
-    iobuf->data = data;
-    iobuf->size = size;
-    iobuf->capacity = capacity;
-    iobuf->dp = 0;
-}
-
 struct sss_iobuf *sss_iobuf_init_empty(TALLOC_CTX *mem_ctx,
                                        size_t size,
                                        size_t capacity)
@@ -51,7 +36,15 @@ struct sss_iobuf *sss_iobuf_init_empty(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    iobuf_init(iobuf, buf, size, capacity);
+    if (capacity == 0) {
+        capacity = SIZE_MAX/2;
+    }
+
+    iobuf->data = data;
+    iobuf->size = size;
+    iobuf->capacity = capacity;
+    iobuf->dp = 0;
+
     return iobuf;
 }
 
