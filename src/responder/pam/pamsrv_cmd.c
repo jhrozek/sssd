@@ -1546,24 +1546,32 @@ static int pam_check_user_search(struct pam_auth_req *preq)
     struct tevent_req *dpreq;
     struct pam_ctx *pctx;
     struct cache_req_data *data;
+    char *name;
+
+    if (preq->pd->logon_name == NULL) {
+        name = talloc_asprintf(preq,
+                               "%s@%s", preq->pd->user, preq->pd->domain);
+    }
 
     data = cache_req_data_name(preq,
                                CACHE_REQ_INITGROUPS,
-                               preq->pd->logon_name);
+                               preq->pd->logon_name ? preq->pd->logon_name : name);
 
     pctx = talloc_get_type(preq->cctx->rctx->pvt_ctx, struct pam_ctx);
-    ret = pam_initgr_check_timeout(pctx->id_table,
-                                   preq->pd->logon_name);
-    if (ret == EOK) {
-        /* Entry is still valid, force to lookup in the cache first */
-        cache_req_data_set_bypass_cache(data, false);
-    } else if (ret == ENOENT) {
-        /* Call the data provider first */
-        cache_req_data_set_bypass_cache(data, true);
-    } else {
-        DEBUG(SSSDBG_OP_FAILURE,
-                "Could not look up initgroup timeout\n");
-        return EIO;
+
+    if (preq->pd->logon_name != NULL) {
+        ret = pam_initgr_check_timeout(pctx->id_table, preq->pd->logon_name);
+        if (ret == EOK) {
+            /* Entry is still valid, force to lookup in the cache first */
+            cache_req_data_set_bypass_cache(data, false);
+        } else if (ret == ENOENT) {
+            /* Call the data provider first */
+            cache_req_data_set_bypass_cache(data, true);
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                    "Could not look up initgroup timeout\n");
+            return EIO;
+        }
     }
 
     dpreq = cache_req_send(preq,
@@ -1605,7 +1613,8 @@ static void pam_dp_send_acct_req_done(struct tevent_req *req)
     }
 
     if (ret == EOK) {
-        pd_set_primary_name(result->msgs[0], preq->pd);
+        preq->user_obj = result->msgs[0];
+        pd_set_primary_name(preq->user_obj, preq->pd);
         preq->domain = result->domain;
 
         ret = pam_initgr_cache_set(pctx->rctx->ev,
