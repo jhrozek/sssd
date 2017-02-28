@@ -1462,6 +1462,9 @@ static int pam_check_user_search(struct pam_auth_req *preq)
     data = cache_req_data_name(preq,
                                CACHE_REQ_INITGROUPS,
                                preq->pd->user);
+    if (data == NULL) {
+        return ENOMEM;
+    }
 
     pctx = talloc_get_type(preq->cctx->rctx->pvt_ctx, struct pam_ctx);
 
