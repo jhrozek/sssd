@@ -1432,7 +1432,16 @@ static void pam_forwarder_cb(struct tevent_req *req)
     pd = preq->pd;
 
     ret = pam_forwarder_parse_data(cctx, pd);
-    if (ret != EOK) {
+    if (ret == EAGAIN) {
+        DEBUG(SSSDBG_TRACE_FUNC, "Assuming %s is a UPN\n", pd->logon_name);
+        /* If not, cache_req will error out later */
+        pd->user = talloc_strdup(pd, pd->logon_name);
+        if (pd->user == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+        pd->domain = NULL;
+    } else if (ret != EOK) {
         ret = EINVAL;
         goto done;
     }
