@@ -239,6 +239,28 @@ errno_t sss_iobuf_read_int32(struct sss_iobuf *iobuf,
     return EOK;
 }
 
+errno_t sss_iobuf_read_uint16(struct sss_iobuf *iobuf,
+                              uint16_t *_val)
+{
+    SAFEALIGN_COPY_UINT16_CHECK(_val, iobuf_ptr(iobuf),
+                                iobuf->capacity, &iobuf->dp);
+    return EOK;
+}
+
+errno_t sss_iobuf_write_uint16(struct sss_iobuf *iobuf,
+                               uint16_t val)
+{
+    errno_t ret;
+
+    ret = ensure_bytes(iobuf, sizeof(uint16_t));
+    if (ret != EOK) {
+        return ret;
+    }
+
+    SAFEALIGN_SETMEM_UINT16(iobuf_ptr(iobuf), val, &iobuf->dp);
+    return EOK;
+}
+
 errno_t sss_iobuf_write_uint32(struct sss_iobuf *iobuf,
                                uint32_t val)
 {

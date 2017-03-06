@@ -143,6 +143,12 @@ errno_t sss_iobuf_read_int32(struct sss_iobuf *iobuf,
 errno_t sss_iobuf_write_int32(struct sss_iobuf *iobuf,
                               int32_t val);
 
+errno_t sss_iobuf_read_uint16(struct sss_iobuf *iobuf,
+                              uint16_t *_val);
+
+errno_t sss_iobuf_write_uint16(struct sss_iobuf *iobuf,
+                               uint16_t val);
+
 errno_t sss_iobuf_read_stringz(struct sss_iobuf *iobuf,
                                const char **_out);
 
