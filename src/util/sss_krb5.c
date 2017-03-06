@@ -1145,6 +1145,30 @@ static errno_t iobuf_read_uint32be(struct sss_iobuf *iobuf,
     return EOK;
 }
 
+static errno_t iobuf_read_uint16be(struct sss_iobuf *iobuf,
+                                   uint16_t *_val)
+{
+    uint16_t beval;
+    errno_t ret;
+
+    ret = sss_iobuf_read_uint16(iobuf, &beval);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    *_val = be16toh(beval);
+    return EOK;
+}
+
+static errno_t iobuf_write_uint16be(struct sss_iobuf *iobuf,
+                                    uint16_t val)
+{
+    uint16_t beval;
+
+    beval = htobe16(val);
+    return sss_iobuf_write_uint16(iobuf, beval);
+}
+
 static errno_t iobuf_write_uint32be(struct sss_iobuf *iobuf,
                                     uint32_t val)
 {
@@ -1152,6 +1176,15 @@ static errno_t iobuf_write_uint32be(struct sss_iobuf *iobuf,
 
     beval = htobe32(val);
     return sss_iobuf_write_uint32(iobuf, beval);
+}
+
+static errno_t iobuf_write_int32be(struct sss_iobuf *iobuf,
+                                   int32_t val)
+{
+    int32_t beval;
+
+    beval = htobe32(val);
+    return sss_iobuf_write_int32(iobuf, beval);
 }
 
 static errno_t iobuf_get_len_bytes(TALLOC_CTX *mem_ctx,
@@ -1181,6 +1214,27 @@ static errno_t iobuf_get_len_bytes(TALLOC_CTX *mem_ctx,
 
     *_bytes = bytes;
     *_nbytes = nbytes;
+    return EOK;
+}
+
+static errno_t iobuf_put_len_bytes(struct sss_iobuf *iobuf,
+                                   uint32_t nbytes,
+                                   uint8_t *bytes)
+{
+    errno_t ret;
+
+    ret = iobuf_write_uint32be(iobuf, nbytes);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    if (nbytes > 0) {
+        ret = sss_iobuf_write_len(iobuf, bytes, nbytes);
+        if (ret != EOK) {
+            return ret;
+        }
+    }
+
     return EOK;
 }
 
@@ -1322,4 +1376,430 @@ krb5_error_code sss_krb5_marshal_princ(krb5_principal princ,
         }
     }
     return EOK;
+}
+
+static errno_t unmarshal_keyblock(TALLOC_CTX *data_owner,
+                                  struct sss_iobuf *iobuf,
+                                  krb5_keyblock *kb)
+{
+    errno_t ret;
+
+    memset(kb, 0, sizeof(*kb));
+    kb->magic = KV5M_KEYBLOCK;
+
+    /* enctypes can be negative, so sign-extend the 16-bit result. */
+    ret = iobuf_read_uint16be(iobuf, (uint16_t *) &kb->enctype);
+    if (ret != EOK) {
+        return EOK;
+    }
+
+    ret = iobuf_get_len_bytes(data_owner, iobuf,
+                              &kb->length, &kb->contents);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
+static errno_t marshal_addr(struct sss_iobuf *iobuf,
+                            krb5_address *addr)
+{
+    errno_t ret;
+
+    ret = iobuf_write_int32be(iobuf, addr->addrtype);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_put_len_bytes(iobuf, addr->length, addr->contents);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
+static errno_t marshal_addrs(struct sss_iobuf *iobuf,
+                             krb5_address **addrs)
+{
+    errno_t ret;
+    uint32_t acount;
+
+    for (acount = 0; addrs != NULL && addrs[acount] != NULL; acount++);
+
+    ret = iobuf_write_uint32be(iobuf, acount);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    for (uint32_t i = 0; i < acount; i++) {
+        ret = marshal_addr(iobuf, addrs[i]);
+        if (ret != EOK) {
+            return ret;
+        }
+    }
+
+    return EOK;
+}
+
+static errno_t unmarshal_addr(TALLOC_CTX *mem_ctx,
+                              struct sss_iobuf *iobuf,
+                              krb5_address **_addr)
+{
+    krb5_address *addr;
+    errno_t ret;
+
+    addr = talloc_zero(mem_ctx, krb5_address);
+    if (addr == NULL) {
+        return ENOMEM;
+    }
+
+    addr->magic = KV5M_ADDRESS;
+
+    ret = iobuf_read_uint16be(iobuf, (uint16_t *) &addr->addrtype);
+    if (ret != EOK) {
+        talloc_free(addr);
+        return ret;
+    }
+
+    ret = iobuf_get_len_bytes(addr, iobuf, &addr->length, &addr->contents);
+    if (ret != EOK) {
+        talloc_free(addr);
+        return ret;
+    }
+
+    *_addr = addr;
+    return EOK;
+}
+
+static errno_t unmarshal_addrs(TALLOC_CTX *mem_ctx,
+                               struct sss_iobuf *iobuf,
+                               krb5_address ***_addresses)
+{
+    errno_t ret;
+    uint32_t acount;
+    krb5_address **addresses;
+
+    ret = iobuf_read_uint32be(iobuf, &acount);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    if (acount == 0) {
+        *_addresses = NULL;
+        return EOK;
+    }
+
+    addresses = talloc_zero_array(mem_ctx, krb5_address *, acount);
+    if (addresses == NULL) {
+        return ENOMEM;
+    }
+
+    for (uint32_t i = 0; i < acount; i++) {
+        ret = unmarshal_addr(addresses, iobuf, &addresses[i]);
+        if (ret != EOK) {
+            talloc_free(addresses);
+            return ret;
+        }
+    }
+
+    *_addresses = addresses;
+    return EOK;
+}
+
+static errno_t marshal_authdatum(struct sss_iobuf *iobuf,
+                                 krb5_authdata *authdatum)
+{
+    errno_t ret;
+
+    /* Authdata types can be negative, so sign-extend the get16 result. */
+    ret = iobuf_write_int32be(iobuf, authdatum->ad_type);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_put_len_bytes(iobuf, authdatum->length, authdatum->contents);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
+static errno_t marshal_authdata(struct sss_iobuf *iobuf,
+                                krb5_authdata **authdata)
+{
+    errno_t ret;
+    uint32_t acount;
+
+    for (acount = 0; authdata != NULL && authdata[acount] != NULL; acount++);
+
+    ret = iobuf_write_uint32be(iobuf, acount);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    for (uint32_t i = 0; i < acount; i++) {
+        ret = marshal_authdatum(iobuf, authdata[i]);
+        if (ret != EOK) {
+            talloc_free(authdata);
+            return ret;
+        }
+    }
+
+    return EOK;
+}
+
+static errno_t unmarshal_authdatum(TALLOC_CTX *mem_ctx,
+                                   struct sss_iobuf *iobuf,
+                                   krb5_authdata **_authdatum)
+{
+    errno_t ret;
+    krb5_authdata *authdatum;
+
+    authdatum = talloc_zero(mem_ctx, krb5_authdata);
+    if (authdatum == NULL) {
+        return ENOMEM;
+    }
+
+    authdatum->magic = KV5M_ADDRESS;
+    /* Authdata types can be negative, so sign-extend the get16 result. */
+    ret = iobuf_read_uint16be(iobuf, (uint16_t *) &authdatum->ad_type);
+    if (ret != EOK) {
+        talloc_free(authdatum);
+        return ret;
+    }
+
+    ret = iobuf_get_len_bytes(authdatum, iobuf,
+                              &authdatum->length, &authdatum->contents);
+    if (ret != EOK) {
+        talloc_free(authdatum);
+        return ret;
+    }
+
+    *_authdatum = authdatum;
+    return EOK;
+}
+
+static errno_t unmarshal_authdata(TALLOC_CTX *mem_ctx,
+                                  struct sss_iobuf *iobuf,
+                                  krb5_authdata ***_authdata)
+{
+    errno_t ret;
+    uint32_t acount;
+    krb5_authdata **authdata;
+
+    ret = iobuf_read_uint32be(iobuf, &acount);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    if (acount == 0) {
+        *_authdata = NULL;
+        return EOK;
+    }
+
+    authdata = talloc_zero_array(mem_ctx, krb5_authdata *, acount);
+    if (authdata == NULL) {
+        return ENOMEM;
+    }
+
+    for (uint32_t i = 0; i < acount; i++) {
+        ret = unmarshal_authdatum(authdata, iobuf, &authdata[i]);
+        if (ret != EOK) {
+            talloc_free(authdata);
+            return ret;
+        }
+    }
+
+    *_authdata = authdata;
+    return EOK;
+}
+
+static errno_t marshall_keyblock(struct sss_iobuf *iobuf,
+                                 krb5_keyblock kb)
+{
+    errno_t ret;
+
+    /* enctypes can be negative, so sign-extend the 16-bit result. */
+    ret = iobuf_write_uint16be(iobuf, kb.enctype);
+    if (ret != EOK) {
+        return EOK;
+    }
+
+    ret = iobuf_put_len_bytes(iobuf, kb.length, kb.contents);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
+krb5_error_code sss_krb5_marshal_creds(struct sss_iobuf *iobuf,
+                                       krb5_creds *creds)
+{
+    krb5_error_code ret;
+    uint8_t is_skey;
+
+    if (iobuf == NULL || creds == NULL) {
+        return EINVAL;
+    }
+
+    ret = sss_krb5_marshal_princ(creds->client, iobuf);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = sss_krb5_marshal_princ(creds->server, iobuf);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = marshall_keyblock(iobuf, creds->keyblock);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_write_uint32be(iobuf, creds->times.authtime);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_write_uint32be(iobuf, creds->times.starttime);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_write_uint32be(iobuf, creds->times.endtime);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_write_uint32be(iobuf, creds->times.renew_till);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    is_skey = creds->is_skey;
+    ret = sss_iobuf_write_len(iobuf, &is_skey, 1);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = iobuf_write_uint32be(iobuf, creds->ticket_flags);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = marshal_addrs(iobuf, creds->addresses);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = marshal_authdata(iobuf, creds->authdata);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = set_krb5_data(iobuf, &creds->ticket);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    ret = set_krb5_data(iobuf, &creds->second_ticket);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
+krb5_error_code sss_krb5_unmarshal_creds(TALLOC_CTX *mem_ctx,
+                                         struct sss_iobuf *iobuf,
+                                         krb5_creds **_creds)
+{
+    krb5_creds *creds;
+    krb5_error_code ret;
+
+    if (iobuf == NULL || _creds == NULL) {
+        return EINVAL;
+    }
+
+    creds = talloc_zero(mem_ctx, krb5_creds);
+    if (creds == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sss_krb5_unmarshal_princ(creds, iobuf, &creds->client);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = sss_krb5_unmarshal_princ(creds, iobuf, &creds->server);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = unmarshal_keyblock(creds, iobuf, &creds->keyblock);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = iobuf_read_uint32be(iobuf, (uint32_t *) &creds->times.authtime);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = iobuf_read_uint32be(iobuf, (uint32_t *) &creds->times.starttime);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = iobuf_read_uint32be(iobuf, (uint32_t *) &creds->times.endtime);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = iobuf_read_uint32be(iobuf, (uint32_t *) &creds->times.renew_till);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = sss_iobuf_read_len(iobuf, 1, (uint8_t *) &creds->is_skey);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = iobuf_read_uint32be(iobuf, (uint32_t *) &creds->ticket_flags);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = unmarshal_addrs(creds, iobuf, &creds->addresses);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = unmarshal_authdata(creds, iobuf, &creds->authdata);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = get_krb5_data(creds, iobuf, &creds->ticket);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    ret = get_krb5_data(creds, iobuf, &creds->second_ticket);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    *_creds = talloc_steal(mem_ctx, creds);
+    return EOK;
+
+fail:
+    talloc_free(creds);
+    return ret == EINVAL ? KRB5_CC_FORMAT : ret;
 }
