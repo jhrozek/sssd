@@ -217,8 +217,8 @@ def run_curlwrap_tool(args, exp_http_code):
     return out
 
 
-def test_curlwrap_crd_ops(setup_for_secrets,
-                          curlwrap_tool):
+def test_curlwrap_crud_ops(setup_for_secrets,
+                           curlwrap_tool):
     """
     Test that the basic Create, Retrieve, Delete operations work using our
     tevent libcurl code
@@ -266,6 +266,20 @@ def test_curlwrap_crd_ops(setup_for_secrets,
                        'http://localhost/secrets/foo',
                        'baz'],
                       409)
+
+    # Patching a secret is not
+    run_curlwrap_tool([curlwrap_tool, '-a',
+                       '-v', '-s', sock_path,
+                       'http://localhost/secrets/foo',
+                       'baz'],
+                      200)
+
+    # get the foo secret
+    output = run_curlwrap_tool([curlwrap_tool,
+                                '-v', '-s', sock_path,
+                                'http://localhost/secrets/foo'],
+                               200)
+    assert "baz" in output
 
     # Delete a secret
     run_curlwrap_tool([curlwrap_tool, '-d',
