@@ -127,7 +127,7 @@ def curlwrap_tool(request):
     return None
 
 
-def test_crd_ops(setup_for_secrets, secrets_cli):
+def test_crud_ops(setup_for_secrets, secrets_cli):
     """
     Test that the basic Create, Retrieve, Delete operations work
     """
@@ -153,6 +153,11 @@ def test_crd_ops(setup_for_secrets, secrets_cli):
     with pytest.raises(HTTPError) as err409:
         cli.set_secret("foo", "baz")
     assert str(err409.value).startswith("409")
+
+    # Patching a secret allows to modify its value
+    cli.mod_secret("foo", "baz")
+    fooval = cli.get_secret("foo")
+    assert fooval == "baz"
 
     # Delete a secret
     cli.del_secret("foo")

@@ -112,6 +112,9 @@ class SecretsHttpClient(object):
     def post(self, name, **kwargs):
         return self._request(self.session.post, name, **kwargs)
 
+    def patch(self, name, **kwargs):
+        return self._request(self.session.patch, name, **kwargs)
+
 
 class SecretsLocalClient(SecretsHttpClient):
     def list_secrets(self):
@@ -139,4 +142,8 @@ class SecretsLocalClient(SecretsHttpClient):
 
     def create_container(self, name):
         res = self.post(name)
+        res.raise_for_status()
+
+    def mod_secret(self, name, value):
+        res = self.patch(name, json={"type": "simple", "value": value})
         res.raise_for_status()

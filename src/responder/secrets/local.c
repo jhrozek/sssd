@@ -465,35 +465,29 @@ static int local_check_max_payload_size(struct local_context *lctx,
     return EOK;
 }
 
-static int local_db_put_simple(TALLOC_CTX *mem_ctx,
-                               struct local_context *lctx,
-                               struct local_db_req *lc_req,
-                               const char *secret)
+static int local_db_write_check(TALLOC_CTX *mem_ctx,
+                                struct local_context *lctx,
+                                struct ldb_dn *basedn,
+                                const char *secret)
 {
-    struct ldb_message *msg;
-    const char *enctype = "masterkey";
-    char *enc_secret;
     int ret;
+    TALLOC_CTX *tmp_ctx;
 
-    DEBUG(SSSDBG_TRACE_FUNC, "Adding a secret to [%s]\n", lc_req->path);
-
-    msg = ldb_msg_new(mem_ctx);
-    if (!msg) {
-        ret = ENOMEM;
-        goto done;
+    tmp_ctx = talloc_new(mem_ctx);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
     }
-    msg->dn = lc_req->basedn;
 
     /* make sure containers exist */
-    ret = local_db_check_containers(msg, lctx, msg->dn);
+    ret = local_db_check_containers(tmp_ctx, lctx, basedn);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
               "local_db_check_containers failed for [%s]: [%d]: %s\n",
-              ldb_dn_get_linearized(msg->dn), ret, sss_strerror(ret));
+              ldb_dn_get_linearized(basedn), ret, sss_strerror(ret));
         goto done;
     }
 
-    ret = local_db_check_number_of_secrets(msg, lctx);
+    ret = local_db_check_number_of_secrets(tmp_ctx, lctx);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
               "local_db_check_number_of_secrets failed [%d]: %s\n",
@@ -509,12 +503,33 @@ static int local_db_put_simple(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = local_encrypt(lctx, msg, secret, enctype, &enc_secret);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_OP_FAILURE,
-              "local_encrypt failed [%d]: %s\n", ret, sss_strerror(ret));
+    ret = EOK;
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static errno_t local_db_create_msg(TALLOC_CTX *mem_ctx,
+                                   struct local_db_req *lc_req,
+                                   const char *enctype,
+                                   const char *ciphertext,
+                                   struct ldb_message **_msg)
+{
+    int ret;
+    struct ldb_message *msg;
+    TALLOC_CTX *tmp_ctx;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    msg = ldb_msg_new(tmp_ctx);
+    if (!msg) {
+        ret = ENOMEM;
         goto done;
     }
+    msg->dn = lc_req->basedn;
 
     ret = ldb_msg_add_string(msg, "type", "simple");
     if (ret != EOK) {
@@ -532,7 +547,7 @@ static int local_db_put_simple(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = ldb_msg_add_string(msg, "secret", enc_secret);
+    ret = ldb_msg_add_string(msg, "secret", ciphertext);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
               "ldb_msg_add_string failed adding secret [%d]: %s\n",
@@ -540,12 +555,57 @@ static int local_db_put_simple(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-
     ret = ldb_msg_add_fmt(msg, "creationTime", "%lu", time(NULL));
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
               "ldb_msg_add_string failed adding creationTime [%d]: %s\n",
               ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = EOK;
+    *_msg = talloc_steal(mem_ctx, msg);
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static int local_db_put_simple(TALLOC_CTX *mem_ctx,
+                               struct local_context *lctx,
+                               struct local_db_req *lc_req,
+                               const char *secret)
+{
+    struct ldb_message *msg;
+    const char *enctype = "masterkey";
+    char *enc_secret;
+    int ret;
+    TALLOC_CTX *tmp_ctx;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    DEBUG(SSSDBG_TRACE_FUNC, "Adding a secret to [%s]\n", lc_req->path);
+
+    ret = local_db_write_check(mem_ctx, lctx, lc_req->basedn, secret);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "write_check failed [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = local_encrypt(lctx, tmp_ctx, secret, enctype, &enc_secret);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "local_encrypt failed [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = local_db_create_msg(tmp_ctx, lc_req, enctype, enc_secret, &msg);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "create_msg failed [%d]: %s\n", ret, sss_strerror(ret));
         goto done;
     }
 
@@ -566,7 +626,82 @@ static int local_db_put_simple(TALLOC_CTX *mem_ctx,
 
     ret = EOK;
 done:
-    talloc_free(msg);
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static int local_db_patch_simple(TALLOC_CTX *mem_ctx,
+                                 struct local_context *lctx,
+                                 struct local_db_req *lc_req,
+                                 const char *secret)
+{
+    struct ldb_message *msg;
+    struct ldb_result *res = NULL;
+    const char *enctype = "masterkey";
+    char *enc_secret;
+    int ret;
+    int lret;
+    TALLOC_CTX *tmp_ctx;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    DEBUG(SSSDBG_TRACE_FUNC, "Modifying a secret at [%s]\n", lc_req->path);
+
+    lret = ldb_search(lctx->ldb, tmp_ctx, &res, lc_req->basedn, LDB_SCOPE_BASE,
+                      NULL, NULL);
+    if (lret != LDB_SUCCESS) {
+        ret = sysdb_error_to_errno(lret);
+        goto done;
+    }
+
+    ret = local_db_write_check(mem_ctx, lctx, lc_req->basedn, secret);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "write_check failed [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = local_encrypt(lctx, tmp_ctx, secret, enctype, &enc_secret);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "local_encrypt failed [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = local_db_create_msg(tmp_ctx, lc_req, enctype, enc_secret, &msg);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "create_msg failed [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    if (res->count > 0) {
+        DEBUG(SSSDBG_TRACE_LIBS, "Deleting the previous secret\n");
+        ret = ldb_delete(lctx->ldb, msg->dn);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "Failed to delete previous secret [%s]: [%d]: %s\n",
+                  ldb_dn_get_linearized(msg->dn), ret, ldb_strerror(ret));
+            ret = EIO;
+            goto done;
+        }
+    }
+
+    ret = ldb_add(lctx->ldb, msg);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Failed to add secret [%s]: [%d]: %s\n",
+              ldb_dn_get_linearized(msg->dn), ret, ldb_strerror(ret));
+        ret = EIO;
+        goto done;
+    }
+
+    ret = EOK;
+done:
+    talloc_free(tmp_ctx);
     return ret;
 }
 
@@ -903,6 +1038,28 @@ static struct tevent_req *local_secret_req(TALLOC_CTX *mem_ctx,
         lc_req->path[plen - 1] = '\0';
 
         ret = local_db_create(state, lctx, lc_req);
+        if (ret) goto done;
+        break;
+
+    case HTTP_PATCH:
+        if (secreq->body.length == 0) {
+            DEBUG(SSSDBG_OP_FAILURE, "PATCH with no data\n");
+            ret = EINVAL;
+            goto done;
+        }
+
+        DEBUG(SSSDBG_TRACE_LIBS, "Processing HTTP PATCH at [%s]\n", lc_req->path);
+        if (body_is_json) {
+            ret = sec_json_to_simple_secret(state, secreq->body.data,
+                                            &secret);
+        } else {
+            secret = sss_base64_encode(state, (uint8_t *)secreq->body.data,
+                                       secreq->body.length);
+            ret = secret ? EOK : ENOMEM;
+        }
+        if (ret) goto done;
+
+        ret = local_db_patch_simple(state, lctx, lc_req, secret);
         if (ret) goto done;
         break;
 
