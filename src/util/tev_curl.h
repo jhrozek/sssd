@@ -35,6 +35,7 @@ enum tcurl_http_request {
     TCURL_HTTP_PUT,
     TCURL_HTTP_DELETE,
     TCURL_HTTP_PATCH,
+    TCURL_HTTP_POST,
 };
 
 /**
