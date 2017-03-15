@@ -211,7 +211,8 @@ int sss_packet_recv(struct sss_packet *packet, int fd)
          * larger than SSS_CERT_PACKET_MAX_RECV_SIZE. Due to the way
          * sss_packet_grow() works the packet len must be set to '0' first and
          * then grow to the expected size. */
-        if (sss_packet_get_cmd(packet) == SSS_NSS_GETNAMEBYCERT
+        if ((sss_packet_get_cmd(packet) == SSS_NSS_GETNAMEBYCERT
+                    || sss_packet_get_cmd(packet) == SSS_NSS_GETLISTBYCERT)
                 && packet->memsize < SSS_CERT_PACKET_MAX_RECV_SIZE
                 && (new_len = sss_packet_get_len(packet))
                                    < SSS_CERT_PACKET_MAX_RECV_SIZE) {
