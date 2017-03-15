@@ -1715,9 +1715,9 @@ sssd_check_socket_activated_responders_LDADD = \
     $(NULL)
 endif
 
-if HAVE_NSS
 pkgconfig_DATA += src/lib/certmap/sss_certmap.pc
 libsss_certmap_la_DEPENDENCIES = src/lib/certmap/sss_certmap.exports
+if HAVE_NSS
 libsss_certmap_la_SOURCES = \
     src/lib/certmap/sss_certmap.c \
     src/lib/certmap/sss_certmap_attr_names.c \
@@ -1739,13 +1739,35 @@ libsss_certmap_la_LIBADD = \
     $(TALLOC_LIBS) \
     $(NSS_LIBS) \
     $(NULL)
+else
+libsss_certmap_la_DEPENDENCIES = src/lib/certmap/sss_certmap.exports
+libsss_certmap_la_SOURCES = \
+    src/lib/certmap/sss_certmap.c \
+    src/lib/certmap/sss_certmap_attr_names.c \
+    src/lib/certmap/sss_cert_content_crypto.c \
+    src/lib/certmap/sss_certmap_krb5_match.c \
+    src/lib/certmap/sss_certmap_ldap_mapping.c \
+    src/util/util_ext.c \
+    src/util/cert/cert_common.c \
+    src/util/crypto/libcrypto/crypto_base64.c \
+    src/util/cert/libcrypto/cert.c \
+    $(NULL)
+libsss_certmap_openssl_la_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(TALLOC_CFLAGS) \
+    $(CRYPTO_CFLAGS) \
+    $(NULL)
+libsss_certmap_openssl_la_LIBADD = \
+    $(TALLOC_LIBS) \
+    $(CRYPTO_LIBS) \
+    $(NULL)
+endif
 libsss_certmap_la_LDFLAGS = \
     -Wl,--version-script,$(srcdir)/src/lib/certmap/sss_certmap.exports \
     -version-info 0:0:0
 
 dist_noinst_DATA += src/lib/certmap/sss_certmap.exports
 dist_noinst_HEADERS += src/lib/certmap/sss_certmap_int.h
-endif
 
 #################
 # Feature Tests #
