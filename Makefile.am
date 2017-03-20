@@ -3329,6 +3329,11 @@ endif
 # Integration tests #
 #####################
 
+INTGCHECK_MAKEFLAGS = \
+	$(AM_MAKEFLAGS) \
+	CFLAGS="$(AM_CFLAGS) -DKCM_PEER_UID=$$(echo $$UID)" \
+	$(NULL)
+
 intgcheck-prepare:
 	set -e; \
 	rm -Rf intg; \
@@ -3346,7 +3351,7 @@ intgcheck-prepare:
 	    --without-semanage \
 	    --enable-files-domain \
 	    $(INTGCHECK_CONFIGURE_FLAGS); \
-	$(MAKE) $(AM_MAKEFLAGS); \
+	$(MAKE) $(INTGCHECK_MAKEFLAGS) ; \
 	: Force single-thread install to workaround concurrency issues; \
 	$(MAKE) $(AM_MAKEFLAGS) -j1 install; \
 	: Remove .la files from LDB module directory to avoid loader warnings; \
