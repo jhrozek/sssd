@@ -19,6 +19,7 @@
 */
 
 #include "util/crypto/sss_crypto.h"
+#include "util/sss_nss.h"
 #include "responder/nss/nss_protocol.h"
 
 static errno_t
@@ -532,7 +533,7 @@ nss_protocol_fill_name_list(struct nss_ctx *nss_ctx,
             return ret;
         }
 
-        tmp_str = nss_get_name_from_msg(result->domain, result->msgs[c]);
+        tmp_str = sss_nss_get_name_from_msg(result->domain, result->msgs[c]);
         if (tmp_str == NULL) {
             return EINVAL;
         }

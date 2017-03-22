@@ -22,9 +22,11 @@
 #ifndef __SSS_NSS_H__
 #define __SSS_NSS_H__
 
+#include "confdb/confdb.h"
 #include <stdbool.h>
 #include <sys/types.h>
 #include <talloc.h>
+#include <ldb.h>
 
 struct sss_nss_homedir_ctx {
     const char *username;
@@ -39,4 +41,14 @@ struct sss_nss_homedir_ctx {
 char *expand_homedir_template(TALLOC_CTX *mem_ctx, const char *template,
                               bool case_sensitive,
                               struct sss_nss_homedir_ctx *homedir_ctx);
+
+const char *
+sss_nss_get_name_from_msg(struct sss_domain_info *domain,
+                          struct ldb_message *msg);
+
+int sss_nss_output_name(TALLOC_CTX *mem_ctx,
+                        struct sss_domain_info *domain,
+                        const char *name,
+                        char override_space,
+                        char **_output_name);
 #endif

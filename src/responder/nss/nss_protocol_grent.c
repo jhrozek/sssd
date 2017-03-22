@@ -19,6 +19,7 @@
 */
 
 #include "responder/nss/nss_protocol.h"
+#include "util/sss_nss.h"
 
 static errno_t
 nss_get_grent(TALLOC_CTX *mem_ctx,
@@ -41,7 +42,7 @@ nss_get_grent(TALLOC_CTX *mem_ctx,
     }
 
     /* Get fields. */
-    name = nss_get_name_from_msg(domain, msg);
+    name = sss_nss_get_name_from_msg(domain, msg);
     gid = sss_view_ldb_msg_find_attr_as_uint64(domain, msg, SYSDB_GIDNUM, 0);
 
     if (name == NULL || gid == 0) {
