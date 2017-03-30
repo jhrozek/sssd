@@ -35,6 +35,9 @@
 #include <security/pam_appl.h>
 
 #include "lib/sifp/sss_sifp.h"
+#include "util/util.h"
+#include "tools/common/sss_tools.h"
+#include "tools/sssctl/sssctl.h"
 
 #ifdef HAVE_SECURITY_PAM_MISC_H
 # include <security/pam_misc.h>
@@ -185,35 +188,32 @@ done:
     return ret;
 }
 
-int main(int argc, char *argv[]) {
+errno_t sssctl_user_checks(struct sss_cmdline *cmdline,
+                           struct sss_tool_ctx *tool_ctx,
+                           void *pvt)
+{
 
     pam_handle_t *pamh;
-    char *user;
-    char *action;
-    char *service;
+    const char *user = NULL;
+    const char *action = DEFAULT_ACTION;
+    const char *service = DEFAULT_SERVICE;
     int ret;
     size_t c;
     char **pam_env;
 
-    if (argc == 1) {
-        fprintf(stderr, "Usage: pam_test_client USERNAME "
-                        "[auth|acct|setc|chau|open|clos] [pam_service]\n");
-        return 0;
-    } else if (argc == 2) {
-        fprintf(stderr,"using first argument as user name and default action "
-                       "and service\n");
-    } else if (argc == 3) {
-        fprintf(stderr, "using first argument as user name, second as action "
-                        "and default service\n");
-    }
+    /* Parse command line. */
+    struct poptOption options[] = {
+        {"action", 'a', POPT_ARG_STRING , &action, 0, _("PAM action [auth|acct|setc|chau|open|clos], default: " DEFAULT_ACTION), NULL },
+        {"service", 's', POPT_ARG_STRING , &service, 0, _("PAM service, default: " DEFAULT_SERVICE), NULL },
+        POPT_TABLEEND
+    };
 
-    user = strdup(argv[1]);
-    action =  argc > 2 ? strdup(argv[2]) : strdup(DEFAULT_ACTION);
-    service = argc > 3 ? strdup(argv[3]) : strdup(DEFAULT_SERVICE);
-
-    if (action == NULL || user == NULL || service == NULL) {
-        fprintf(stderr, "Out of memory!\n");
-        return 1;
+    ret = sss_tool_popt_ex(cmdline, options, SSS_TOOL_OPT_OPTIONAL,
+                           NULL, NULL, "USERNAME", _("Specify user name."),
+                           &user, NULL);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to parse command arguments\n");
+        return ret;
     }
 
     fprintf(stdout, "user: %s\naction: %s\nservice: %s\n",
@@ -279,10 +279,6 @@ int main(int argc, char *argv[]) {
 
 
     pam_end(pamh, ret);
-
-    free(user);
-    free(action);
-    free(service);
 
     return 0;
 }
