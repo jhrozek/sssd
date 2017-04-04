@@ -135,6 +135,13 @@ systemctl enable sssd-secrets.service
             </programlisting>
             Your distribution should already set the dependencies between the services.
         </para>
+        <para>
+            Please note that the sssd-secrets storage enforces a quota
+            on the number of secrets stored. While the quota is applied
+            separately for the ccaches and the "regular" user secrets, both
+            are controlled by the same parameter <quote>max_secrets</quote>
+            in the <quote>[secrets]</quote> section of sssd.conf.
+        </para>
     </refsect1>
 
     <refsect1 id='options'>
