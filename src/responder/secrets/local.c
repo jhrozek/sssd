@@ -205,6 +205,7 @@ static char *local_dn_to_path(TALLOC_CTX *mem_ctx,
 
 struct local_db_req {
     char *path;
+    const char *basedn;
     struct ldb_dn *req_dn;
 };
 
@@ -409,7 +410,8 @@ static int local_db_check_containers_nest_level(struct local_context *lctx,
 }
 
 static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
-                                            struct local_context *lctx)
+                                            struct local_context *lctx,
+                                            struct local_db_req *lc_req)
 {
     TALLOC_CTX *tmp_ctx;
     static const char *attrs[] = { NULL };
@@ -420,7 +422,7 @@ static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
     tmp_ctx = talloc_new(mem_ctx);
     if (!tmp_ctx) return ENOMEM;
 
-    dn = ldb_dn_new(tmp_ctx, lctx->ldb, "cn=secrets");
+    dn = ldb_dn_new(tmp_ctx, lctx->ldb, lc_req->basedn);
     if (!dn) {
         ret = ENOMEM;
         goto done;
@@ -493,7 +495,7 @@ static int local_db_put_simple(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = local_db_check_number_of_secrets(msg, lctx);
+    ret = local_db_check_number_of_secrets(msg, lctx, lc_req);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
               "local_db_check_number_of_secrets failed [%d]: %s\n",
@@ -703,7 +705,6 @@ static int local_secrets_map_path(TALLOC_CTX *mem_ctx,
 {
     int ret;
     struct local_db_req *lc_req;
-    const char *basedn;
 
     /* be strict for now */
     if (secreq->parsed_url.fragment != NULL) {
@@ -741,12 +742,12 @@ static int local_secrets_map_path(TALLOC_CTX *mem_ctx,
                 SEC_BASEPATH, sizeof(SEC_BASEPATH) - 1) == 0) {
         lc_req->path = talloc_strdup(lc_req,
                                      secreq->mapped_path + (sizeof(SEC_BASEPATH) - 1));
-        basedn = SECRETS_BASEDN;
+        lc_req->basedn = SECRETS_BASEDN;
     } else if (strncmp(secreq->mapped_path,
                SEC_KCM_BASEPATH, sizeof(SEC_KCM_BASEPATH) - 1) == 0) {
         lc_req->path = talloc_strdup(lc_req,
                                      secreq->mapped_path + (sizeof(SEC_KCM_BASEPATH) - 1));
-        basedn = KCM_BASEDN;
+        lc_req->basedn = KCM_BASEDN;
     } else {
         ret = EINVAL;
         goto done;
@@ -759,7 +760,7 @@ static int local_secrets_map_path(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = local_db_dn(mem_ctx, ldb, basedn, lc_req->path, &lc_req->req_dn);
+    ret = local_db_dn(mem_ctx, ldb, lc_req->basedn, lc_req->path, &lc_req->req_dn);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Failed to map request to local db DN\n");
