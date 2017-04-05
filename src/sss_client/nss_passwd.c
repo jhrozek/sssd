@@ -142,6 +142,7 @@ enum nss_status _nss_sss_getpwnam_r(const char *name, struct passwd *result,
     uint32_t num_results;
     enum nss_status nret;
     int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
     /* Caught once glibc passing in buffer == 0x0 */
     if (!buffer || !buflen) {
@@ -176,7 +177,12 @@ enum nss_status _nss_sss_getpwnam_r(const char *name, struct passwd *result,
     rd.len = name_len + 1;
     rd.data = name;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* previous thread might already initialize entry in mmap cache */
     ret = sss_nss_mc_getpwnam(name, name_len, result, buffer, buflen);
@@ -199,8 +205,8 @@ enum nss_status _nss_sss_getpwnam_r(const char *name, struct passwd *result,
         break;
     }
 
-    nret = sss_nss_make_request(SSS_NSS_GETPWNAM, &rd,
-                                &repbuf, &replen, errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_GETPWNAM, &rd, time_left,
+                                        &repbuf, &replen, errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         goto out;
     }
@@ -254,6 +260,7 @@ enum nss_status _nss_sss_getpwuid_r(uid_t uid, struct passwd *result,
     enum nss_status nret;
     uint32_t user_uid;
     int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
     /* Caught once glibc passing in buffer == 0x0 */
     if (!buffer || !buflen) return ERANGE;
@@ -280,7 +287,12 @@ enum nss_status _nss_sss_getpwuid_r(uid_t uid, struct passwd *result,
     rd.len = sizeof(uint32_t);
     rd.data = &user_uid;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* previous thread might already initialize entry in mmap cache */
     ret = sss_nss_mc_getpwuid(uid, result, buffer, buflen);
@@ -303,8 +315,8 @@ enum nss_status _nss_sss_getpwuid_r(uid_t uid, struct passwd *result,
         break;
     }
 
-    nret = sss_nss_make_request(SSS_NSS_GETPWUID, &rd,
-                                &repbuf, &replen, errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_GETPWUID, &rd, time_left,
+                                        &repbuf, &replen, errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         goto out;
     }
@@ -351,23 +363,31 @@ enum nss_status _nss_sss_setpwent(void)
 {
     enum nss_status nret;
     int errnop;
+    int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        errno = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* make sure we do not have leftovers, and release memory */
     sss_nss_getpwent_data_clean();
 
-    nret = sss_nss_make_request(SSS_NSS_SETPWENT,
-                                NULL, NULL, NULL, &errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_SETPWENT, NULL, time_left,
+                                        NULL, NULL, &errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         errno = errnop;
     }
 
+out:
     sss_nss_unlock();
     return nret;
 }
 
-static enum nss_status internal_getpwent_r(struct passwd *result,
+static enum nss_status internal_getpwent_r(struct passwd *result, int time_left,
                                            char *buffer, size_t buflen,
                                            int *errnop)
 {
@@ -414,8 +434,8 @@ static enum nss_status internal_getpwent_r(struct passwd *result,
     rd.len = sizeof(uint32_t);
     rd.data = &num_entries;
 
-    nret = sss_nss_make_request(SSS_NSS_GETPWENT, &rd,
-                                &repbuf, &replen, errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_GETPWENT, &rd, time_left,
+                                        &repbuf, &replen, errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         return nret;
     }
@@ -434,7 +454,7 @@ static enum nss_status internal_getpwent_r(struct passwd *result,
     sss_nss_getpwent_data.ptr = 8; /* skip metadata fields */
 
     /* call again ourselves, this will return the first result */
-    return internal_getpwent_r(result, buffer, buflen, errnop);
+    return internal_getpwent_r(result, time_left, buffer, buflen, errnop);
 }
 
 enum nss_status _nss_sss_getpwent_r(struct passwd *result,
@@ -442,9 +462,18 @@ enum nss_status _nss_sss_getpwent_r(struct passwd *result,
                                     int *errnop)
 {
     enum nss_status nret;
+    int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
-    sss_nss_lock();
-    nret = internal_getpwent_r(result, buffer, buflen, errnop);
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
+    nret = internal_getpwent_r(result, time_left, buffer, buflen, errnop);
+
+out:
     sss_nss_unlock();
 
     return nret;
@@ -454,18 +483,26 @@ enum nss_status _nss_sss_endpwent(void)
 {
     enum nss_status nret;
     int errnop;
+    int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        errno = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* make sure we do not have leftovers, and release memory */
     sss_nss_getpwent_data_clean();
 
-    nret = sss_nss_make_request(SSS_NSS_ENDPWENT,
-                                NULL, NULL, NULL, &errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_ENDPWENT, NULL, time_left,
+                                        NULL, NULL, &errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         errno = errnop;
     }
 
+out:
     sss_nss_unlock();
     return nret;
 }

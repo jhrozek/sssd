@@ -48,6 +48,7 @@
 #include <pthread.h>
 #endif
 
+#include "util/strtonum.h"
 /*
 * Note we set MSG_NOSIGNAL to avoid
 * having to fiddle with signal masks
@@ -1109,6 +1110,26 @@ static struct sss_mutex sss_pam_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
 
 static struct sss_mutex sss_nss_mc_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
 
+static int sss_mt_timedlock(struct sss_mutex *m, time_t timeout)
+{
+    struct timespec endtime;
+    int ret;
+
+    ret = clock_gettime(CLOCK_REALTIME, &endtime);
+    if (ret != 0) {
+        return ret;
+    }
+    endtime.tv_sec += timeout;
+
+    ret = pthread_mutex_timedlock(&m->mtx, &endtime);
+    if (ret != 0) {
+        return ret;
+    }
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &m->old_cancel_state);
+
+    return 0;
+}
+
 static void sss_mt_lock(struct sss_mutex *m)
 {
     pthread_mutex_lock(&m->mtx);
@@ -1121,7 +1142,50 @@ static void sss_mt_unlock(struct sss_mutex *m)
     pthread_mutex_unlock(&m->mtx);
 }
 
+static time_t sss_get_client_timeout(void)
+{
+    char *envval;
+    time_t t;
+    char *endptr;
+
+    envval = getenv("SSS_NSS_CLIENT_TIMEOUT");
+    if (envval != NULL && *envval != '\0') {
+        errno = 0;
+        t = strtouint32(envval, &endptr, 10);
+        if (t > 0 && errno == 0 && *endptr == '\0') {
+            return t;
+        }
+    }
+    return (SSS_CLI_SOCKET_TIMEOUT / 1000);
+}
+
 /* NSS mutex wrappers */
+int sss_nss_timedlock(int *time_left)
+{
+    time_t timeout;
+    int ret;
+    time_t start;
+    int left;
+
+    timeout = sss_get_client_timeout();
+    start = time(NULL);
+
+    ret = sss_mt_timedlock(&sss_nss_mtx, timeout);
+
+    if (ret == 0) {
+        left = (timeout - (time(NULL) - start)) * 1000;
+        if (left <= 0) {
+            return EIO;
+        } else if (left > SSS_CLI_SOCKET_TIMEOUT) {
+            *time_left = SSS_CLI_SOCKET_TIMEOUT;
+        } else {
+            *time_left = left;
+        }
+    }
+
+    return ret;
+}
+
 void sss_nss_lock(void)
 {
     sss_mt_lock(&sss_nss_mtx);

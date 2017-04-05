@@ -591,6 +591,7 @@ SSSD_TOOLS_OBJ = \
 
 SSSD_LCL_TOOLS_OBJ = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/tools/tools_mc_util.c \
     $(SSSD_TOOLS_OBJ)
 
@@ -864,7 +865,7 @@ if BUILD_IFP
     SSSD_DOCS += sss_simpleifp_doc
 endif
 
-CLIENT_LIBS = $(LTLIBINTL)
+CLIENT_LIBS = $(LTLIBINTL) -lpthread
 
 if WITH_JOURNALD
 SYSLOG_LIBS = $(JOURNALD_LIBS)
@@ -1148,7 +1149,8 @@ libsss_nss_idmap_la_DEPENDENCIES = src/sss_client/idmap/sss_nss_idmap.exports
 libsss_nss_idmap_la_SOURCES = \
     src/sss_client/idmap/sss_nss_idmap.c \
     src/sss_client/common.c \
-    src/util/strtonum.c
+    src/util/strtonum.c \
+    $(NULL)
 libsss_nss_idmap_la_LIBADD = \
     $(CLIENT_LIBS)
 libsss_nss_idmap_la_LDFLAGS = \
@@ -1745,6 +1747,7 @@ sssctl_CFLAGS = \
 if BUILD_SUDO
 sss_sudo_cli_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/sudo/sss_sudo.c \
     src/sss_client/sudo/sss_sudo_response.c \
     src/sss_client/sudo_testcli/sudo_testcli.c
@@ -1755,6 +1758,7 @@ endif
 if BUILD_SSH
 sss_ssh_authorizedkeys_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/ssh/sss_ssh_client.c \
     src/sss_client/ssh/sss_ssh_authorizedkeys.c
 sss_ssh_authorizedkeys_CFLAGS = $(AM_CFLAGS)
@@ -1764,6 +1768,7 @@ sss_ssh_authorizedkeys_LDADD = \
 
 sss_ssh_knownhostsproxy_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/ssh/sss_ssh_client.c \
     src/sss_client/ssh/sss_ssh_knownhostsproxy.c
 sss_ssh_knownhostsproxy_CFLAGS = $(AM_CFLAGS)
@@ -2931,6 +2936,7 @@ test_wbc_calls_SOURCES = \
     src/sss_client/libwbclient/wbclient_common.c \
     src/sss_client/libwbclient/wbc_sid_common.c \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     $(NULL)
 test_wbc_calls_CFLAGS = \
     $(AM_CFLAGS) \
@@ -3491,7 +3497,9 @@ if BUILD_AUTOFS
 autofs_test_client_SOURCES = \
     src/sss_client/autofs/autofs_test_client.c \
     src/sss_client/autofs/sss_autofs.c \
-    src/sss_client/common.c
+    src/sss_client/common.c \
+    src/util/strtonum.c \
+    $(NULL)
 autofs_test_client_CFLAGS = $(AM_CFLAGS)
 autofs_test_client_LDADD = -lpopt $(CLIENT_LIBS)
 endif
@@ -3565,6 +3573,7 @@ intgcheck:
 nsslib_LTLIBRARIES = libnss_sss.la
 libnss_sss_la_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/nss_passwd.c \
     src/sss_client/nss_group.c \
     src/sss_client/nss_netgroup.c \
@@ -3589,6 +3598,7 @@ if BUILD_NFS_IDMAP
 nfslib_LTLIBRARIES = sss.la
 sss_la_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/nss_mc_common.c \
     src/util/io.c \
     src/util/murmurhash3.c \
@@ -3612,6 +3622,7 @@ pam_sss_la_SOURCES = \
     src/sss_client/pam_sss.c \
     src/sss_client/pam_message.c \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/sss_cli.h \
     src/util/atomic_io.c \
     src/util/authtok-utils.c \
@@ -3630,6 +3641,7 @@ if BUILD_SUDO
 
 libsss_sudo_la_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/sss_cli.h \
     src/sss_client/sudo/sss_sudo_response.c \
     src/sss_client/sudo/sss_sudo.c \
@@ -3650,6 +3662,7 @@ if BUILD_AUTOFS
 autofslib_LTLIBRARIES = libsss_autofs.la
 libsss_autofs_la_SOURCES = \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/sss_cli.h \
     src/sss_client/autofs/sss_autofs.c \
     src/sss_client/autofs/sss_autofs_private.h
@@ -4165,6 +4178,7 @@ sssd_krb5_localauth_plugin_la_SOURCES = \
     src/util/murmurhash3.c \
     src/util/io.c \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/nss_mc_common.c \
     src/sss_client/nss_mc_passwd.c \
     src/sss_client/nss_passwd.c
@@ -4181,6 +4195,7 @@ endif
 sssd_pac_plugin_la_SOURCES = \
     src/sss_client/sssd_pac.c \
     src/sss_client/common.c \
+    src/util/strtonum.c \
     src/sss_client/sss_cli.h \
     src/sss_client/krb5_authdata_int.h
 sssd_pac_plugin_la_CFLAGS = \

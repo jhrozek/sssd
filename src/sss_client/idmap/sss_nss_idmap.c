@@ -215,6 +215,7 @@ static int sss_nss_getyyybyxxx(union input inp, enum sss_cli_command cmd ,
     struct sss_nss_kv *kv_list;
     char **names;
     enum sss_id_type *types;
+    int time_left;
 
     switch (cmd) {
     case SSS_NSS_GETSIDBYNAME:
@@ -250,9 +251,13 @@ static int sss_nss_getyyybyxxx(union input inp, enum sss_cli_command cmd ,
         return EINVAL;
     }
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        goto done;
+    }
 
-    nret = sss_nss_make_request(cmd, &rd, &repbuf, &replen, &errnop);
+    nret = sss_nss_make_request_timeout(cmd, &rd, time_left,
+                                        &repbuf, &replen, &errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         ret = nss_status_to_errno(nret);
         goto done;

@@ -285,6 +285,7 @@ enum nss_status _nss_sss_initgroups_dyn(const char *user, gid_t group,
     uint32_t num_ret;
     long int l, max_ret;
     int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
     ret = sss_strnlen(user, SSS_NAME_MAX, &user_len);
     if (ret != 0) {
@@ -314,7 +315,12 @@ enum nss_status _nss_sss_initgroups_dyn(const char *user, gid_t group,
     rd.len = user_len + 1;
     rd.data = user;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* previous thread might already initialize entry in mmap cache */
     ret = sss_nss_mc_initgroups_dyn(user, user_len, group, start, size,
@@ -338,8 +344,8 @@ enum nss_status _nss_sss_initgroups_dyn(const char *user, gid_t group,
         break;
     }
 
-    nret = sss_nss_make_request(SSS_NSS_INITGR, &rd,
-                                &repbuf, &replen, errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_INITGR, &rd, time_left,
+                                        &repbuf, &replen, errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         goto out;
     }
@@ -404,6 +410,7 @@ enum nss_status _nss_sss_getgrnam_r(const char *name, struct group *result,
     uint32_t num_results;
     enum nss_status nret;
     int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
     /* Caught once glibc passing in buffer == 0x0 */
     if (!buffer || !buflen) {
@@ -438,7 +445,12 @@ enum nss_status _nss_sss_getgrnam_r(const char *name, struct group *result,
     rd.len = name_len + 1;
     rd.data = name;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* previous thread might already initialize entry in mmap cache */
     ret = sss_nss_mc_getgrnam(name, name_len, result, buffer, buflen);
@@ -464,8 +476,8 @@ enum nss_status _nss_sss_getgrnam_r(const char *name, struct group *result,
     nret = sss_nss_get_getgr_cache(name, 0, GETGR_NAME,
                                    &repbuf, &replen, errnop);
     if (nret == NSS_STATUS_NOTFOUND) {
-        nret = sss_nss_make_request(SSS_NSS_GETGRNAM, &rd,
-                                    &repbuf, &replen, errnop);
+        nret = sss_nss_make_request_timeout(SSS_NSS_GETGRNAM, &rd, time_left,
+                                            &repbuf, &replen, errnop);
     }
     if (nret != NSS_STATUS_SUCCESS) {
         goto out;
@@ -524,6 +536,7 @@ enum nss_status _nss_sss_getgrgid_r(gid_t gid, struct group *result,
     enum nss_status nret;
     uint32_t group_gid;
     int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
     /* Caught once glibc passing in buffer == 0x0 */
     if (!buffer || !buflen) return ERANGE;
@@ -550,7 +563,12 @@ enum nss_status _nss_sss_getgrgid_r(gid_t gid, struct group *result,
     rd.len = sizeof(uint32_t);
     rd.data = &group_gid;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* previous thread might already initialize entry in mmap cache */
     ret = sss_nss_mc_getgrgid(gid, result, buffer, buflen);
@@ -576,8 +594,8 @@ enum nss_status _nss_sss_getgrgid_r(gid_t gid, struct group *result,
     nret = sss_nss_get_getgr_cache(NULL, gid, GETGR_GID,
                                    &repbuf, &replen, errnop);
     if (nret == NSS_STATUS_NOTFOUND) {
-        nret = sss_nss_make_request(SSS_NSS_GETGRGID, &rd,
-                                    &repbuf, &replen, errnop);
+        nret = sss_nss_make_request_timeout(SSS_NSS_GETGRGID, &rd, time_left,
+                                            &repbuf, &replen, errnop);
     }
     if (nret != NSS_STATUS_SUCCESS) {
         goto out;
@@ -629,23 +647,31 @@ enum nss_status _nss_sss_setgrent(void)
 {
     enum nss_status nret;
     int errnop;
+    int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        errno = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* make sure we do not have leftovers, and release memory */
     sss_nss_getgrent_data_clean();
 
-    nret = sss_nss_make_request(SSS_NSS_SETGRENT,
-                                NULL, NULL, NULL, &errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_SETGRENT, NULL, time_left,
+                                        NULL, NULL, &errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         errno = errnop;
     }
 
+out:
     sss_nss_unlock();
     return nret;
 }
 
-static enum nss_status internal_getgrent_r(struct group *result,
+static enum nss_status internal_getgrent_r(struct group *result, int time_left,
                                            char *buffer, size_t buflen,
                                            int *errnop)
 {
@@ -694,8 +720,8 @@ static enum nss_status internal_getgrent_r(struct group *result,
     rd.len = sizeof(uint32_t);
     rd.data = &num_entries;
 
-    nret = sss_nss_make_request(SSS_NSS_GETGRENT, &rd,
-                                &repbuf, &replen, errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_GETGRENT, &rd, time_left,
+                                        &repbuf, &replen, errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         return nret;
     }
@@ -714,16 +740,25 @@ static enum nss_status internal_getgrent_r(struct group *result,
     sss_nss_getgrent_data.ptr = 8; /* skip metadata fields */
 
     /* call again ourselves, this will return the first result */
-    return internal_getgrent_r(result, buffer, buflen, errnop);
+    return internal_getgrent_r(result, time_left, buffer, buflen, errnop);
 }
 
 enum nss_status _nss_sss_getgrent_r(struct group *result,
                                     char *buffer, size_t buflen, int *errnop)
 {
     enum nss_status nret;
+    int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
-    sss_nss_lock();
-    nret = internal_getgrent_r(result, buffer, buflen, errnop);
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        *errnop = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
+    nret = internal_getgrent_r(result, time_left, buffer, buflen, errnop);
+
+out:
     sss_nss_unlock();
 
     return nret;
@@ -733,18 +768,26 @@ enum nss_status _nss_sss_endgrent(void)
 {
     enum nss_status nret;
     int errnop;
+    int ret;
+    int time_left = SSS_CLI_SOCKET_TIMEOUT;
 
-    sss_nss_lock();
+    ret = sss_nss_timedlock(&time_left);
+    if (ret != 0) {
+        errno = EIO;
+        nret = NSS_STATUS_UNAVAIL;
+        goto out;
+    }
 
     /* make sure we do not have leftovers, and release memory */
     sss_nss_getgrent_data_clean();
 
-    nret = sss_nss_make_request(SSS_NSS_ENDGRENT,
-                                NULL, NULL, NULL, &errnop);
+    nret = sss_nss_make_request_timeout(SSS_NSS_ENDGRENT, NULL, time_left,
+                                        NULL, NULL, &errnop);
     if (nret != NSS_STATUS_SUCCESS) {
         errno = errnop;
     }
 
+out:
     sss_nss_unlock();
     return nret;
 }

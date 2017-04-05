@@ -635,6 +635,7 @@ int sss_ssh_make_request(enum sss_cli_command cmd,
 errno_t sss_strnlen(const char *str, size_t maxlen, size_t *len);
 
 void sss_nss_lock(void);
+int sss_nss_timedlock(int *time_left);
 void sss_nss_unlock(void);
 void sss_pam_lock(void);
 void sss_pam_unlock(void);
