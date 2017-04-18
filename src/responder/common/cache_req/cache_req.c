@@ -715,7 +715,7 @@ cache_req_search_domains(struct tevent_req *req,
                          bool bypass_cache,
                          bool bypass_dp);
 
-static void cache_req_done(struct tevent_req *subreq);
+static void cache_req_search_domains_done(struct tevent_req *subreq);
 
 struct tevent_req *cache_req_send(TALLOC_CTX *mem_ctx,
                                   struct tevent_context *ev,
@@ -926,11 +926,11 @@ cache_req_search_domains(struct tevent_req *req,
         return ENOMEM;
     }
 
-    tevent_req_set_callback(subreq, cache_req_done, req);
+    tevent_req_set_callback(subreq, cache_req_search_domains_done, req);
     return EAGAIN;
 }
 
-static void cache_req_done(struct tevent_req *subreq)
+static void cache_req_search_domains_done(struct tevent_req *subreq)
 {
     struct cache_req_state *state;
     struct tevent_req *req;
