@@ -395,7 +395,7 @@ struct cache_req_search_domains_state {
 
 static errno_t cache_req_search_domains_next(struct tevent_req *req);
 
-static void cache_req_search_domains_done(struct tevent_req *subreq);
+static void cache_req_search_domains_next_done(struct tevent_req *subreq);
 
 struct tevent_req *
 cache_req_search_domains_send(TALLOC_CTX *mem_ctx,
@@ -502,7 +502,8 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req)
             return ENOMEM;
         }
 
-        tevent_req_set_callback(subreq, cache_req_search_domains_done, req);
+        tevent_req_set_callback(subreq,
+                                cache_req_search_domains_next_done, req);
 
         /* we will continue with the following domain the next time */
         if (state->check_next) {
@@ -535,7 +536,7 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req)
     return ENOENT;
 }
 
-static void cache_req_search_domains_done(struct tevent_req *subreq)
+static void cache_req_search_domains_next_done(struct tevent_req *subreq)
 {
     struct cache_req_search_domains_state *state;
     struct ldb_result *result;
