@@ -27,13 +27,19 @@
 
 struct kcm_ops_queue_entry {
     struct tevent_req *req;
-    uid_t uid;
 
     hash_table_t *wait_queue_hash;
 
-    struct kcm_ops_queue_entry *head;
+    struct kcm_ops_queue *queue;
+
     struct kcm_ops_queue_entry *next;
     struct kcm_ops_queue_entry *prev;
+};
+
+struct kcm_ops_queue {
+    uid_t uid;
+
+    struct kcm_ops_queue_entry *head;
 };
 
 struct kcm_ops_queue_ctx {
