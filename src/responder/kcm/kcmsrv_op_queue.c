@@ -26,24 +26,19 @@
 #define QUEUE_HASH_SIZE      32
 
 struct kcm_ops_queue_entry {
-    struct tevent_req *req;
-
-    hash_table_t *wait_queue_hash;
-
-    struct kcm_ops_queue *queue;
-
-    struct kcm_ops_queue_entry *next;
-    struct kcm_ops_queue_entry *prev;
+    struct tevent_queue_entry *qentry;
 };
 
 struct kcm_ops_queue {
     uid_t uid;
+    struct kcm_ops_queue_ctx *qctx;
+    struct tevent_context *ev;
 
-    struct kcm_ops_queue_entry *head;
+    struct tevent_queue *tq;
 };
 
 struct kcm_ops_queue_ctx {
-    /* UID: dlist of kcm_ops_queue_entry */
+    /* UID:kcm_ops_queue */
     hash_table_t *wait_queue_hash;
 };
 
@@ -51,8 +46,7 @@ struct kcm_ops_queue_ctx {
  * Per-UID wait queue
  *
  * They key in the hash table is the UID of the peer. The value of each
- * hash table entry is a linked list of kcm_ops_queue_entry structures
- * which primarily hold the tevent request being queued.
+ * hash table entry is a tevent_queue structure
  */
 struct kcm_ops_queue_ctx *kcm_ops_queue_create(TALLOC_CTX *mem_ctx)
 {
@@ -77,58 +71,128 @@ struct kcm_ops_queue_ctx *kcm_ops_queue_create(TALLOC_CTX *mem_ctx)
     return queue_ctx;
 }
 
-static int kcm_op_queue_entry_destructor(struct kcm_ops_queue_entry *entry)
+static void remove_queue(struct tevent_context *ctx,
+                         struct tevent_immediate *im,
+                         void *private_data)
 {
+    struct kcm_ops_queue *kcm_q;
+    size_t qlen;
     int ret;
-    struct kcm_ops_queue_entry *next_entry;
     hash_key_t key;
 
-    if (entry == NULL) {
-        return 1;
+    kcm_q = talloc_get_type(private_data, struct kcm_ops_queue);
+    if (kcm_q == NULL) {
+        return;
     }
 
-    /* Take the next entry from the queue */
-    next_entry = entry->next;
-
-    /* Remove the current entry from the queue */
-    DLIST_REMOVE(entry->head, entry);
-
-    if (next_entry == NULL) {
-        key.type = HASH_KEY_ULONG;
-        key.ul = entry->uid;
-
-        /* If this was the last entry, remove the key (the UID) from the
-         * hash table to signal the queue is empty
-         */
-        ret = hash_delete(entry->wait_queue_hash, &key);
-        if (ret != HASH_SUCCESS) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Failed to remove wait queue for user %"SPRIuid"\n",
-                  entry->uid);
-            return 1;
-        }
-        return 0;
+    qlen = tevent_queue_length(kcm_q->tq);
+    if (qlen > 0) {
+        DEBUG(SSSDBG_TRACE_ALL, "Some requests are in the queue\n");
+        return;
     }
 
-    /* Otherwise, mark the current head as done to run the next request */
-    tevent_req_done(next_entry->req);
-    return 0;
+    key.type = HASH_KEY_ULONG;
+    key.ul = kcm_q->uid;
+
+    /* If this was the last entry, remove the key (the UID) from the
+     * hash table to signal the queue is empty
+     */
+    DEBUG(SSSDBG_TRACE_ALL, "Removing an empty queue\n");
+    ret = hash_delete(kcm_q->qctx->wait_queue_hash, &key);
+    if (ret != HASH_SUCCESS) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Failed to remove wait queue for user %"SPRIuid"\n",
+              kcm_q->uid);
+        return;
+    }
+
+    talloc_free(kcm_q);
 }
 
-static errno_t kcm_op_queue_add(hash_table_t *wait_queue_hash,
-                                struct kcm_ops_queue_entry *entry,
-                                uid_t uid)
+static void kcm_op_queue_trigger(struct tevent_req *req, void *private_data)
+{
+    struct tevent_immediate *imm;
+    struct kcm_ops_queue *kcm_q;
+    size_t qlen;
+
+    if (private_data == NULL) {
+        return;
+    }
+
+    kcm_q = talloc_get_type(private_data, struct kcm_ops_queue);
+    if (kcm_q == NULL) {
+        return;
+    }
+
+    DEBUG(SSSDBG_TRACE_LIBS, "Marking %p as done\n", req);
+    tevent_req_done(req);
+
+    qlen = tevent_queue_length(kcm_q->tq);
+    if (qlen > 0) {
+        DEBUG(SSSDBG_TRACE_ALL, "More request to be enqueued, waiting..\n");
+        return;
+    }
+
+    DEBUG(SSSDBG_TRACE_ALL, "Scheduling the removal of an empty queue\n");
+    imm = tevent_create_immediate(kcm_q->qctx);
+    if (imm == NULL) {
+        return;
+    }
+    tevent_schedule_immediate(imm, kcm_q->ev, remove_queue, kcm_q);
+}
+
+static struct kcm_ops_queue *kcm_op_queue_add(struct kcm_ops_queue_ctx *qctx,
+                                              uid_t uid,
+                                              struct tevent_context *ev,
+                                              struct tevent_req *req)
 {
     errno_t ret;
     hash_key_t key;
     hash_value_t value;
-    struct kcm_ops_queue_entry *head = NULL;
+    struct kcm_ops_queue *per_uid_queue = NULL;;
+    char *qname;
 
     key.type = HASH_KEY_ULONG;
     key.ul = uid;
 
-    ret = hash_lookup(wait_queue_hash, &key, &value);
+    ret = hash_lookup(qctx->wait_queue_hash, &key, &value);
     switch (ret) {
+    case HASH_ERROR_KEY_NOT_FOUND:
+        /* No request for this UID yet. Create a new queue and then
+         * add this request to the new queue
+         */
+        per_uid_queue = talloc_zero(qctx, struct kcm_ops_queue);
+        if (per_uid_queue == NULL) {
+            return NULL;
+        }
+        per_uid_queue->uid = uid;
+        per_uid_queue->ev = ev;
+        per_uid_queue->qctx = qctx;
+
+        qname = talloc_asprintf(per_uid_queue, "%"SPRIuid, uid);
+        if (qname == NULL) {
+            return NULL;
+        }
+
+        per_uid_queue->tq = tevent_queue_create(qctx->wait_queue_hash, qname);
+        if (per_uid_queue == NULL) {
+            talloc_free(qname);
+            return NULL;
+        }
+
+        value.type = HASH_VALUE_PTR;
+        value.ptr = per_uid_queue;
+
+        ret = hash_enter(qctx->wait_queue_hash, &key, &value);
+        if (ret != HASH_SUCCESS) {
+            DEBUG(SSSDBG_CRIT_FAILURE, "hash_enter failed.\n");
+            return NULL;
+        }
+
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "Added a first request to the queue, running immediately\n");
+        break;
+
     case HASH_SUCCESS:
         /* The key with this UID already exists. Its value is request queue
          * for the UID, so let's just add the current request to the end
@@ -136,51 +200,29 @@ static errno_t kcm_op_queue_add(hash_table_t *wait_queue_hash,
          */
         if (value.type != HASH_VALUE_PTR) {
             DEBUG(SSSDBG_CRIT_FAILURE, "Unexpected hash value type.\n");
-            return EINVAL;
+            return NULL;
         }
 
-        head = talloc_get_type(value.ptr, struct kcm_ops_queue_entry);
-        if (head == NULL) {
+        per_uid_queue = talloc_get_type(value.ptr, struct kcm_ops_queue);
+        if (per_uid_queue == NULL) {
             DEBUG(SSSDBG_CRIT_FAILURE, "Invalid queue pointer\n");
-            return EINVAL;
+            return NULL;
         }
-
-        entry->head = head;
-        DLIST_ADD_END(head, entry, struct kcm_ops_queue_entry *);
 
         DEBUG(SSSDBG_TRACE_LIBS, "Waiting in queue\n");
-        ret = EAGAIN;
-        break;
-
-    case HASH_ERROR_KEY_NOT_FOUND:
-        /* No request for this UID yet. Enqueue this request in case
-         * another one comes in and return EOK to run the current request
-         * immediatelly
-         */
-        entry->head = entry;
-
-        value.type = HASH_VALUE_PTR;
-        value.ptr = entry;
-
-        ret = hash_enter(wait_queue_hash, &key, &value);
-        if (ret != HASH_SUCCESS) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "hash_enter failed.\n");
-            return EIO;
-        }
-
-        DEBUG(SSSDBG_TRACE_LIBS,
-              "Added a first request to the queue, running immediately\n");
-        ret = EOK;
         break;
 
     default:
         DEBUG(SSSDBG_CRIT_FAILURE, "hash_lookup failed.\n");
-        return EIO;
+        return NULL;
     }
 
-    talloc_steal(wait_queue_hash, entry);
-    talloc_set_destructor(entry, kcm_op_queue_entry_destructor);
-    return ret;
+    if (per_uid_queue == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "No queue to add to\n");
+        return NULL;
+    }
+
+    return per_uid_queue;
 }
 
 struct kcm_op_queue_state {
@@ -204,7 +246,9 @@ struct tevent_req *kcm_op_queue_send(TALLOC_CTX *mem_ctx,
 {
     errno_t ret;
     struct tevent_req *req;
+    struct tevent_req *subreq;
     struct kcm_op_queue_state *state;
+    struct kcm_ops_queue *per_uid_queue = NULL;;
     uid_t uid;
 
     uid = cli_creds_get_uid(client);
@@ -219,37 +263,30 @@ struct tevent_req *kcm_op_queue_send(TALLOC_CTX *mem_ctx,
         ret = ENOMEM;
         goto immediate;
     }
-    state->entry->req = req;
-    state->entry->uid = uid;
-    state->entry->wait_queue_hash = qctx->wait_queue_hash;
 
     DEBUG(SSSDBG_FUNC_DATA,
           "Adding request by %"SPRIuid" to the wait queue\n", uid);
 
-    ret = kcm_op_queue_add(qctx->wait_queue_hash, state->entry, uid);
-    if (ret == EOK) {
-        DEBUG(SSSDBG_TRACE_LIBS,
-              "Wait queue was empty, running immediately\n");
-        goto immediate;
-    } else if (ret != EAGAIN) {
+    per_uid_queue = kcm_op_queue_add(qctx, uid, ev, req);
+    if (per_uid_queue == NULL) {
+        ret = EIO;
         DEBUG(SSSDBG_OP_FAILURE,
               "Cannot enqueue request [%d]: %s\n", ret, sss_strerror(ret));
         goto immediate;
     }
 
+    subreq = tevent_queue_wait_send(state, ev, per_uid_queue->tq);
+    tevent_req_set_callback(subreq, kcm_op_queue_done, req);
     DEBUG(SSSDBG_TRACE_LIBS, "Waiting our turn in the queue\n");
     return req;
 
 immediate:
-    if (ret == EOK) {
-        tevent_req_done(req);
-    } else {
-        tevent_req_error(req, ret);
-    }
+    tevent_req_error(req, ret);
     tevent_req_post(req, ev);
     return req;
 }
 
+static void kcm_op_queue_done(struct tevent_req
 /*
  * The queue recv function is called when this request is 'activated'. The queue
  * entry should be allocated on the same memory context as the enqueued request

@@ -71,7 +71,7 @@ static struct tevent_req *timed_request_send(TALLOC_CTX *mem_ctx,
     state->delay = delay;
     state->req_id = req_id;
 
-    DEBUG(SSSDBG_TRACE_ALL, "Request %p with delay %d\n", req, delay);
+    DEBUG(SSSDBG_TRACE_ALL, "Request %d with delay %d\n", state->req_id, delay);
 
     subreq = kcm_op_queue_send(state, ev, qctx, client);
     if (subreq == NULL) {
@@ -99,6 +99,8 @@ static void timed_request_start(struct tevent_req *subreq)
         return;
     }
 
+    DEBUG(SSSDBG_TRACE_ALL, "Unblocked %d with delay %d\n", state->req_id, state->delay);
+
     tv = tevent_timeval_current_ofs(state->delay, 0);
     timeout = tevent_add_timer(state->ev, state, tv, timed_request_done, req);
     if (timeout == NULL) {
@@ -115,7 +117,10 @@ static void timed_request_done(struct tevent_context *ev,
                                void *pvt)
 {
     struct tevent_req *req = talloc_get_type(pvt, struct tevent_req);
-    DEBUG(SSSDBG_TRACE_ALL, "Request %p done\n", req);
+    struct timed_request_state *state = tevent_req_data(req,
+                                                struct timed_request_state);
+
+    DEBUG(SSSDBG_TRACE_ALL, "Request %d done\n", state->req_id);
     tevent_req_done(req);
 }
 
@@ -265,6 +270,8 @@ static void test_kcm_queue_multi_same_id(void **state)
         tevent_loop_once(test_ctx->ev);
     }
     assert_int_equal(test_ctx->error, EOK);
+
+    talloc_report_full(test_ctx, stderr);
 }
 
 /*
@@ -313,6 +320,8 @@ static void test_kcm_queue_multi_different_id(void **state)
         tevent_loop_once(test_ctx->ev);
     }
     assert_int_equal(test_ctx->error, EOK);
+
+    talloc_report_full(test_ctx, stderr);
 }
 
 int main(int argc, const char *argv[])
