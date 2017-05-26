@@ -31,6 +31,7 @@
 #define DEFAULT_SEC_FD_LIMIT 2048
 #define DEFAULT_SEC_CONTAINERS_NEST_LEVEL 4
 #define DEFAULT_SEC_MAX_SECRETS 1024
+#define DEFAULT_SEC_MAX_UID_SECRETS 256
 #define DEFAULT_SEC_MAX_PAYLOAD_SIZE 16
 
 static int sec_get_config(struct sec_ctx *sctx)
@@ -65,6 +66,18 @@ static int sec_get_config(struct sec_ctx *sctx)
                          CONFDB_SEC_MAX_SECRETS,
                          DEFAULT_SEC_MAX_SECRETS,
                          &sctx->max_secrets);
+
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE,
+              "Failed to get maximum number of entries\n");
+        goto fail;
+    }
+
+    ret = confdb_get_int(sctx->rctx->cdb,
+                         sctx->rctx->confdb_service_path,
+                         CONFDB_SEC_MAX_UID_SECRETS,
+                         DEFAULT_SEC_MAX_SECRETS,
+                         &sctx->max_per_uid_secrets);
 
     if (ret != EOK) {
         DEBUG(SSSDBG_FATAL_FAILURE,

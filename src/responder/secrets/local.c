@@ -32,9 +32,12 @@
 struct local_context {
     struct ldb_context *ldb;
     struct sec_data master_key;
+
     int containers_nest_level;
     int max_secrets;
     int max_payload_size;
+
+    int max_per_uid_secrets;
 };
 
 static int local_decrypt(struct local_context *lctx, TALLOC_CTX *mem_ctx,
@@ -409,9 +412,81 @@ static int local_db_check_containers_nest_level(struct local_context *lctx,
     return EOK;
 }
 
-static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
-                                            struct local_context *lctx,
-                                            struct local_db_req *lc_req)
+static struct ldb_dn *per_uid_container(TALLOC_CTX *mem_ctx,
+                                        struct ldb_dn *req_dn)
+{
+    int user_comp;
+    int num_comp;
+    struct ldb_dn *uid_base_dn;
+
+    uid_base_dn = ldb_dn_copy(mem_ctx, req_dn);
+    if (uid_base_dn == NULL) {
+        return NULL;
+    }
+
+    /* Remove all the components up to the per-user base path which consists
+     * of three components:
+     *  cn=<uidnumber>,cn=users,cn=secrets
+     */
+    user_comp = ldb_dn_get_comp_num(uid_base_dn) - 3;
+
+    if (!ldb_dn_remove_child_components(uid_base_dn, user_comp)) {
+        DEBUG(SSSDBG_OP_FAILURE, "Cannot remove child components\n");
+        talloc_free(uid_base_dn);
+        return NULL;
+    }
+
+    num_comp = ldb_dn_get_comp_num(uid_base_dn);
+    if (num_comp != 3) {
+        DEBUG(SSSDBG_OP_FAILURE, "Expected 3 components got %d\n", num_comp);
+        talloc_free(uid_base_dn);
+        return NULL;
+    }
+
+    return uid_base_dn;
+}
+
+static int local_db_check_peruid_number_of_secrets(TALLOC_CTX *mem_ctx,
+                                                   struct local_context *lctx,
+                                                   struct local_db_req *lc_req)
+{
+    TALLOC_CTX *tmp_ctx;
+    static const char *attrs[] = { NULL };
+    struct ldb_result *res = NULL;
+    struct ldb_dn *cli_basedn = NULL;
+    int ret;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (!tmp_ctx) return ENOMEM;
+
+    cli_basedn = per_uid_container(tmp_ctx, lc_req->req_dn);
+    if (cli_basedn == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = ldb_search(lctx->ldb, tmp_ctx, &res, cli_basedn, LDB_SCOPE_SUBTREE,
+                     attrs, LOCAL_SIMPLE_FILTER);
+    if (res->count >= lctx->max_per_uid_secrets) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot store any more secrets for this client (basedn %s) "
+              "as the maximum allowed limit (%d) has been reached\n",
+              ldb_dn_get_linearized(cli_basedn),
+              lctx->max_payload_size);
+        ret = ERR_SEC_INVALID_TOO_MANY_SECRETS;
+        goto done;
+    }
+
+    ret = EOK;
+
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static int local_db_check_total_number_of_secrets(TALLOC_CTX *mem_ctx,
+                                                  struct local_context *lctx,
+                                                  struct local_db_req *lc_req)
 {
     TALLOC_CTX *tmp_ctx;
     static const char *attrs[] = { NULL };
@@ -433,8 +508,8 @@ static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
     if (res->count >= lctx->max_secrets) {
         DEBUG(SSSDBG_OP_FAILURE,
               "Cannot store any more secrets as the maximum allowed limit (%d) "
-              "has been reached\n", lctx->max_secrets);
-
+              "has been reached\n",
+              lctx->max_secrets);
         ret = ERR_SEC_INVALID_TOO_MANY_SECRETS;
         goto done;
     }
@@ -443,6 +518,31 @@ static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
 
 done:
     talloc_free(tmp_ctx);
+    return ret;
+}
+
+static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
+                                            struct local_context *lctx,
+                                            struct local_db_req *lc_req)
+{
+    int ret;
+
+    ret = local_db_check_peruid_number_of_secrets(mem_ctx, lctx, lc_req);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "local_db_check_peruid_number_of_secrets failed [%d]: %s\n",
+              ret, sss_strerror(ret));
+        return ret;
+    }
+
+    ret = local_db_check_total_number_of_secrets(mem_ctx, lctx, lc_req);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "local_db_check_total_number_of_secrets failed [%d]: %s\n",
+              ret, sss_strerror(ret));
+        return ret;
+    }
+
     return ret;
 }
 
@@ -1020,6 +1120,7 @@ int local_secrets_provider_handle(struct sec_ctx *sctx,
 
     lctx->containers_nest_level = sctx->containers_nest_level;
     lctx->max_secrets = sctx->max_secrets;
+    lctx->max_per_uid_secrets = sctx->max_per_uid_secrets;
     lctx->max_payload_size = sctx->max_payload_size;
 
     lctx->master_key.data = talloc_size(lctx, MKEY_SIZE);

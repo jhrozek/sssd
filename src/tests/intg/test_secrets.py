@@ -83,13 +83,8 @@ def create_sssd_secrets_fixture(request):
     return secpid
 
 
-@pytest.fixture
-def setup_for_secrets(request):
-    """
-    Just set up the local provider for tests and enable the secrets
-    responder
-    """
-    conf = unindent("""\
+def create_sssd_conf(max_secrets=10, max_uid_secrets=10, max_payload_size=2):
+    return unindent("""\
         [sssd]
         domains = local
         services = nss
@@ -98,9 +93,18 @@ def setup_for_secrets(request):
         id_provider = local
 
         [secrets]
-        max_secrets = 10
-        max_payload_size = 2
+        max_secrets = {max_secrets}
+        max_payload_size = {max_payload_size}
     """).format(**locals())
+
+
+@pytest.fixture
+def setup_for_secrets(request):
+    """
+    Just set up the local provider for tests and enable the secrets
+    responder
+    """
+    conf = create_sssd_conf()
 
     create_conf_fixture(request, conf)
     create_sssd_secrets_fixture(request)
@@ -385,3 +389,70 @@ def test_containers(setup_for_secrets, secrets_cli):
     with pytest.raises(HTTPError) as err406:
         cli.create_container(container)
     assert str(err406.value).startswith("406")
+
+
+@pytest.fixture
+def setup_for_uid_limit(request):
+    """
+    Set up lower per UID limits than global limits
+    """
+    conf = create_sssd_conf(max_uid_secrets=5)
+
+    create_conf_fixture(request, conf)
+    create_sssd_secrets_fixture(request)
+    return None
+
+
+def test_per_uid_limit(setup_for_uid_limit, secrets_cli):
+    """
+    Test that per-UID limits are enforced even if the global limit would still
+    allow to store more secrets
+    """
+    cli = secrets_cli
+
+    # Don't allow storing more secrets after reaching the max
+    # number of entries.
+    MAX_UID_SECRETS = 10
+
+    sec_value = "value"
+    for x in range(MAX_UID_SECRETS):
+        cli.set_secret(str(x), sec_value)
+
+    with pytest.raises(HTTPError) as err507:
+        cli.set_secret(str(MAX_UID_SECRETS), sec_value)
+    assert str(err507.value).startswith("507")
+
+    # FIXME - at this point, it would be nice to test that another UID can still
+    # store secrets, but sadly socket_wrapper doesn't allow us to fake UIDs yet
+
+
+@pytest.fixture
+def setup_for_low_global_limit(request):
+    """
+    Set up lower per UID limits than global limits
+    """
+    conf = create_sssd_conf(max_secrets=5, max_uid_secrets=10)
+
+    create_conf_fixture(request, conf)
+    create_sssd_secrets_fixture(request)
+    return None
+
+
+def test_global_limit_lower_than_per_uid_limit(setup_for_low_global_limit, secrets_cli):
+    """
+    Test that if the global limit is lower than the per-UID limit, it is enforced
+    first
+    """
+    cli = secrets_cli
+
+    # Don't allow storing more secrets after reaching the max
+    # number of entries.
+    MAX_SECRETS = 5
+
+    sec_value = "value"
+    for x in range(MAX_SECRETS):
+        cli.set_secret(str(x), sec_value)
+
+    with pytest.raises(HTTPError) as err507:
+        cli.set_secret(str(MAX_SECRETS), sec_value)
+    assert str(err507.value).startswith("507")
