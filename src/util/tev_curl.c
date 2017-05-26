@@ -633,7 +633,8 @@ tcurl_request_send(TALLOC_CTX *mem_ctx,
                    struct tevent_context *ev,
                    struct tcurl_ctx *tcurl_ctx,
                    struct tcurl_request *tcurl_req,
-                   long int timeout)
+                   long int timeout,
+                   size_t max_response)
 {
     struct tcurl_request_state *state;
     struct tevent_req *req;
@@ -652,7 +653,11 @@ tcurl_request_send(TALLOC_CTX *mem_ctx,
 
     state->tcurl_req = talloc_steal(state, tcurl_req);
 
-    state->response = sss_iobuf_init_empty(state, TCURL_IOBUF_CHUNK, TCURL_IOBUF_MAX);
+    if (max_response < TCURL_IOBUF_CHUNK) {
+        max_response = TCURL_IOBUF_CHUNK;
+    }
+
+    state->response = sss_iobuf_init_empty(state, TCURL_IOBUF_CHUNK, max_response);
     if (state->response == NULL) {
         ret = ENOMEM;
         goto done;
@@ -997,7 +1002,8 @@ struct tevent_req *tcurl_http_send(TALLOC_CTX *mem_ctx,
                                    const char *url,
                                    const char **headers,
                                    struct sss_iobuf *body,
-                                   int timeout)
+                                   int timeout,
+                                   size_t max_response)
 {
     struct tcurl_request *tcurl_req;
     struct tevent_req *req;
@@ -1007,7 +1013,12 @@ struct tevent_req *tcurl_http_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    req = tcurl_request_send(mem_ctx, ev, tcurl_ctx, tcurl_req, timeout);
+    req = tcurl_request_send(mem_ctx,
+                             ev,
+                             tcurl_ctx,
+                             tcurl_req,
+                             timeout,
+                             max_response);
     if (req == NULL) {
         talloc_free(tcurl_req);
     }

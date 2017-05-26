@@ -166,7 +166,8 @@ static struct tevent_req *sec_list_send(TALLOC_CTX *mem_ctx,
                              container_url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -353,7 +354,8 @@ static struct tevent_req *sec_get_send(TALLOC_CTX *mem_ctx,
                              cc_url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -639,7 +641,8 @@ static struct tevent_req *sec_patch_send(TALLOC_CTX *mem_ctx,
                              state->sec_key_url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -690,7 +693,8 @@ static void sec_patch_del_done(struct tevent_req *subreq)
                              state->sec_key_url,
                              sec_headers,
                              state->sec_value,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         tevent_req_error(req, ENOMEM);
         return;
@@ -995,7 +999,8 @@ static struct tevent_req *ccdb_sec_get_default_send(TALLOC_CTX *mem_ctx,
                              url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -1583,7 +1588,8 @@ static struct tevent_req *ccdb_sec_create_send(TALLOC_CTX *mem_ctx,
                              container_url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -1637,7 +1643,8 @@ static void ccdb_sec_container_done(struct tevent_req *subreq)
                              state->key_url,
                              sec_headers,
                              state->ccache_payload,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         tevent_req_error(req, ENOMEM);
         return;
@@ -2030,7 +2037,8 @@ static void ccdb_sec_delete_list_done(struct tevent_req *subreq)
                              cc_url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         tevent_req_error(req, ENOMEM);
         return;
@@ -2085,7 +2093,8 @@ static void ccdb_sec_delete_cc_done(struct tevent_req *subreq)
                              container_url,
                              sec_headers,
                              NULL,
-                             SEC_TIMEOUT);
+                             SEC_TIMEOUT,
+                             0);
     if (subreq == NULL) {
         tevent_req_error(req, ENOMEM);
         return;

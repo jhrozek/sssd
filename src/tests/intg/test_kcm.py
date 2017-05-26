@@ -28,6 +28,7 @@ import kdc
 import krb5utils
 import config
 from util import unindent
+from util import run_shell
 from test_secrets import create_sssd_secrets_fixture
 
 
@@ -84,7 +85,7 @@ def create_sssd_kcm_fixture(sock_path, request):
     assert kcm_pid >= 0
 
     if kcm_pid == 0:
-        if subprocess.call([resp_path, "--uid=0", "--gid=0"]) != 0:
+        if subprocess.call([resp_path, "--uid=0", "--gid=0", "--debug-level=10", "--debug-to-files"]) != 0:
             print("sssd_kcm failed to start")
             sys.exit(99)
     else:
@@ -119,6 +120,7 @@ def create_sssd_conf(kcm_path, ccache_storage):
         id_provider = local
 
         [kcm]
+        timeout = 3000
         socket_path = {kcm_path}
         ccache_storage = {ccache_storage}
     """).format(**locals())
@@ -383,10 +385,12 @@ def exercise_subsidiaries(testenv):
     out, _, _ = testenv.k5util.kinit("alice", "alicepw")
     assert out == 0
     out, _, _ = testenv.k5util.kvno('host/somehostname')
+    assert out == 0
 
     out, _, _ = testenv.k5util.kinit("bob", "bobpw")
     assert out == 0
     out, _, _ = testenv.k5util.kvno('host/differenthostname')
+    assert out == 0
 
     exp_cc_coll = dict()
     exp_cc_coll['alice@KCMTEST'] = 'host/somehostname@KCMTEST'
@@ -470,3 +474,24 @@ def test_kcm_sec_parallel_klist(setup_for_kcm_sec,
     for p in processes:
         rc = p.wait()
         assert rc == 0
+
+
+def long_princlist(limit):
+    return ["host/hostname%04d" % i for i in range(0, limit)]
+
+
+def test_many_principals(setup_for_kcm_sec,
+                         setup_secrets):
+    testenv = setup_for_kcm_sec
+
+    testenv.k5kdc.add_principal("alice", "alicepw")
+    out, _, _ = testenv.k5util.kinit("alice", "alicepw")
+    assert out == 0
+
+    for princ in long_princlist(5):
+        testenv.k5kdc.add_principal(princ)
+
+    run_shell()
+    for princ in long_princlist(5):
+        out, _, _ = testenv.k5util.kvno(princ)
+        assert out == 0

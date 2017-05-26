@@ -273,7 +273,7 @@ run_requests(struct tool_ctx *tool_ctx,
     }
 
     for (i = 0; requests[i] != NULL; i++) {
-        req = tcurl_request_send(tmp_ctx, ev, tcurl_ctx, requests[i], 5);
+        req = tcurl_request_send(tmp_ctx, ev, tcurl_ctx, requests[i], 5, 0);
         if (req == NULL) {
             DEBUG(SSSDBG_FATAL_FAILURE, "Could not create tevent request\n");
             ret = ENOMEM;

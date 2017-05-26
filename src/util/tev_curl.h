@@ -60,6 +60,9 @@ struct tcurl_ctx *tcurl_init(TALLOC_CTX *mem_ctx,
  * @param[in]  tcurl_req    TCURL request
  * @param[in]  timeout      The request timeout in seconds. Use 0 if you want
  *                          to use the default libcurl timeout.
+ * @param[in]  max_response Maximum sss_iobuf size of the libcurl response.
+ *                          Will be increased to a reasonable minimal size
+ *                          if a small or zero size is given.
  *
  * @returns A tevent request or NULL on allocation error. On other errors, we
  * try to set the errno as event error code and run it to completion so that
@@ -74,7 +77,8 @@ tcurl_request_send(TALLOC_CTX *mem_ctx,
                    struct tevent_context *ev,
                    struct tcurl_ctx *tcurl_ctx,
                    struct tcurl_request *tcurl_req,
-                   long int timeout);
+                   long int timeout,
+                   size_t max_response);
 
 /**
  * @brief Receive a result of a single asynchronous TCURL request.
@@ -82,7 +86,7 @@ tcurl_request_send(TALLOC_CTX *mem_ctx,
  * @param[in]  mem_ctx         The talloc context that owns the response
  * @param[in]  req             The request previously obtained with tcurl_request_send
  * @param[out] _response       Response to the request
- * @param[out] _response_code  Protocol response code (may indicate a protocl error)
+ * @param[out] _response_code  Protocol response code (may indicate a protocol error)
  *
  * @returns The error code of the curl request (not the HTTP code!)
  */
@@ -156,6 +160,9 @@ struct tcurl_request *tcurl_http(TALLOC_CTX *mem_ctx,
  *                          types like DELETE, this is OK to leave as NULL.
  * @param[in]  timeout      The request timeout in seconds. Use 0 if you want
  *                          to use the default libcurl timeout.
+ * @param[in]  max_response Maximum sss_iobuf size of the libcurl response.
+ *                          Will be increased to a reasonable minimal size
+ *                          if a small or zero size is given.
  *
  * @returns A tevent request or NULL on allocation error. On other errors, we
  * try to set the errno as event error code and run it to completion so that
@@ -172,7 +179,8 @@ struct tevent_req *tcurl_http_send(TALLOC_CTX *mem_ctx,
                                    const char *url,
                                    const char **headers,
                                    struct sss_iobuf *body,
-                                   int timeout);
+                                   int timeout,
+                                   size_t max_response);
 
 /**
  * @brief Receive a result of a single asynchronous HTTP request.

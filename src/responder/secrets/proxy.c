@@ -514,7 +514,7 @@ struct tevent_req *proxy_secret_req(TALLOC_CTX *mem_ctx,
     }
 
     subreq = tcurl_request_send(mem_ctx, ev, pctx->tcurl, tcurl_req,
-                                SEC_PROXY_TIMEOUT);
+                                SEC_PROXY_TIMEOUT, 0);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto done;
