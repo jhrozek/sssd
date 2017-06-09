@@ -1137,8 +1137,9 @@ static void krb5_auth_done(struct tevent_req *subreq)
     }
 
     if (kr->is_offline) {
-        if (dp_opt_get_bool(kr->krb5_ctx->opts,
-                            KRB5_STORE_PASSWORD_IF_OFFLINE)) {
+        if (dp_opt_get_bool(kr->krb5_ctx->opts, KRB5_STORE_PASSWORD_IF_OFFLINE)
+                && sss_authtok_get_type(state->pd->authtok)
+                                     == SSS_AUTHTOK_TYPE_PASSWORD) {
             krb5_auth_cache_creds(state->kr->krb5_ctx,
                                   state->domain,
                                   state->be_ctx->cdb,
