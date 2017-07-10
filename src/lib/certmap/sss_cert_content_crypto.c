@@ -23,11 +23,38 @@
 
 #include <talloc.h>
 #include <openssl/x509v3.h>
+#include <openssl/asn1.h>
+#include <openssl/asn1t.h>
 
 #include "util/crypto/sss_crypto.h"
 #include "util/cert.h"
 #include "lib/certmap/sss_certmap.h"
 #include "lib/certmap/sss_certmap_int.h"
+
+
+typedef struct PrincipalName_st {
+    ASN1_INTEGER name_type;
+    ASN1_STRING **name_string;
+} PrincipalName;
+
+ASN1_SEQUENCE(PrincipalName) = {
+    ASN1_SIMPLE(PrincipalName, name_type, ASN1_INTEGER),
+    ASN1_SEQUENCE_OF(PrincipalName, name_string, ASN1_GENERALSTRING)
+} ASN1_SEQUENCE_END(PrincipalName)
+
+IMPLEMENT_ASN1_FUNCTIONS(PrincipalName)
+
+typedef struct KRB5PrincipalName_st {
+    ASN1_STRING *realm;
+    PrincipalName *principal_name;
+} KRB5PrincipalName;
+
+ASN1_SEQUENCE(KRB5PrincipalName) = {
+    ASN1_SIMPLE(KRB5PrincipalName, realm, ASN1_GENERALSTRING),
+    ASN1_SEQUENCE_OF(KRB5PrincipalName, principal_name, PrincipalName)
+} ASN1_SEQUENCE_END(KRB5PrincipalName)
+
+IMPLEMENT_ASN1_FUNCTIONS(KRB5PrincipalName)
 
 enum san_opt openssl_name_type_to_san_opt(int type)
 {
@@ -156,12 +183,105 @@ done:
     return ret;
 }
 
+/* OpenSSL 1.1 */
+#define ASN1_STRING_get0_data ASN1_STRING_data
+void *ASN1_TYPE_unpack_sequence(const ASN1_ITEM *it, const ASN1_TYPE *t)
+{
+    if (t == NULL || t->type != V_ASN1_SEQUENCE || t->value.sequence == NULL)
+        return NULL;
+    return ASN1_item_unpack(t->value.sequence, it);
+}
+
 static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
                                         enum san_opt san_opt,
                                         GENERAL_NAME *current,
                                         struct san_list **item)
 {
-    return EINVAL;
+    const ASN1_STRING *oct;
+
+    //princ = ASN1_TYPE_unpack_sequence(ASN1_ITEM_rptr(KRB5PrincipalName),
+    //                                  current->d.otherName->value);
+    oct = current->d.otherName->value->value.sequence;
+    return add_pkinit_princ_to_san_list_buf(mem_ctx, san_opt,
+                                            oct->data, oct->length, item);
+}
+
+int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
+                                     enum san_opt san_opt,
+                                     const unsigned char *data,
+                                     size_t len,
+                                     struct san_list **item)
+{
+    struct san_list *i = NULL;
+    int ret;
+    KRB5PrincipalName *princ = NULL;
+    size_t c;
+    const unsigned char *p;
+
+    p = data;
+    princ = d2i_KRB5PrincipalName(NULL, &p, len);
+    if (princ == NULL) {
+        return EINVAL;
+    }
+
+    if (princ->realm == NULL
+            || princ->principal_name->name_string == NULL
+            || princ->principal_name->name_string[0] == NULL
+            || *ASN1_STRING_get0_data(princ->principal_name->name_string[0])
+                                                                      == '\0') {
+        ret = EINVAL;
+        goto done;
+    }
+
+    i = talloc_zero(mem_ctx, struct san_list);
+    if (i == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+    i->san_opt = san_opt;
+
+    i->val = talloc_strndup(i,
+                   (char *) ASN1_STRING_get0_data(princ->principal_name->name_string[0]),
+                   ASN1_STRING_length(princ->principal_name->name_string[0]));
+    if (i->val == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    for (c = 1; princ->principal_name->name_string[c] == NULL; c++) {
+        i->val = talloc_asprintf_append(i->val, "/%.*s",
+                  ASN1_STRING_length(princ->principal_name->name_string[c]),
+                  ASN1_STRING_get0_data(princ->principal_name->name_string[c]));
+        if (i->val == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    i->val = talloc_asprintf_append(i->val, "@%.*s",
+                                    ASN1_STRING_length(princ->realm),
+                                    ASN1_STRING_get0_data(princ->realm));
+    if (i->val == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = get_short_name(i, i->val, '@', &(i->short_name));
+    if (ret != 0) {
+        goto done;
+    }
+
+    ret = 0;
+
+done:
+    KRB5PrincipalName_free(princ);
+    if (ret == 0) {
+        *item = i;
+    } else {
+        talloc_free(i);
+    }
+
+    return ret;
 }
 
 static int add_ip_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,

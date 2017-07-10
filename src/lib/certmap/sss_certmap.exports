@@ -8,6 +8,7 @@ SSS_CERTMAP_0.0 {
         sss_certmap_get_search_filter;
         sss_cert_get_content;
         sss_certmap_free_filter_and_domains;
+        add_pkinit_princ_to_san_list_buf;
     local:
         *;
 };

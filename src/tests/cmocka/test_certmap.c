@@ -1393,6 +1393,21 @@ static void test_sss_certmap_get_search_filter(void **state)
     sss_certmap_free_ctx(ctx);
 }
 
+
+const uint8_t TEST_DATA[] = {
+0x30, 0x2E, 0xA0, 0x10, 0x1B, 0x0E, 0x41, 0x54, 0x48, 0x45, 0x4E, 0x41, 0x2E, 0x4D, 0x49, 0x54, 0x2E, 0x45, 0x44, 0x55, 0xA1, 0x1A, 0x30, 0x18, 0xA0, 0x03, 0x02, 0x01, 0x01, 0xA1, 0x11, 0x30, 0x0F, 0x1B, 0x06, 0x68, 0x66, 0x74, 0x73, 0x61, 0x69, 0x1B, 0x05, 0x65, 0x78, 0x74, 0x72, 0x61};
+
+static void test_add_pkinit_princ_to_san_list_buf(void **state)
+{
+    int ret;
+    struct san_list *i = NULL;
+
+    ret = add_pkinit_princ_to_san_list_buf(NULL, SAN_PKINIT, TEST_DATA,
+                                           sizeof(TEST_DATA), &i);
+    assert_int_equal(ret, 0);
+}
+
+
 int main(int argc, const char *argv[])
 {
     int rv;
@@ -1414,6 +1429,7 @@ int main(int argc, const char *argv[])
         cmocka_unit_test(test_sss_certmap_match_cert),
         cmocka_unit_test(test_sss_certmap_add_mapping_rule),
         cmocka_unit_test(test_sss_certmap_get_search_filter),
+        cmocka_unit_test(test_add_pkinit_princ_to_san_list_buf),
     };
 
     /* Set debug level to invalid value so we can deside if -d 0 was used. */
