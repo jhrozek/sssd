@@ -1393,7 +1393,7 @@ static void test_sss_certmap_get_search_filter(void **state)
     sss_certmap_free_ctx(ctx);
 }
 
-
+/* Test blob from MIT Kerberos src/tests/asn.1/krb5_decode_test.c */
 const uint8_t TEST_DATA[] = {
 0x30, 0x2E, 0xA0, 0x10, 0x1B, 0x0E, 0x41, 0x54, 0x48, 0x45, 0x4E, 0x41, 0x2E, 0x4D, 0x49, 0x54, 0x2E, 0x45, 0x44, 0x55, 0xA1, 0x1A, 0x30, 0x18, 0xA0, 0x03, 0x02, 0x01, 0x01, 0xA1, 0x11, 0x30, 0x0F, 0x1B, 0x06, 0x68, 0x66, 0x74, 0x73, 0x61, 0x69, 0x1B, 0x05, 0x65, 0x78, 0x74, 0x72, 0x61};
 
@@ -1405,6 +1405,14 @@ static void test_add_pkinit_princ_to_san_list_buf(void **state)
     ret = add_pkinit_princ_to_san_list_buf(NULL, SAN_PKINIT, TEST_DATA,
                                            sizeof(TEST_DATA), &i);
     assert_int_equal(ret, 0);
+    assert_non_null(i);
+    assert_int_equal(i->san_opt, SAN_PKINIT);
+    assert_non_null(i->val);
+    assert_string_equal(i->val, "hftsai/extra@ATHENA.MIT.EDU");
+    assert_non_null(i->short_name);
+    assert_string_equal(i->short_name, "hftsai/extra");
+
+    talloc_free(i);
 }
 
 

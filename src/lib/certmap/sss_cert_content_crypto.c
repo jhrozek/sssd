@@ -25,6 +25,9 @@
 #include <openssl/x509v3.h>
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
+#include <openssl/err.h>
+#include <openssl/stack.h>
+#include <openssl/safestack.h>
 
 #include "util/crypto/sss_crypto.h"
 #include "util/cert.h"
@@ -33,13 +36,13 @@
 
 
 typedef struct PrincipalName_st {
-    ASN1_INTEGER name_type;
-    ASN1_STRING **name_string;
+    ASN1_INTEGER *name_type;
+    STACK_OF(ASN1_STRING) *name_string;
 } PrincipalName;
 
 ASN1_SEQUENCE(PrincipalName) = {
-    ASN1_SIMPLE(PrincipalName, name_type, ASN1_INTEGER),
-    ASN1_SEQUENCE_OF(PrincipalName, name_string, ASN1_GENERALSTRING)
+    ASN1_EXP(PrincipalName, name_type, ASN1_INTEGER, 0),
+    ASN1_EXP_SEQUENCE_OF(PrincipalName, name_string, ASN1_GENERALSTRING, 1)
 } ASN1_SEQUENCE_END(PrincipalName)
 
 IMPLEMENT_ASN1_FUNCTIONS(PrincipalName)
@@ -50,8 +53,8 @@ typedef struct KRB5PrincipalName_st {
 } KRB5PrincipalName;
 
 ASN1_SEQUENCE(KRB5PrincipalName) = {
-    ASN1_SIMPLE(KRB5PrincipalName, realm, ASN1_GENERALSTRING),
-    ASN1_SEQUENCE_OF(KRB5PrincipalName, principal_name, PrincipalName)
+    ASN1_EXP(KRB5PrincipalName, realm, ASN1_GENERALSTRING, 0),
+    ASN1_EXP(KRB5PrincipalName, principal_name, PrincipalName, 1)
 } ASN1_SEQUENCE_END(KRB5PrincipalName)
 
 IMPLEMENT_ASN1_FUNCTIONS(KRB5PrincipalName)
@@ -199,8 +202,6 @@ static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
 {
     const ASN1_STRING *oct;
 
-    //princ = ASN1_TYPE_unpack_sequence(ASN1_ITEM_rptr(KRB5PrincipalName),
-    //                                  current->d.otherName->value);
     oct = current->d.otherName->value->value.sequence;
     return add_pkinit_princ_to_san_list_buf(mem_ctx, san_opt,
                                             oct->data, oct->length, item);
@@ -217,6 +218,7 @@ int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
     KRB5PrincipalName *princ = NULL;
     size_t c;
     const unsigned char *p;
+    ASN1_GENERALSTRING *current;
 
     p = data;
     princ = d2i_KRB5PrincipalName(NULL, &p, len);
@@ -225,10 +227,10 @@ int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
     }
 
     if (princ->realm == NULL
+            || princ->principal_name == NULL
             || princ->principal_name->name_string == NULL
-            || princ->principal_name->name_string[0] == NULL
-            || *ASN1_STRING_get0_data(princ->principal_name->name_string[0])
-                                                                      == '\0') {
+            || sk_ASN1_GENERALSTRING_num(princ->principal_name->name_string)
+                                                                         == 0) {
         ret = EINVAL;
         goto done;
     }
@@ -240,18 +242,24 @@ int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
     }
     i->san_opt = san_opt;
 
+    current = sk_ASN1_GENERALSTRING_value(princ->principal_name->name_string,
+                                          0);
     i->val = talloc_strndup(i,
-                   (char *) ASN1_STRING_get0_data(princ->principal_name->name_string[0]),
-                   ASN1_STRING_length(princ->principal_name->name_string[0]));
+                   (char *) ASN1_STRING_get0_data(current),
+                   ASN1_STRING_length(current));
     if (i->val == NULL) {
         ret = ENOMEM;
         goto done;
     }
 
-    for (c = 1; princ->principal_name->name_string[c] == NULL; c++) {
+    for (c = 1;
+         c < sk_ASN1_GENERALSTRING_num(princ->principal_name->name_string);
+         c++) {
+        current = sk_ASN1_GENERALSTRING_value(
+                                         princ->principal_name->name_string, c);
         i->val = talloc_asprintf_append(i->val, "/%.*s",
-                  ASN1_STRING_length(princ->principal_name->name_string[c]),
-                  ASN1_STRING_get0_data(princ->principal_name->name_string[c]));
+                                        ASN1_STRING_length(current),
+                                        ASN1_STRING_get0_data(current));
         if (i->val == NULL) {
             ret = ENOMEM;
             goto done;
