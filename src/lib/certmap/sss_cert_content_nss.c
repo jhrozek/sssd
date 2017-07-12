@@ -464,87 +464,6 @@ done:
     return ret;
 }
 
-int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
-                                        enum san_opt san_opt,
-                                     const unsigned char *data,
-                                     size_t len,
-                                        struct san_list **item)
-{
-    struct san_list *i = NULL;
-    SECStatus rv;
-    struct kerberos_principal_name kname;
-    int ret;
-    size_t c;
-    PLArenaPool *pool;
-    SECItem secitem;
-    pool = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
-    if (pool == NULL) {
-        return ENOMEM;
-    }
-
-    secitem.data = discard_const(data);
-    secitem.len = len;
-    rv = SEC_ASN1DecodeItem(pool, &kname,
-                            kerberos_principal_name_template,
-                            &secitem);
-    if (rv != SECSuccess) {
-        return EINVAL;
-    }
-
-    i = talloc_zero(mem_ctx, struct san_list);
-    if (i == NULL) {
-        return ENOMEM;
-    }
-    i->san_opt = san_opt;
-
-    if (kname.principal_name.name_string != NULL) {
-        i->val = talloc_strdup(i, "");
-        if (i->val == NULL) {
-            ret = ENOMEM;
-            goto done;
-        }
-        for (c = 0; kname.principal_name.name_string[c] != NULL; c++) {
-            if (c > 0) {
-                i->val = talloc_strdup_append(i->val, "/");
-                if (i->val == NULL) {
-                    ret = ENOMEM;
-                    goto done;
-                }
-            }
-            i->val = talloc_strndup_append(i->val,
-                         (char *) kname.principal_name.name_string[c]->data,
-                          kname.principal_name.name_string[c]->len);
-            if (i->val == NULL) {
-                ret = ENOMEM;
-                goto done;
-            }
-        }
-        i->val = talloc_asprintf_append(i->val, "@%.*s",
-                                             kname.realm.len,
-                                             (char *) kname.realm.data);
-        if (i->val == NULL) {
-            ret = ENOMEM;
-            goto done;
-        }
-
-        ret = get_short_name(i, i->val, '@', &(i->short_name));
-        if (ret != 0) {
-            goto done;
-        }
-    }
-
-    ret = 0;
-
-done:
-    if (ret == 0) {
-        *item = i;
-    } else {
-        talloc_free(i);
-    }
-
-    return ret;
-}
-
 static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
                                         PLArenaPool *pool,
                                         enum san_opt san_opt,
@@ -553,7 +472,7 @@ static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
 {
     struct san_list *i = NULL;
     SECStatus rv;
-    struct kerberos_principal_name kname;
+    struct kerberos_principal_name kname = { 0 };
     int ret;
     size_t c;
 
@@ -592,9 +511,9 @@ static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
                 goto done;
             }
         }
-        i->val = talloc_strndup_append(i->val,
-                                             (char *) kname.realm.data,
-                                             kname.realm.len);
+        i->val = talloc_asprintf_append(i->val, "@%.*s",
+                                             kname.realm.len,
+                                             (char *) kname.realm.data);
         if (i->val == NULL) {
             ret = ENOMEM;
             goto done;

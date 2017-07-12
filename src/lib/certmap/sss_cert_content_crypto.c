@@ -200,28 +200,17 @@ static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
                                         GENERAL_NAME *current,
                                         struct san_list **item)
 {
-    const ASN1_STRING *oct;
-
-    oct = current->d.otherName->value->value.sequence;
-    return add_pkinit_princ_to_san_list_buf(mem_ctx, san_opt,
-                                            oct->data, oct->length, item);
-}
-
-int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
-                                     enum san_opt san_opt,
-                                     const unsigned char *data,
-                                     size_t len,
-                                     struct san_list **item)
-{
     struct san_list *i = NULL;
     int ret;
     KRB5PrincipalName *princ = NULL;
     size_t c;
     const unsigned char *p;
-    ASN1_GENERALSTRING *current;
+    const ASN1_STRING *oct;
+    ASN1_GENERALSTRING *name_comp;
 
-    p = data;
-    princ = d2i_KRB5PrincipalName(NULL, &p, len);
+    oct = current->d.otherName->value->value.sequence;
+    p = oct->data;
+    princ = d2i_KRB5PrincipalName(NULL, &p, oct->length);
     if (princ == NULL) {
         return EINVAL;
     }
@@ -242,33 +231,44 @@ int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
     }
     i->san_opt = san_opt;
 
-    current = sk_ASN1_GENERALSTRING_value(princ->principal_name->name_string,
-                                          0);
-    i->val = talloc_strndup(i,
-                   (char *) ASN1_STRING_get0_data(current),
-                   ASN1_STRING_length(current));
+    i->val = talloc_strdup(i, "");
     if (i->val == NULL) {
         ret = ENOMEM;
         goto done;
     }
 
-    for (c = 1;
+    for (c = 0;
          c < sk_ASN1_GENERALSTRING_num(princ->principal_name->name_string);
          c++) {
-        current = sk_ASN1_GENERALSTRING_value(
+
+        if (c > 0) {
+            i->val = talloc_strdup_append(i->val, "/");
+            if (i->val == NULL) {
+                ret = ENOMEM;
+                goto done;
+            }
+        }
+
+        name_comp = sk_ASN1_GENERALSTRING_value(
                                          princ->principal_name->name_string, c);
-        i->val = talloc_asprintf_append(i->val, "/%.*s",
-                                        ASN1_STRING_length(current),
-                                        ASN1_STRING_get0_data(current));
+        i->val = talloc_strndup_append(i->val,
+                                      (char *) ASN1_STRING_get0_data(name_comp),
+                                      ASN1_STRING_length(name_comp));
         if (i->val == NULL) {
             ret = ENOMEM;
             goto done;
         }
     }
 
+            i->val = talloc_strdup_append(i->val, "@");
+        i->val = talloc_strndup_append(i->val,
+                                    (char *)ASN1_STRING_get0_data(princ->realm),
+                                    ASN1_STRING_length(princ->realm));
+#if 0
     i->val = talloc_asprintf_append(i->val, "@%.*s",
                                     ASN1_STRING_length(princ->realm),
                                     ASN1_STRING_get0_data(princ->realm));
+#endif
     if (i->val == NULL) {
         ret = ENOMEM;
         goto done;

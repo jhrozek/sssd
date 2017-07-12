@@ -207,10 +207,4 @@ int add_principal_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,
 
 int rdn_list_2_dn_str(TALLOC_CTX *mem_ctx, const char *conversion,
                       const char **rdn_list, char **result);
-
-int add_pkinit_princ_to_san_list_buf(TALLOC_CTX *mem_ctx,
-                                     enum san_opt san_opt,
-                                     const unsigned char *data,
-                                     size_t len,
-                                     struct san_list **item);
 #endif /* __SSS_CERTMAP_INT_H__ */
