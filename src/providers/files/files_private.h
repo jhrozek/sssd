@@ -39,8 +39,10 @@ struct files_id_ctx {
     struct sss_domain_info *domain;
     struct files_ctx *fctx;
 
-    const char *passwd_file;
-    const char *group_file;
+    const char **passwd_files;
+    const char **group_files;
+    int num_passwd_files;
+    int num_group_files;
 
     bool updating_passwd;
     bool updating_groups;
@@ -53,8 +55,10 @@ struct files_id_ctx {
 /* files_ops.c */
 struct files_ctx *sf_init(TALLOC_CTX *mem_ctx,
                           struct tevent_context *ev,
-                          const char *passwd_file,
-                          const char *group_file,
+                          const char **passwd_files,
+                          const char **group_files,
+                          int num_passwd_files,
+                          int num_group_files,
                           struct files_id_ctx *id_ctx);
 
 /* files_id.c */
