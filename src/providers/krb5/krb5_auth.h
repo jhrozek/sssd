@@ -59,6 +59,7 @@ struct krb5child_req {
     uid_t uid;
     gid_t gid;
     bool is_offline;
+    bool kdcproxy_faux_online;
     struct fo_server *srv;
     struct fo_server *kpasswd_srv;
     bool active_ccache;
