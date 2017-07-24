@@ -469,6 +469,12 @@ static int local_db_check_peruid_number_of_secrets(TALLOC_CTX *mem_ctx,
 
     ret = ldb_search(lctx->ldb, tmp_ctx, &res, cli_basedn, LDB_SCOPE_SUBTREE,
                      attrs, LOCAL_SIMPLE_FILTER);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "ldb_search returned %d: %s\n", ret, ldb_strerror(ret));
+        goto done;
+    }
+
     if (res->count >= lc_req->quota->max_uid_secrets) {
         DEBUG(SSSDBG_OP_FAILURE,
               "Cannot store any more secrets for this client (basedn %s) "
@@ -506,6 +512,12 @@ static int local_db_check_number_of_secrets(TALLOC_CTX *mem_ctx,
 
     ret = ldb_search(lctx->ldb, tmp_ctx, &res, dn, LDB_SCOPE_SUBTREE,
                      attrs, LOCAL_SIMPLE_FILTER);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_TRACE_LIBS,
+              "ldb_search returned %d: %s\n", ret, ldb_strerror(ret));
+        goto done;
+    }
+
     if (res->count >= lc_req->quota->max_secrets) {
         DEBUG(SSSDBG_OP_FAILURE,
               "Cannot store any more secrets as the maximum allowed limit (%d) "
