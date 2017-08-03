@@ -741,6 +741,7 @@ static errno_t sss_write_krb5_libdefaults_snippet(const char *path,
     int ret;
     TALLOC_CTX *tmp_ctx = NULL;
     const char *file_name;
+    char *file_contents;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -758,29 +759,43 @@ static errno_t sss_write_krb5_libdefaults_snippet(const char *path,
     DEBUG(SSSDBG_FUNC_DATA, "File for KRB5 kibdefaults configuration is [%s]\n",
                              file_name);
 
-    ret = sss_write_krb5_snippet_common(file_name, "[libdefaults]\n");
+    file_contents = talloc_strdup(tmp_ctx, "[libdefaults]\n");
+    if (file_contents == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "talloc_asprintf failed while creating the content\n");
+        ret = ENOMEM;
+        goto done;
+    }
+
+    if (canonicalize == true) {
+        file_contents = talloc_asprintf_append(file_contents,
+                                               " canonicalize = true\n");
+        if (file_contents == NULL) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "talloc_asprintf failed while appending to the content\n");
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    if (udp_limit == true) {
+        file_contents = talloc_asprintf_append(file_contents,
+                                               " udp_preference_limit = 0\n");
+        if (file_contents == NULL) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "talloc_asprintf failed while appending to the content\n");
+            ret = ENOMEM;
+            goto done;
+        }
+    }
+
+    ret = sss_write_krb5_snippet_common(file_name, file_contents);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE, "sss_write_krb5_snippet_common failed.\n");
         goto done;
     }
 
-    if (udp_limit == true) {
-        ret = sss_write_krb5_snippet_common(file_name,
-                                            " udp_preference_limit = 0\n");
-        if (ret != EOK) {
-            DEBUG(SSSDBG_OP_FAILURE, "sss_write_krb5_snippet_common failed.\n");
-            goto done;
-        }
-    }
 
-    if (canonicalize == true) {
-        ret = sss_write_krb5_snippet_common(file_name,
-                                            " canonicalize = true\n");
-        if (ret != EOK) {
-            DEBUG(SSSDBG_OP_FAILURE, "sss_write_krb5_snippet_common failed.\n");
-            goto done;
-        }
-    }
 done:
 
     talloc_free(tmp_ctx);
