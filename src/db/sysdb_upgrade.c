@@ -704,6 +704,9 @@ int sysdb_upgrade_04(struct sysdb_ctx *sysdb, const char **ver)
     }
 
     /* Rebuild memberuid and memberoif attributes */
+    DEBUG(SSSDBG_TRACE_FUNC,
+          "rhbz#1481778 | rebuild memberuid and memberof attributes\n");
+
     msg = ldb_msg_new(tmp_ctx);
     if (!msg) {
         ret = ENOMEM;
