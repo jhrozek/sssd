@@ -58,6 +58,11 @@
                     ldap_use_tokengroups = true
                 </para>
             </listitem>
+            <listitem>
+                <para>
+                    ldap_user_ad_logon_hours = logonHours
+                </para>
+            </listitem>
         </itemizedlist>
     </refsect2>
 </refsect1>

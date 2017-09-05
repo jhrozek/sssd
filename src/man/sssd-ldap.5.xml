@@ -574,7 +574,7 @@
                             storing the user's permitted logon hours.
                         </para>
                         <para>
-                            Default: logonHours
+                            Default: logonHours with ldap_schema=ad, otherwise not set
                         </para>
                     </listitem>
                 </varlistentry>

@@ -44,6 +44,15 @@
 #define PERMANENTLY_LOCKED_ACCOUNT "000001010000Z"
 #define MALFORMED_FILTER "Malformed access control filter [%s]\n"
 
+#ifndef MAX
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
+
 enum sdap_pwpolicy_mode {
     PWP_LOCKOUT_ONLY,
     PWP_LOCKOUT_EXPIRE,
