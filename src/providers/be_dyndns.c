@@ -1034,7 +1034,7 @@ be_nsupdate_args(TALLOC_CTX *mem_ctx,
     char **argv;
     int argc = 0;
 
-    argv = talloc_zero_array(mem_ctx, char *, 6);
+    argv = talloc_zero_array(mem_ctx, char *, 7);
     if (argv == NULL) {
         return NULL;
     }
@@ -1081,6 +1081,14 @@ be_nsupdate_args(TALLOC_CTX *mem_ctx,
 
     if (debug_level >= SSSDBG_TRACE_INTERNAL) {
         argv[argc] = talloc_strdup(argv, "-D");
+        if (argv[argc] == NULL) {
+            goto fail;
+        }
+        argc++;
+    }
+
+    if (debug_level >= SSSDBG_TRACE_ALL) {
+        argv[argc] = talloc_strdup(argv, "-M");
         if (argv[argc] == NULL) {
             goto fail;
         }
