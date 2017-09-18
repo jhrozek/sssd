@@ -29,6 +29,7 @@ dist_noinst_DATA = \
     kdc.py \
     krb5utils.py \
     test_kcm.py \
+    test_pac_responder.py \
     $(NULL)
 
 config.py: config.py.m4
