@@ -114,6 +114,12 @@ errno_t kcm_cc_store_cred_blob(struct kcm_ccache *cc,
 struct kcm_cred *kcm_cc_get_cred(struct kcm_ccache *cc);
 struct kcm_cred *kcm_cc_next_cred(struct kcm_cred *crd);
 
+/* Return the SELinux context of the owner of the ccache.
+ *
+ * Return NULL on systems that do not support SELinux
+ */
+SELINUX_CTX kcm_cc_get_sectx(struct kcm_ccache *cc);
+
 /* An opaque database that contains all the ccaches */
 struct kcm_ccdb;
 

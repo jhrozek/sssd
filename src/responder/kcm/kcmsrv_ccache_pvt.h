@@ -30,8 +30,8 @@ struct kcm_ccache_owner {
     uid_t uid;
     gid_t gid;
 #ifdef HAVE_SELINUX
-    const char *selinux_context;
-#endif
+    SELINUX_CTX sectx;
+#endif /* HAVE_SELINUX */
 };
 
 struct kcm_cred {

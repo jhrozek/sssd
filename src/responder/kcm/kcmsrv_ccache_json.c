@@ -56,7 +56,7 @@
  * We keep the JSON representation of the ccache versioned to allow
  * us to modify the format in a future version
  */
-#define KS_JSON_VERSION     1
+#define KS_JSON_VERSION     2
 
 /*
  * The secrets store is a key-value store at heart. We store the UUID
@@ -393,6 +393,38 @@ static json_t *creds_to_json_array(struct kcm_cred *creds)
 }
 
 /*
+ * Creates a JSON object with a string. If SELinux is supported
+ * on this platform, then the string will be non-empty, otherwise
+ * we just use an empty string.
+ */
+static json_t *sec_ctx_to_json(struct kcm_ccache *cc)
+{
+    const char *sec_ctx;
+
+#ifdef HAVE_SELINUX
+    SELINUX_CTX cc_sectx;
+
+    cc_sectx = kcm_cc_get_sectx(cc);
+    if (cc_sectx = NULL) {
+        /* FIXME - test disabled SELinux */
+        return NULL;
+    }
+
+    str_sectx = SELINUX_context_str(cli->selinux_ctx);
+    if (str_sectx == NULL) {
+        /* FIXME - debug */
+        return NULL;
+    }
+#else
+    sec_ctx = "";
+#endif /* HAVE_SELINUX */
+
+    /* Now we have the string, let's turn it into a JSON object */
+    return json_string(sec_ctx);
+}
+
+
+/*
  * The ccache is formatted in JSON as:
  * {
  *      version: number
@@ -419,6 +451,7 @@ static json_t *ccache_to_json(struct kcm_ccache *cc)
     json_t *princ = NULL;
     json_t *creds = NULL;
     json_t *jcc = NULL;
+    json_t *sec_ctx = NULL;
     json_error_t error;
 
     princ = princ_to_json(cc, cc->client);
@@ -436,19 +469,30 @@ static json_t *ccache_to_json(struct kcm_ccache *cc)
         return NULL;
     }
 
+    sec_ctx = sec_ctx_to_json(cc);
+    if (sec_ctx == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot convert creds to JSON array\n");
+        json_decref(creds);
+        json_decref(princ);
+        return NULL;
+    }
+
     jcc = json_pack_ex(&error,
                        JSON_STRICT,
-                       "{s:i, s:i, s:o, s:o}",
+                       "{s:i, s:i, s:o, s:o, s:o}",
                        "version", KS_JSON_VERSION,
                        "kdc_offset", cc->kdc_offset,
                        "principal", princ,
-                       "creds", creds);
+                       "creds", creds,
+                       "sec_ctx", sec_ctx);
     if (jcc == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Failed to pack JSON ccache structure on line %d: %s\n",
               error.line, error.text);
         json_decref(creds);
         json_decref(princ);
+        json_decref(sec_ctx);
         return NULL;
     }
 
@@ -838,6 +882,8 @@ static errno_t sec_json_value_to_ccache(struct kcm_ccache *cc,
         return EINVAL;
     }
 
+    switch (version) {
+    }
     if (version != KS_JSON_VERSION) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Expected version %d, received version %d\n",

@@ -35,6 +35,10 @@ static int kcm_cc_destructor(struct kcm_ccache *cc)
     }
 
     krb5_free_principal(NULL, cc->client);
+#if HAVE_SELINUX
+    SELINUX_context_free(cc->owner->sectx);
+    cc->owner->sectx = NULL;
+#endif
     return 0;
 }
 
@@ -44,6 +48,7 @@ static errno_t kcm_cc_set_sectx(struct kcm_ccache_owner *cc_owner,
 #if HAVE_SELINUX
     const char *str_sectx;
 
+    /* FIXME - is there a better way to copy the context? */
     str_sectx = SELINUX_context_str(cli->selinux_ctx);
     if (str_sectx == NULL) {
         DEBUG(SSSDBG_OP_FAILURE,
@@ -51,8 +56,8 @@ static errno_t kcm_cc_set_sectx(struct kcm_ccache_owner *cc_owner,
         return EIO;
     }
 
-    cc_owner->selinux_context = talloc_strdup(cc_owner, str_sectx);
-    if (cc_owner->selinux_context == NULL) {
+    cc_owner->sectx = SELINUX_context_new(str_sectx);
+    if (cc_owner->sectx == NULL) {
         return ENOMEM;
     }
 
@@ -163,6 +168,39 @@ krb5_principal kcm_cc_get_client_principal(struct kcm_ccache *cc)
     return cc ? cc->client : NULL;
 }
 
+static bool cc_seaccess(struct kcm_ccache_owner *cc_owner,
+                        struct cli_creds *client)
+{
+    const char *ra, *rb;
+
+    if (cc_owner->sectx == client->selinux_ctx) {
+        return true;
+    }
+    if (cc_owner->sectx == NULL || client->selinux_ctx == NULL) {
+        return false;
+    }
+
+    if (strcmp(SELINUX_context_user_get(cc_owner->sectx),
+               SELINUX_context_user_get(client->selinux_ctx)) != 0) {
+        return false;
+    }
+    if (strcmp(SELINUX_context_role_get(cc_owner->sectx),
+               SELINUX_context_role_get(client->selinux_ctx)) != 0) {
+        return false;
+    }
+    if (strcmp(SELINUX_context_type_get(cc_owner->sectx),
+               SELINUX_context_type_get(client->selinux_ctx)) != 0) {
+        return false;
+    }
+    ra = SELINUX_context_range_get(cc_owner->sectx);
+    rb = SELINUX_context_range_get(client->selinux_ctx);
+    if (ra && rb && (strcmp(ra, rb) != 0)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool kcm_cc_access(struct kcm_ccache *cc,
                    struct cli_creds *client)
 {
@@ -180,7 +218,12 @@ bool kcm_cc_access(struct kcm_ccache *cc,
     }
 
     ok = ((cc->owner->uid == uid) && (cc->owner->gid == gid));
+    if (ok) {
+        ok = cc_seaccess(cc->owner, client);
+    }
+
     if (!ok) {
+        /* FIXME - the debug message should include the SELinux context */
         DEBUG(SSSDBG_MINOR_FAILURE,
               "Client %"SPRIuid":%"SPRIgid" has no access to ccache %s\n",
               cli_creds_get_uid(client),
@@ -227,6 +270,15 @@ struct kcm_cred *kcm_cc_get_cred(struct kcm_ccache *cc)
     }
 
     return cc->creds;
+}
+
+SELINUX_CTX kcm_cc_get_sectx(struct kcm_ccache *cc)
+{
+#ifdef HAVE_SELINUX
+    return cc->owner->sec_ctx;
+#else
+    return NULL;
+#endif /* HAVE_SELINUX */
 }
 
 struct kcm_cred *kcm_cc_next_cred(struct kcm_cred *crd)
