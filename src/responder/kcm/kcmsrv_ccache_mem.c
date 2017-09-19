@@ -84,7 +84,7 @@ static struct ccache_mem_wrap *memdb_get_by_uuid(struct ccdb_mem *memdb,
             continue;
         }
 
-        if (ccwrap->cc->owner.uid == uid) {
+        if (ccwrap->cc->owner->uid == uid) {
             if (uuid_compare(uuid, ccwrap->cc->uuid) == 0) {
                 out = ccwrap;
                 break;
@@ -112,7 +112,7 @@ static struct ccache_mem_wrap *memdb_get_by_name(struct ccdb_mem *memdb,
             continue;
         }
 
-        if (ccwrap->cc->owner.uid == uid) {
+        if (ccwrap->cc->owner->uid == uid) {
             if (strcmp(ccwrap->cc->name, name) == 0) {
                 out = ccwrap;
                 break;
@@ -239,7 +239,7 @@ static struct tevent_req *ccdb_mem_list_send(TALLOC_CTX *mem_ctx,
     uid = cli_creds_get_uid(client);
 
     DLIST_FOR_EACH(ccwrap, memdb->head) {
-        if (ccwrap->cc->owner.uid == uid) {
+        if (ccwrap->cc->owner->uid == uid) {
             num_ccaches++;
         }
     }
@@ -252,7 +252,7 @@ static struct tevent_req *ccdb_mem_list_send(TALLOC_CTX *mem_ctx,
 
     cc_index = 0;
     DLIST_FOR_EACH(ccwrap, memdb->head) {
-        if (ccwrap->cc->owner.uid == uid) {
+        if (ccwrap->cc->owner->uid == uid) {
             uuid_copy(state->uuid_list[cc_index], ccwrap->cc->uuid);
             cc_index++;
         }
@@ -307,7 +307,7 @@ static struct tevent_req *ccdb_mem_set_default_send(TALLOC_CTX *mem_ctx,
             continue;
         }
 
-        if (ccwrap->cc->owner.uid == uid) {
+        if (ccwrap->cc->owner->uid == uid) {
             ccwrap->is_default = false;
         }
     }
@@ -361,7 +361,7 @@ static struct tevent_req *ccdb_mem_get_default_send(TALLOC_CTX *mem_ctx,
             continue;
         }
 
-        if (ccwrap->cc->owner.uid == uid && ccwrap->is_default == true) {
+        if (ccwrap->cc->owner->uid == uid && ccwrap->is_default == true) {
             break;
         }
     }

@@ -50,7 +50,7 @@ struct kcm_ccdb {
 
 struct kcm_ccache {
     const char *name;
-    struct kcm_ccache_owner owner;
+    struct kcm_ccache_owner *owner;
     uuid_t uuid;
 
     krb5_principal client;
