@@ -38,6 +38,46 @@ static int kcm_cc_destructor(struct kcm_ccache *cc)
     return 0;
 }
 
+static errno_t kcm_cc_set_sectx(struct kcm_ccache_owner *cc_owner,
+                                struct cli_creds *cli)
+{
+#if HAVE_SELINUX
+    const char *str_sectx;
+
+    str_sectx = SELINUX_context_str(cli->selinux_ctx);
+    if (str_sectx == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot get the SELinux context as string\n");
+        return EIO;
+    }
+
+    cc_owner->selinux_context = talloc_strdup(cc_owner, str_sectx);
+    if (cc_owner->selinux_context == NULL) {
+        return ENOMEM;
+    }
+
+    return EOK;
+#else
+    return EOK;
+#endif
+}
+
+static errno_t kcm_cc_set_owner(struct kcm_ccache_owner *cc_owner,
+                                struct cli_creds *cli)
+{
+    errno_t ret;
+
+    cc_owner->uid = cli_creds_get_uid(cli);
+    cc_owner->gid = cli_creds_get_gid(cli);
+
+    ret = kcm_cc_set_sectx(cc_owner, cli);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
 errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
                    krb5_context k5c,
                    struct cli_creds *owner,
@@ -84,8 +124,14 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    cc->owner->uid = cli_creds_get_uid(owner);
-    cc->owner->gid = cli_creds_get_gid(owner);
+    ret = kcm_cc_set_owner(cc->owner, owner);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot set ccache owner [%d]: %s\n", ret, sss_strerror(ret));
+        talloc_free(cc);
+        return ret;
+    }
+
     cc->kdc_offset = INT32_MAX;
 
     talloc_set_destructor(cc, kcm_cc_destructor);
