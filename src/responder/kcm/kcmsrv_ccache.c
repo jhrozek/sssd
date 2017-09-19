@@ -60,6 +60,12 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
         return ENOMEM;
     }
 
+    cc->owner = talloc_zero(cc, struct kcm_ccache_owner);
+    if (cc->owner == NULL) {
+        talloc_free(cc);
+        return ENOMEM;
+    }
+
     cc->name = talloc_strdup(cc, name);
     if (cc->name == NULL) {
         ret = ENOMEM;
@@ -78,8 +84,8 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    cc->owner.uid = cli_creds_get_uid(owner);
-    cc->owner.gid = cli_creds_get_gid(owner);
+    cc->owner->uid = cli_creds_get_uid(owner);
+    cc->owner->gid = cli_creds_get_gid(owner);
     cc->kdc_offset = INT32_MAX;
 
     talloc_set_destructor(cc, kcm_cc_destructor);
@@ -127,7 +133,7 @@ bool kcm_cc_access(struct kcm_ccache *cc,
         return true;
     }
 
-    ok = ((cc->owner.uid == uid) && (cc->owner.gid == gid));
+    ok = ((cc->owner->uid == uid) && (cc->owner->gid == gid));
     if (!ok) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               "Client %"SPRIuid":%"SPRIgid" has no access to ccache %s\n",
