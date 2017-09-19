@@ -49,15 +49,15 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
     krb5_error_code kret;
     errno_t ret;
 
-    cc = talloc_zero(mem_ctx, struct kcm_ccache);
-    if (cc == NULL) {
-        return ENOMEM;
-    }
-
     ret = kcm_check_name(name, owner);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Name %s is malformed\n", name);
         goto done;
+    }
+
+    cc = talloc_zero(mem_ctx, struct kcm_ccache);
+    if (cc == NULL) {
+        return ENOMEM;
     }
 
     cc->name = talloc_strdup(cc, name);
