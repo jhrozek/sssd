@@ -899,11 +899,17 @@ errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
+    cc->owner = talloc_zero(cc, struct kcm_ccache_owner);
+    if (cc->owner == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
     /* We rely on sssd-secrets only searching the user's subtree so we
      * set the ownership to the client
      */
-    cc->owner.uid = cli_creds_get_uid(client);
-    cc->owner.gid = cli_creds_get_gid(client);
+    cc->owner->uid = cli_creds_get_uid(client);
+    cc->owner->gid = cli_creds_get_gid(client);
 
     ret = sec_key_parse(cc, sec_key, &cc->name, cc->uuid);
     if (ret != EOK) {
