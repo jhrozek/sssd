@@ -56,7 +56,11 @@
  * We keep the JSON representation of the ccache versioned to allow
  * us to modify the format in a future version
  */
-#define KS_JSON_VERSION     2
+#define KS_JSON_V_UNKNOWN   0
+#define KS_JSON_V_ORIG      1
+#define KS_JSON_V_SECTX     2
+
+#define KS_JSON_VERSION     KS_JSON_V_SECTX
 
 /*
  * The secrets store is a key-value store at heart. We store the UUID
@@ -858,13 +862,88 @@ static errno_t json_to_creds(struct kcm_ccache *cc,
     return EOK;
 }
 
-static errno_t sec_json_value_to_ccache(struct kcm_ccache *cc,
+static const char *json_to_sec_ctx(TALLOC_CTX *mem_ctx,
+                                   json_t *j_sec_ctx)
+{
+    const char *sec_ctx;
+
+#ifdef HAVE_SELINUX
+     sec_ctx = json_string_value(j_sec_ctx);
+     if (sec_ctx == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Cannot convert the JSON string to a native string\n");
+         return NULL;
+     }
+
+     return talloc_strdup(mem_ctx, sec_ctx);
+#else
+    sec_ctx = NULL;
+#endif /* HAVE_SELINUX */
+
+    /* Now we have the string, let's turn it into a JSON object */
+    return sec_ctx;
+}
+
+static int get_json_version(json_t *root)
+{
+    json_t *jversion = NULL;
+    int version;
+
+    jversion = json_object_get(root, "version");
+    if (jversion == NULL) {
+        /* Return 0 on failure because json_integer_value also returns 0
+         * if the value is not an integer..
+         */
+        return 0;
+    }
+
+    version = json_integer_value(jversion);
+    json_decref(jversion);
+    return version;
+}
+
+static errno_t sec_json_unpack_client_and_creds(struct kcm_ccache *cc,
+                                                int expected_version,
+                                                int json_version,
+                                                json_t *princ,
+                                                json_t *creds,
+                                                json_t *root)
+{
+    errno_t ret;
+
+    if (json_version != expected_version) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Expected version %d, received version %d\n",
+              expected_version, json_version);
+        return EINVAL;
+    }
+
+    ret = json_to_princ(cc, princ, &cc->client);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot store JSON to principal [%d]: %s\n",
+              ret, sss_strerror(ret));
+        return ret;
+    }
+
+    ret = json_to_creds(cc, creds);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot store JSON to creds [%d]: %s\n",
+              ret, sss_strerror(ret));
+        return ret;
+    }
+
+    return ret;
+}
+
+static errno_t sec_json_value_unpack_v1(struct kcm_ccache *cc,
                                         json_t *root)
 {
     errno_t ret;
+    json_error_t error;
     json_t *princ = NULL;
     json_t *creds = NULL;
-    json_error_t error;
     int version;
 
     ret = json_unpack_ex(root,
@@ -882,32 +961,91 @@ static errno_t sec_json_value_to_ccache(struct kcm_ccache *cc,
         return EINVAL;
     }
 
-    switch (version) {
-    }
-    if (version != KS_JSON_VERSION) {
+    ret = sec_json_unpack_client_and_creds(cc,
+                                           KS_JSON_V_ORIG, version,
+                                           princ, creds,
+                                           root);
+    if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
-              "Expected version %d, received version %d\n",
-              KS_JSON_VERSION, version);
+              "Failed to unpack principal or creds payload\n");
         return EINVAL;
     }
 
-    ret = json_to_princ(cc, princ, &cc->client);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_CRIT_FAILURE,
-              "Cannot store JSON to principal [%d]: %s\n",
-              ret, sss_strerror(ret));
-        return ret;
-    }
-
-    ret = json_to_creds(cc, creds);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_CRIT_FAILURE,
-              "Cannot store JSON to creds [%d]: %s\n",
-              ret, sss_strerror(ret));
-        return EOK;
-    }
-
+    cc->owner->sectx = NULL;
     return EOK;
+}
+
+static errno_t sec_json_value_unpack_v2(struct kcm_ccache *cc,
+                                        json_t *root)
+{
+    errno_t ret;
+    json_error_t error;
+    json_t *princ = NULL;
+    json_t *creds = NULL;
+    json_t *sec_ctx = NULL;
+    int version;
+
+    ret = json_unpack_ex(root,
+                         &error,
+                         JSON_STRICT,
+                         "{s:i, s:i, s:o, s:o}",
+                         "version", &version,
+                         "kdc_offset", &cc->kdc_offset,
+                         "principal", &princ,
+                         "creds", &creds,
+                         "sec_ctx", &sec_ctx);
+    if (ret != 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Failed to unpack JSON creds structure on line %d: %s\n",
+              error.line, error.text);
+        return EINVAL;
+    }
+
+    ret = sec_json_unpack_client_and_creds(cc, KS_JSON_V_ORIG, version,
+                                           princ, creds,
+                                           root);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Failed to unpack principal or creds payload\n");
+        return EINVAL;
+    }
+
+    cc->owner->sectx = json_to_sec_ctx(cc->owner, sec_ctx);
+    if (cc->owner->sectx == NULL) {
+        DEBUG(SSSDBG_CONF_SETTINGS,
+              "Unknown SELinux context, this is OK if the platform does not "
+              "support SELinux\n");
+    }
+    return EOK;
+}
+
+static errno_t sec_json_value_to_ccache(struct kcm_ccache *cc,
+                                        json_t *root)
+{
+    errno_t ret;
+    int version;
+
+    version = get_json_version(root);
+    switch (version) {
+    case KS_JSON_V_ORIG:
+        ret = sec_json_value_unpack_v1(cc, root);
+        break;
+    case KS_JSON_V_SECTX:
+        ret = sec_json_value_unpack_v2(cc, root);
+        break;
+    case KS_JSON_V_UNKNOWN:
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Could not determine JSON object version, fail\n");
+        ret = ERR_JSON_DECODING;
+        break;
+    default:
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Unexpected version %d\n", version);
+        ret = EINVAL;
+        break;
+    }
+
+    return ret;
 }
 
 /*
