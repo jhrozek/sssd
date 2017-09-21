@@ -275,7 +275,7 @@ struct kcm_cred *kcm_cc_get_cred(struct kcm_ccache *cc)
 SELINUX_CTX kcm_cc_get_sectx(struct kcm_ccache *cc)
 {
 #ifdef HAVE_SELINUX
-    return cc->owner->sec_ctx;
+    return cc->owner->sectx;
 #else
     return NULL;
 #endif /* HAVE_SELINUX */

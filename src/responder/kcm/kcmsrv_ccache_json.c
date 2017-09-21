@@ -405,13 +405,13 @@ static json_t *sec_ctx_to_json(struct kcm_ccache *cc)
     SELINUX_CTX cc_sectx;
 
     cc_sectx = kcm_cc_get_sectx(cc);
-    if (cc_sectx = NULL) {
+    if (cc_sectx == NULL) {
         /* FIXME - test disabled SELinux */
         return NULL;
     }
 
-    str_sectx = SELINUX_context_str(cli->selinux_ctx);
-    if (str_sectx == NULL) {
+    sec_ctx = SELINUX_context_str(cc_sectx);
+    if (sec_ctx == NULL) {
         /* FIXME - debug */
         return NULL;
     }
@@ -941,6 +941,12 @@ errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
 
     cc = talloc_zero(tmp_ctx, struct kcm_ccache);
     if (cc == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    cc->owner = talloc_zero(cc, struct kcm_ccache_owner);
+    if (cc->owner == NULL) {
         ret = ENOMEM;
         goto done;
     }
