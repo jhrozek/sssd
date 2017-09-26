@@ -38,12 +38,14 @@ static int kcm_cc_destructor(struct kcm_ccache *cc)
     return 0;
 }
 
-errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
-                   krb5_context k5c,
-                   struct cli_creds *owner,
-                   const char *name,
-                   krb5_principal princ,
-                   struct kcm_ccache **_cc)
+errno_t kcm_cc_create(TALLOC_CTX *mem_ctx,
+                      krb5_context k5c,
+                      struct cli_creds *owner,
+                      const char *name,
+                      uuid_t uuid,
+                      int32_t kdc_offset,
+                      krb5_principal princ,
+                      struct kcm_ccache **_cc)
 {
     struct kcm_ccache *cc = NULL;
     krb5_error_code kret;
@@ -65,6 +67,8 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
         talloc_free(cc);
         return ENOMEM;
     }
+    cc->owner->uid = cli_creds_get_uid(owner);
+    cc->owner->gid = cli_creds_get_gid(owner);
 
     cc->name = talloc_strdup(cc, name);
     if (cc->name == NULL) {
@@ -72,7 +76,8 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    uuid_generate(cc->uuid);
+    cc->kdc_offset = INT32_MAX;
+    uuid_copy(cc->uuid, uuid);
 
     kret = krb5_copy_principal(k5c, princ, &cc->client);
     if (kret != 0) {
@@ -84,10 +89,6 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    cc->owner->uid = cli_creds_get_uid(owner);
-    cc->owner->gid = cli_creds_get_gid(owner);
-    cc->kdc_offset = INT32_MAX;
-
     talloc_set_destructor(cc, kcm_cc_destructor);
     *_cc = cc;
     ret = EOK;
@@ -96,6 +97,24 @@ done:
         talloc_free(cc);
     }
     return ret;
+}
+
+/*
+ * kcm_cc_create() just with a random UUID and maximum offset
+ */
+errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
+                   krb5_context k5c,
+                   struct cli_creds *owner,
+                   const char *name,
+                   krb5_principal princ,
+                   struct kcm_ccache **_cc)
+{
+    uuid_t uuid;
+
+    uuid_generate(uuid);
+
+    return kcm_cc_create(mem_ctx, k5c, owner, name,
+                         uuid, INT32_MAX, princ, _cc);
 }
 
 const char *kcm_cc_get_name(struct kcm_ccache *cc)
