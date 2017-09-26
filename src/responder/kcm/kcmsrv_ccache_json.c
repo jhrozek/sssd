@@ -692,7 +692,7 @@ static errno_t json_to_princ(TALLOC_CTX *mem_ctx,
 
     realm_size = strlen(realm_str);
 
-    princ->realm.data = talloc_strndup(mem_ctx, realm_str, realm_size);
+    princ->realm.data = talloc_strndup(princ, realm_str, realm_size);
     if (princ->realm.data == NULL) {
         return ENOMEM;
     }
@@ -814,54 +814,66 @@ static errno_t json_to_creds(struct kcm_ccache *cc,
     return EOK;
 }
 
-static errno_t sec_json_value_to_ccache(struct kcm_ccache *cc,
-                                        json_t *root)
+static errno_t sec_json_value_parse(TALLOC_CTX *mem_ctx,
+                                    json_t *root,
+                                    int32_t *_kdc_offset,
+                                    krb5_principal *_princ,
+                                    json_t **_jcreds)
 {
     errno_t ret;
-    json_t *princ = NULL;
-    json_t *creds = NULL;
+    json_t *jprinc = NULL;
+    json_t *jcreds = NULL;
     json_error_t error;
     int version;
+    TALLOC_CTX *tmp_ctx = NULL;
+    int32_t kdc_offset;
+    krb5_principal princ;
+
+    tmp_ctx = talloc_new(mem_ctx);
+    if (tmp_ctx == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
 
     ret = json_unpack_ex(root,
                          &error,
                          JSON_STRICT,
                          "{s:i, s:i, s:o, s:o}",
                          "version", &version,
-                         "kdc_offset", &cc->kdc_offset,
-                         "principal", &princ,
-                         "creds", &creds);
+                         "kdc_offset", &kdc_offset,
+                         "principal", &jprinc,
+                         "creds", &jcreds);
     if (ret != 0) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Failed to unpack JSON creds structure on line %d: %s\n",
               error.line, error.text);
-        return EINVAL;
+        ret = EINVAL;
+        goto done;
     }
 
     if (version != KS_JSON_VERSION) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Expected version %d, received version %d\n",
               KS_JSON_VERSION, version);
-        return EINVAL;
+        ret = EINVAL;
+        goto done;
     }
 
-    ret = json_to_princ(cc, princ, &cc->client);
+    ret = json_to_princ(tmp_ctx, jprinc, &princ);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannot store JSON to principal [%d]: %s\n",
               ret, sss_strerror(ret));
-        return ret;
+        goto done;
     }
 
-    ret = json_to_creds(cc, creds);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_CRIT_FAILURE,
-              "Cannot store JSON to creds [%d]: %s\n",
-              ret, sss_strerror(ret));
-        return EOK;
-    }
-
-    return EOK;
+    ret = EOK;
+    *_kdc_offset = kdc_offset;
+    *_princ = talloc_steal(mem_ctx, princ);
+    *_jcreds = jcreds;
+done:
+    talloc_free(tmp_ctx);
+    return ret;
 }
 
 /*
@@ -878,6 +890,11 @@ errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
     json_t *root = NULL;
     struct kcm_ccache *cc = NULL;
     TALLOC_CTX *tmp_ctx = NULL;
+    const char *name = NULL;
+    int32_t kdc_offset;
+    krb5_principal princ;
+    json_t *jcreds;
+    uuid_t uuid;
 
     ret = sec_value_to_json(sec_value, &root);
     if (ret != EOK) {
@@ -893,25 +910,7 @@ errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    cc = talloc_zero(tmp_ctx, struct kcm_ccache);
-    if (cc == NULL) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    cc->owner = talloc_zero(cc, struct kcm_ccache_owner);
-    if (cc->owner == NULL) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    /* We rely on sssd-secrets only searching the user's subtree so we
-     * set the ownership to the client
-     */
-    cc->owner->uid = cli_creds_get_uid(client);
-    cc->owner->gid = cli_creds_get_gid(client);
-
-    ret = sec_key_parse(cc, sec_key, &cc->name, cc->uuid);
+    ret = sec_key_parse(tmp_ctx, sec_key, &name, uuid);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannt parse secret key [%d]: %s\n",
@@ -919,10 +918,29 @@ errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = sec_json_value_to_ccache(cc, root);
+    ret = sec_json_value_parse(tmp_ctx, root,
+                               &kdc_offset, &princ, &jcreds);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
-              "Cannt parse secret value [%d]: %s\n",
+              "Cannot parse secret value [%d]: %s\n",
+              ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = kcm_cc_create(tmp_ctx, NULL, client, name, uuid,
+                        kdc_offset, princ, &cc);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot create a new credential cache [%d]: %s\n",
+              ret, sss_strerror(ret));
+        goto done;
+    }
+
+
+    ret = json_to_creds(cc, jcreds);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot store JSON to creds [%d]: %s\n",
               ret, sss_strerror(ret));
         goto done;
     }

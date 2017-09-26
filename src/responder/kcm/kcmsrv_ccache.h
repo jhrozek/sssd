@@ -56,6 +56,15 @@ struct kcm_cred;
  */
 struct kcm_ccache;
 
+errno_t kcm_cc_create(TALLOC_CTX *mem_ctx,
+                      krb5_context k5c,
+                      struct cli_creds *owner,
+                      const char *name,
+                      uuid_t uuid,
+                      int32_t kdc_offset,
+                      krb5_principal princ,
+                      struct kcm_ccache **_cc);
+
 /*
  * Create a new KCM ccache owned by mem_ctx on the
  * memory level.
