@@ -367,6 +367,92 @@ struct kcm_ccdb *kcm_ccdb_init(TALLOC_CTX *mem_ctx,
     return ccdb;
 }
 
+struct kcm_ccdb_access_state {
+    struct kcm_ccdb *db;
+    struct cli_creds *client;
+
+};
+
+static void kcm_ccdb_uuid_access_done(struct tevent_req *subreq);
+
+static struct tevent_req *kcm_ccdb_uuid_access_send(TALLOC_CTX *mem_ctx,
+                                                    struct tevent_context *ev,
+                                                    struct kcm_ccdb *db,
+                                                    struct cli_creds *client,
+                                                    uuid_t uuid)
+{
+    struct tevent_req *req = NULL;
+    struct tevent_req *subreq = NULL;
+    struct kcm_ccdb_access_state *state = NULL;
+    errno_t ret;
+
+    req = tevent_req_create(mem_ctx, &state, struct kcm_ccdb_access_state);
+    if (req == NULL) {
+        return NULL;
+    }
+    state->db = db;
+    state->client = client;
+
+    if (ev == NULL || db == NULL || client == NULL || uuid_is_null(uuid)) {
+        ret = EINVAL;
+        goto immediate;
+    }
+
+    subreq = db->ops->getbyuuid_send(state, ev, db, client, uuid);
+    if (subreq == NULL) {
+        ret = ENOMEM;
+        goto immediate;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_uuid_access_done, req);
+    return req;
+
+immediate:
+    tevent_req_error(req, ret);
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static void kcm_ccdb_uuid_access_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_access_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_access_state);
+    errno_t ret;
+    struct kcm_ccache *cc;
+    bool ok;
+
+    ret = state->db->ops->getbyuuid_recv(subreq, state, &cc);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Failed to get cache by UUID [%d]: %s\n",
+              ret, sss_strerror(ret));
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    if (cc == NULL) {
+        DEBUG(SSSDBG_TRACE_LIBS, "No cache found by UUID\n");
+        tevent_req_done(req);
+        return;
+    }
+
+    ok = kcm_cc_access(cc, state->client);
+    if (!ok) {
+        tevent_req_error(req, EACCES);
+        return;
+    }
+
+    tevent_req_done(req);
+}
+
+static errno_t kcm_ccdb_uuid_access_recv(struct tevent_req *req)
+{
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+    return EOK;
+}
+
 struct kcm_ccdb_nextid_state {
     char *next_cc;
     struct kcm_ccdb *db;
@@ -535,7 +621,9 @@ errno_t kcm_ccdb_list_recv(struct tevent_req *req,
 }
 
 struct kcm_ccdb_get_default_state {
+    struct tevent_context *ev;
     struct kcm_ccdb *db;
+    struct cli_creds *client;
     uuid_t uuid;
 };
 
@@ -556,6 +644,8 @@ struct tevent_req *kcm_ccdb_get_default_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
     state->db = db;
+    state->ev = ev;
+    state->client = client;
 
     if (ev == NULL || db == NULL || client == NULL) {
         ret = EINVAL;
@@ -594,6 +684,11 @@ static void kcm_ccdb_get_default_done(struct tevent_req *subreq)
         return;
     }
 
+    if (uuid_is_null(state->uuid)) {
+        DEBUG(SSSDBG_TRACE_INTERNAL, "No default cache, done\n");
+        tevent_req_done(req);
+        return;
+    }
     tevent_req_done(req);
 }
 
@@ -621,7 +716,9 @@ struct kcm_ccdb_set_default_state {
     uuid_t uuid;
 };
 
-static void kcm_ccdb_set_default_uuid_resolved(struct tevent_req *subreq);
+static void kcm_ccdb_set_default_resolved(struct tevent_req *subreq);
+static void kcm_ccdb_set_default_old_access_check_done(struct tevent_req *subreq);
+static void kcm_ccdb_set_default_new_access_check_done(struct tevent_req *subreq);
 static void kcm_ccdb_set_default_done(struct tevent_req *subreq);
 
 struct tevent_req *kcm_ccdb_set_default_send(TALLOC_CTX *mem_ctx,
@@ -649,30 +746,13 @@ struct tevent_req *kcm_ccdb_set_default_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    if (uuid_is_null(uuid)) {
-        /* NULL UUID means to just reset the default to 'no default' */
-        subreq = state->db->ops->set_default_send(state,
-                                                state->ev,
-                                                state->db,
-                                                state->client,
-                                                state->uuid);
-        if (subreq == NULL) {
-            ret = ENOMEM;
-            goto immediate;
-        }
-        tevent_req_set_callback(subreq, kcm_ccdb_set_default_done, req);
-    } else {
-        /* Otherwise we need to check if the client can access the UUID
-         * about to be set as default
-         */
-        subreq = db->ops->getbyuuid_send(state, ev, db, client, uuid);
-        if (subreq == NULL) {
-            ret = ENOMEM;
-            goto immediate;
-        }
-        tevent_req_set_callback(subreq, kcm_ccdb_set_default_uuid_resolved, req);
+    /* Get the old default ccache so that we can check it's writable */
+    subreq = db->ops->get_default_send(state, ev, db, client);
+    if (subreq == NULL) {
+        ret = ENOMEM;
+        goto immediate;
     }
-
+    tevent_req_set_callback(subreq, kcm_ccdb_set_default_resolved, req);
     return req;
 
 immediate:
@@ -681,35 +761,129 @@ immediate:
     return req;
 }
 
-static void kcm_ccdb_set_default_uuid_resolved(struct tevent_req *subreq)
+static void kcm_ccdb_set_default_resolved(struct tevent_req *subreq)
 {
     struct tevent_req *req = tevent_req_callback_data(subreq,
                                                       struct tevent_req);
     struct kcm_ccdb_set_default_state *state = tevent_req_data(req,
                                                 struct kcm_ccdb_set_default_state);
     errno_t ret;
-    bool ok;
-    struct kcm_ccache *cc;
+    uuid_t prev_dfl_uuid;
 
-    ret = state->db->ops->getbyuuid_recv(subreq, state, &cc);
+    ret = state->db->ops->get_default_recv(subreq, prev_dfl_uuid);
     talloc_zfree(subreq);
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
-              "Failed to get cache by UUID [%d]: %s\n",
+              "Failed to get the default ccache [%d]: %s\n",
               ret, sss_strerror(ret));
         tevent_req_error(req, ret);
         return;
     }
 
-    if (cc == NULL) {
-        DEBUG(SSSDBG_TRACE_LIBS, "No cache found by UUID\n");
-        tevent_req_error(req, ERR_KCM_CC_END);
+    if (uuid_is_null(prev_dfl_uuid) == false) {
+        /* There was some default UUID previously, check the access to it */
+        subreq = kcm_ccdb_uuid_access_send(state,
+                                           state->ev,
+                                           state->db,
+                                           state->client,
+                                           state->uuid);
+        if (subreq == NULL) {
+            tevent_req_error(req, ENOMEM);
+            return;
+        }
+        tevent_req_set_callback(subreq, kcm_ccdb_set_default_old_access_check_done, req);
         return;
     }
 
-    ok = kcm_cc_access(cc, state->client);
-    if (!ok) {
-        tevent_req_error(req, EACCES);
+    /* No previous default, do we need to check the new one? */
+    if (uuid_is_null(state->uuid)) {
+        /* Don't bother setting NULL to NULL */
+        tevent_req_done(req);
+        return;
+    }
+
+    subreq = kcm_ccdb_uuid_access_send(state,
+                                       state->ev,
+                                       state->db,
+                                       state->client,
+                                       state->uuid);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_set_default_new_access_check_done, req);
+}
+
+static void
+kcm_ccdb_set_default_old_access_check_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_set_default_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_set_default_state);
+    errno_t ret;
+
+    ret = kcm_ccdb_uuid_access_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        if (ret == EACCES) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Client has no access to the old default cache\n");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Cannot check access to the old default cache\n");
+        }
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    /* Only check if the new cache is readable in case it is non-null */
+    if (uuid_is_null(state->uuid)) {
+        /* Reset to empty cache can be done w/o addition checks */
+        subreq = state->db->ops->set_default_send(state,
+                                                  state->ev,
+                                                  state->db,
+                                                  state->client,
+                                                  state->uuid);
+        if (subreq == NULL) {
+            tevent_req_error(req, ENOMEM);
+            return;
+        }
+        tevent_req_set_callback(subreq, kcm_ccdb_set_default_done, req);
+    }
+
+    subreq = kcm_ccdb_uuid_access_send(state,
+                                       state->ev,
+                                       state->db,
+                                       state->client,
+                                       state->uuid);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_set_default_new_access_check_done, req);
+}
+
+static void
+kcm_ccdb_set_default_new_access_check_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_set_default_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_set_default_state);
+    errno_t ret;
+
+    ret = kcm_ccdb_uuid_access_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        if (ret == EACCES) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Client has no access to the new default cache\n");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Cannot check access to the new default cache\n");
+        }
+        tevent_req_error(req, ret);
         return;
     }
 
@@ -1196,9 +1370,15 @@ void kcm_mod_cc(struct kcm_ccache *cc, struct kcm_mod_ctx *mod_ctx)
 }
 
 struct kcm_ccdb_mod_cc_state {
+    struct tevent_context *ev;
     struct kcm_ccdb *db;
+    struct cli_creds *client;
+
+    uuid_t uuid;
+    struct kcm_mod_ctx *mod_cc;
 };
 
+static void kcm_ccdb_mod_access_done(struct tevent_req *subreq);
 static void kcm_ccdb_mod_done(struct tevent_req *subreq);
 
 struct tevent_req *kcm_ccdb_mod_cc_send(TALLOC_CTX *mem_ctx,
@@ -1218,29 +1398,69 @@ struct tevent_req *kcm_ccdb_mod_cc_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
     state->db = db;
+    state->ev = ev;
+    state->client = client;
+    state->mod_cc = mod_cc;
+    uuid_copy(state->uuid, uuid);
 
     if (ev == NULL || db == NULL || client == NULL || mod_cc == NULL) {
         ret = EINVAL;
         goto immediate;
     }
 
-    subreq = state->db->ops->mod_send(state,
-                                      ev,
-                                      state->db,
-                                      client,
-                                      uuid,
-                                      mod_cc);
+    /* Check the UUID is accessible by the client before actually modifying it */
+    subreq = kcm_ccdb_uuid_access_send(state,
+                                       state->ev,
+                                       state->db,
+                                       state->client,
+                                       state->uuid);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
     }
-    tevent_req_set_callback(subreq, kcm_ccdb_mod_done, req);
+    tevent_req_set_callback(subreq, kcm_ccdb_mod_access_done, req);
     return req;
 
 immediate:
     tevent_req_error(req, ret);
     tevent_req_post(req, ev);
     return req;
+}
+
+static void kcm_ccdb_mod_access_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_mod_cc_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_mod_cc_state);
+    errno_t ret;
+
+    ret = kcm_ccdb_uuid_access_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        if (ret == EACCES) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Client has no access to the cache to be modified\n");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Cannot check access to the cache to be modified\n");
+        }
+        tevent_req_error(req, ret);
+        return;
+    }
+
+
+    subreq = state->db->ops->mod_send(state,
+                                      state->ev,
+                                      state->db,
+                                      state->client,
+                                      state->uuid,
+                                      state->mod_cc);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_mod_done, req);
 }
 
 static void kcm_ccdb_mod_done(struct tevent_req *subreq)
@@ -1271,9 +1491,15 @@ errno_t kcm_ccdb_mod_cc_recv(struct tevent_req *req)
 }
 
 struct kcm_ccdb_store_cred_blob_state {
+    struct tevent_context *ev;
     struct kcm_ccdb *db;
+    struct cli_creds *client;
+
+    uuid_t uuid;
+    struct sss_iobuf *cred_blob;
 };
 
+static void kcm_ccdb_store_cred_blob_access_check_done(struct tevent_req *subreq);
 static void kcm_ccdb_store_cred_blob_done(struct tevent_req *subreq);
 
 struct tevent_req *kcm_ccdb_store_cred_blob_send(TALLOC_CTX *mem_ctx,
@@ -1293,29 +1519,71 @@ struct tevent_req *kcm_ccdb_store_cred_blob_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
     state->db = db;
+    state->ev = ev;
+    state->client = client;
+    state->cred_blob = cred_blob;
+    uuid_copy(state->uuid, uuid);
 
     if (ev == NULL || db == NULL || client == NULL || cred_blob == NULL) {
         ret = EINVAL;
         goto immediate;
     }
 
-    subreq = state->db->ops->store_cred_send(state,
-                                             ev,
-                                             state->db,
-                                             client,
-                                             uuid,
-                                             cred_blob);
+    subreq = kcm_ccdb_uuid_access_send(state,
+                                       state->ev,
+                                       state->db,
+                                       state->client,
+                                       state->uuid);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
     }
-    tevent_req_set_callback(subreq, kcm_ccdb_store_cred_blob_done, req);
+    tevent_req_set_callback(subreq,
+                            kcm_ccdb_store_cred_blob_access_check_done,
+                            req);
+
     return req;
 
 immediate:
     tevent_req_error(req, ret);
     tevent_req_post(req, ev);
     return req;
+}
+
+static void
+kcm_ccdb_store_cred_blob_access_check_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_store_cred_blob_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_store_cred_blob_state);
+    errno_t ret;
+
+    ret = kcm_ccdb_uuid_access_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        if (ret == EACCES) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Client has no access to the cache to be deleted\n");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Cannot check access to the cache to be deleted\n");
+        }
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    subreq = state->db->ops->store_cred_send(state,
+                                             state->ev,
+                                             state->db,
+                                             state->client,
+                                             state->uuid,
+                                             state->cred_blob);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_store_cred_blob_done, req);
 }
 
 static void kcm_ccdb_store_cred_blob_done(struct tevent_req *subreq)
@@ -1352,8 +1620,10 @@ struct kcm_ccdb_delete_cc_state {
     uuid_t uuid;
 };
 
+static void kcm_ccdb_delete_access_done(struct tevent_req *subreq);
 static void kcm_ccdb_delete_done(struct tevent_req *subreq);
 static void kcm_ccdb_delete_get_default_done(struct tevent_req *subreq);
+static void kcm_ccdb_delete_default_access_done(struct tevent_req *subreq);
 static void kcm_ccdb_delete_default_reset_done(struct tevent_req *subreq);
 
 struct tevent_req *kcm_ccdb_delete_cc_send(TALLOC_CTX *mem_ctx,
@@ -1381,23 +1651,58 @@ struct tevent_req *kcm_ccdb_delete_cc_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = state->db->ops->delete_send(state,
-                                         state->ev,
-                                         state->db,
-                                         state->client,
-                                         state->uuid);
+    /* Check if the UUID about to be deleted is accessible by the client */
+    subreq = kcm_ccdb_uuid_access_send(state,
+                                       state->ev,
+                                       state->db,
+                                       state->client,
+                                       state->uuid);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
     }
-    tevent_req_set_callback(subreq, kcm_ccdb_delete_done, req);
-
+    tevent_req_set_callback(subreq, kcm_ccdb_delete_access_done, req);
     return req;
 
 immediate:
     tevent_req_error(req, ret);
     tevent_req_post(req, ev);
     return req;
+}
+
+static void kcm_ccdb_delete_access_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_delete_cc_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_delete_cc_state);
+    errno_t ret;
+
+    ret = kcm_ccdb_uuid_access_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        if (ret == EACCES) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Client has no access to the cache to be delated\n");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Cannot check access to the cache to be deleted\n");
+        }
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    subreq = state->db->ops->delete_send(state,
+                                         state->ev,
+                                         state->db,
+                                         state->client,
+                                         state->uuid);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_delete_done, req);
+
 }
 
 static void kcm_ccdb_delete_done(struct tevent_req *subreq)
@@ -1440,7 +1745,6 @@ static void kcm_ccdb_delete_get_default_done(struct tevent_req *subreq)
                                                 struct kcm_ccdb_delete_cc_state);
     errno_t ret;
     uuid_t dfl_uuid;
-    uuid_t null_uuid;
 
     ret = state->db->ops->get_default_recv(subreq, dfl_uuid);
     talloc_zfree(subreq);
@@ -1459,8 +1763,44 @@ static void kcm_ccdb_delete_get_default_done(struct tevent_req *subreq)
     }
 
     /* If we deleted the default ccache, reset the default ccache to 'none' */
-    uuid_clear(null_uuid);
+    /* Check if the UUID about to be deleted is accessible by the client */
+    subreq = kcm_ccdb_uuid_access_send(state,
+                                       state->ev,
+                                       state->db,
+                                       state->client,
+                                       state->uuid);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, kcm_ccdb_delete_default_access_done, req);
 
+}
+
+static void kcm_ccdb_delete_default_access_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct kcm_ccdb_delete_cc_state *state = tevent_req_data(req,
+                                                struct kcm_ccdb_delete_cc_state);
+    errno_t ret;
+    uuid_t null_uuid;
+
+    ret = kcm_ccdb_uuid_access_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        if (ret == EACCES) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Client has no access to the default cache\n");
+        } else {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "Cannot check access to the default cache\n");
+        }
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    uuid_clear(null_uuid);
     subreq = state->db->ops->set_default_send(state,
                                               state->ev,
                                               state->db,

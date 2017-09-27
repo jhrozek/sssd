@@ -433,7 +433,6 @@ static void kcm_op_initialize_got_byname(struct tevent_req *subreq)
                                                       struct tevent_req);
     struct kcm_op_initialize_state *state = tevent_req_data(req,
                                             struct kcm_op_initialize_state);
-    bool ok;
     uuid_t uuid;
 
     ret = kcm_ccdb_getbyname_recv(subreq, state, &state->new_cc);
@@ -447,13 +446,6 @@ static void kcm_op_initialize_got_byname(struct tevent_req *subreq)
     }
 
     if (state->new_cc != NULL) {
-        ok = kcm_cc_access(state->new_cc, state->op_ctx->client);
-        if (!ok) {
-            state->op_ret = EACCES;
-            tevent_req_done(req);
-            return;
-        }
-
         ret = kcm_cc_get_uuid(state->new_cc, uuid);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE,
