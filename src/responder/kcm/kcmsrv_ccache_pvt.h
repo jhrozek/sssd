@@ -29,6 +29,9 @@
 struct kcm_ccache_owner {
     uid_t uid;
     gid_t gid;
+#ifdef HAVE_SELINUX
+    const char *selinux_context;
+#endif
 };
 
 struct kcm_cred {
