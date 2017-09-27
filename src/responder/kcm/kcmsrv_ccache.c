@@ -38,6 +38,66 @@ static int kcm_cc_destructor(struct kcm_ccache *cc)
     return 0;
 }
 
+static errno_t kcm_cc_set_sectx(struct kcm_ccache_owner *cc_owner,
+                                struct cli_creds *cli)
+{
+#if HAVE_SELINUX
+    const char *str_sectx;
+
+    str_sectx = SELINUX_context_str(cli->selinux_ctx);
+    if (str_sectx == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot get the SELinux context as string\n");
+        return EIO;
+    }
+
+    cc_owner->selinux_context = talloc_strdup(cc_owner, str_sectx);
+    if (cc_owner->selinux_context == NULL) {
+        return ENOMEM;
+    }
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "Setting ccache selinux context to %s\n",
+          cc_owner->selinux_context);
+
+    return EOK;
+#else
+    DEBUG(SSSDBG_TRACE_INTERNAL, "SELinux disabled\n");
+    return EOK;
+#endif
+}
+
+static errno_t kcm_cc_chown(struct kcm_ccache *cc,
+                            struct cli_creds *owner)
+{
+    errno_t ret;
+
+    if (cc == NULL || owner == NULL) {
+        return EINVAL;
+    }
+
+    talloc_zfree(cc->owner);
+
+    cc->owner = talloc_zero(cc, struct kcm_ccache_owner);
+    if (cc->owner == NULL) {
+        talloc_free(cc);
+        return ENOMEM;
+    }
+    cc->owner->uid = cli_creds_get_uid(owner);
+    cc->owner->gid = cli_creds_get_gid(owner);
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "ccache %s now owned by %"SPRIuid":%"SPRIgid"\n",
+          cc->name,
+          cli_creds_get_uid(owner),
+          cli_creds_get_gid(owner));
+
+    ret = kcm_cc_set_sectx(cc->owner, owner);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    return EOK;
+}
+
 errno_t kcm_cc_create(TALLOC_CTX *mem_ctx,
                       krb5_context k5c,
                       struct cli_creds *owner,
@@ -64,11 +124,16 @@ errno_t kcm_cc_create(TALLOC_CTX *mem_ctx,
 
     cc->owner = talloc_zero(cc, struct kcm_ccache_owner);
     if (cc->owner == NULL) {
-        talloc_free(cc);
-        return ENOMEM;
+        ret = ENOMEM;
+        goto done;
     }
-    cc->owner->uid = cli_creds_get_uid(owner);
-    cc->owner->gid = cli_creds_get_gid(owner);
+
+    ret = kcm_cc_chown(cc, owner);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot set ccache owner [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
 
     cc->name = talloc_strdup(cc, name);
     if (cc->name == NULL) {
@@ -76,7 +141,7 @@ errno_t kcm_cc_create(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    cc->kdc_offset = INT32_MAX;
+    cc->kdc_offset = kdc_offset;
     uuid_copy(cc->uuid, uuid);
 
     if (princ) {
@@ -138,6 +203,38 @@ krb5_principal kcm_cc_get_client_principal(struct kcm_ccache *cc)
     return cc ? cc->client : NULL;
 }
 
+static bool kcm_cc_seaccess(struct kcm_ccache *cc,
+                            struct cli_creds *client)
+{
+#if HAVE_SELINUX
+    const char *cli_sectx;
+    bool sectx_are_same;
+
+    cli_sectx = SELINUX_context_str(client->selinux_ctx);
+    if (cli_sectx == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "Cannot get the SELinux context as string\n");
+        return false;
+    }
+
+    if (cc->owner->selinux_context == NULL) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "ccache has no SELinux owner but SELinux is enabled "
+              "denying access\n");
+        return false;
+    }
+
+    sectx_are_same = strcmp(cli_sectx, cc->owner->selinux_context) == 0;
+    DEBUG(sectx_are_same == true ? SSSDBG_TRACE_LIBS : SSSDBG_MINOR_FAILURE,
+          "Contexts do%s match",
+          sectx_are_same == true ? "" : " not");
+    return sectx_are_same;
+#else
+    DEBUG(SSSDBG_TRACE_INTERNAL, "SELinux disabled\n");
+    return true;
+#endif
+}
+
 bool kcm_cc_access(struct kcm_ccache *cc,
                    struct cli_creds *client)
 {
@@ -145,7 +242,8 @@ bool kcm_cc_access(struct kcm_ccache *cc,
     uid_t uid = cli_creds_get_uid(client);
     gid_t gid = cli_creds_get_gid(client);
 
-    if (cc == NULL) {
+    if (cc == NULL || client == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "Invalid input, denying access\n");
         return false;
     }
 
@@ -161,7 +259,14 @@ bool kcm_cc_access(struct kcm_ccache *cc,
               cli_creds_get_uid(client),
               cli_creds_get_gid(client),
               cc->name);
+        return false;
     }
+
+    ok = kcm_cc_seaccess(cc, client);
+    if (!ok) {
+        return false;
+    }
+
     return ok;
 }
 
