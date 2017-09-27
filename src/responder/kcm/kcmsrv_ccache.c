@@ -297,7 +297,7 @@ struct tevent_req *kcm_ccdb_nextid_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = state->db->ops->nextid_send(mem_ctx, ev, state->db, client);
+    subreq = state->db->ops->nextid_send(state, ev, state->db, client);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -385,7 +385,7 @@ struct tevent_req *kcm_ccdb_list_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = state->db->ops->list_send(mem_ctx,
+    subreq = state->db->ops->list_send(state,
                                        ev,
                                        state->db,
                                        client);
@@ -462,7 +462,7 @@ struct tevent_req *kcm_ccdb_get_default_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = db->ops->get_default_send(mem_ctx, ev, db, client);
+    subreq = db->ops->get_default_send(state, ev, db, client);
     if (subreq == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -1029,7 +1029,7 @@ struct tevent_req *kcm_ccdb_create_cc_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = state->db->ops->create_send(mem_ctx,
+    subreq = state->db->ops->create_send(state,
                                          ev,
                                          state->db,
                                          client,
@@ -1124,7 +1124,7 @@ struct tevent_req *kcm_ccdb_mod_cc_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = state->db->ops->mod_send(mem_ctx,
+    subreq = state->db->ops->mod_send(state,
                                       ev,
                                       state->db,
                                       client,
@@ -1199,7 +1199,7 @@ struct tevent_req *kcm_ccdb_store_cred_blob_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    subreq = state->db->ops->store_cred_send(mem_ctx,
+    subreq = state->db->ops->store_cred_send(state,
                                              ev,
                                              state->db,
                                              client,
