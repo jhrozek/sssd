@@ -26,7 +26,6 @@
 #include "util/sss_krb5.h"
 #include "responder/kcm/kcmsrv_ccache.h"
 #include "responder/kcm/kcmsrv_ccache_pvt.h"
-#include "responder/kcm/kcmsrv_ccache_be.h"
 
 static int kcm_cc_destructor(struct kcm_ccache *cc)
 {
@@ -198,6 +197,24 @@ static bool kcm_cc_seaccess(struct kcm_ccache *cc,
     return true;
 }
 
+/* In order to provide a consistent interface, we need to let the caller
+ * of getbyXXX own the ccache, therefore the memory back end returns a shallow
+ * copy of the ccache
+ */
+struct kcm_ccache *kcm_ccache_shallow_dup(TALLOC_CTX *mem_ctx,
+                                          struct kcm_ccache *in)
+{
+    struct kcm_ccache *out;
+
+    out = talloc_zero(mem_ctx, struct kcm_ccache);
+    if (out == NULL) {
+        return NULL;
+    }
+    memcpy(out, in, sizeof(struct kcm_ccache));
+
+    return out;
+}
+
 bool kcm_cc_access(struct kcm_ccache *cc,
                    struct cli_creds *client)
 {
@@ -357,7 +374,7 @@ struct kcm_ccdb *kcm_ccdb_init(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    ret = ccdb->ops->init(ccdb);
+    ret = ccdb->ops->init(ccdb, ccdb->ev);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot initialize ccache database\n");
         talloc_free(ccdb);
@@ -365,6 +382,17 @@ struct kcm_ccdb *kcm_ccdb_init(TALLOC_CTX *mem_ctx,
     }
 
     return ccdb;
+}
+
+void kcm_ccdb_set_handle(struct kcm_ccdb *db,
+                         void *db_handle)
+{
+    db->db_handle = db_handle;
+}
+
+void *kcm_ccdb_get_handle(struct kcm_ccdb *db)
+{
+    return db ? db->db_handle : NULL;
 }
 
 struct kcm_ccdb_access_state {

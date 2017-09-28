@@ -25,7 +25,6 @@
 #include <stdio.h>
 
 #include "util/util.h"
-#include "responder/kcm/kcmsrv_ccache_pvt.h"
 #include "responder/kcm/kcmsrv_ccache_be.h"
 
 struct ccdb_mem;
@@ -49,43 +48,30 @@ struct ccdb_mem {
     unsigned int nextid;
 };
 
-/* In order to provide a consistent interface, we need to let the caller
- * of getbyXXX own the ccache, therefore the memory back end returns a shallow
- * copy of the ccache
- */
-static struct kcm_ccache *kcm_ccache_dup(TALLOC_CTX *mem_ctx,
-                                         struct kcm_ccache *in)
-{
-    struct kcm_ccache *out;
-
-    out = talloc_zero(mem_ctx, struct kcm_ccache);
-    if (out == NULL) {
-        return NULL;
-    }
-    memcpy(out, in, sizeof(struct kcm_ccache));
-
-    return out;
-}
-
 static struct ccache_mem_wrap *memdb_get_by_uuid(struct ccdb_mem *memdb,
                                                  struct cli_creds *client,
                                                  uuid_t uuid)
 {
-    uid_t uid;
     struct ccache_mem_wrap *ccwrap = NULL;
     struct ccache_mem_wrap *out = NULL;
-
-    uid = cli_creds_get_uid(client);
+    errno_t ret;
 
     DLIST_FOR_EACH(ccwrap, memdb->head) {
+        uuid_t cc_uuid;
+
         if (ccwrap->cc == NULL) {
             /* since KCM stores ccaches, better not crash.. */
             DEBUG(SSSDBG_CRIT_FAILURE, "BUG: ccwrap contains NULL cc\n");
             continue;
         }
 
-        if (ccwrap->cc->owner->uid == uid) {
-            if (uuid_compare(uuid, ccwrap->cc->uuid) == 0) {
+        if (kcm_cc_access(ccwrap->cc, client)) {
+            ret = kcm_cc_get_uuid(ccwrap->cc, cc_uuid);
+            if (ret != EOK) {
+                continue;
+            }
+
+            if (uuid_compare(uuid, cc_uuid) == 0) {
                 out = ccwrap;
                 break;
             }
@@ -99,21 +85,25 @@ static struct ccache_mem_wrap *memdb_get_by_name(struct ccdb_mem *memdb,
                                                  struct cli_creds *client,
                                                  const char *name)
 {
-    uid_t uid;
     struct ccache_mem_wrap *ccwrap = NULL;
     struct ccache_mem_wrap *out = NULL;
 
-    uid = cli_creds_get_uid(client);
-
     DLIST_FOR_EACH(ccwrap, memdb->head) {
+        const char *ccname;
+
         if (ccwrap->cc == NULL) {
             /* since KCM stores ccaches, better not crash.. */
             DEBUG(SSSDBG_CRIT_FAILURE, "BUG: ccwrap contains NULL cc\n");
             continue;
         }
 
-        if (ccwrap->cc->owner->uid == uid) {
-            if (strcmp(ccwrap->cc->name, name) == 0) {
+        ccname = kcm_cc_get_name(ccwrap->cc);
+        if (ccname == NULL) {
+            continue;
+        }
+
+        if (kcm_cc_access(ccwrap->cc, client)) {
+            if (strcmp(ccname, name) == 0) {
                 out = ccwrap;
                 break;
             }
@@ -133,15 +123,21 @@ struct ccdb_mem_dummy_state {
 static int ccwrap_destructor(void *ptr)
 {
     struct ccache_mem_wrap *ccwrap = talloc_get_type(ptr, struct ccache_mem_wrap);
+    struct kcm_cred *crd;
+    struct sss_iobuf *crd_blob;
 
     if (ccwrap == NULL) {
         return 0;
     }
 
     if (ccwrap->cc != NULL) {
-        if (ccwrap->cc->creds) {
-            safezero(sss_iobuf_get_data(ccwrap->cc->creds->cred_blob),
-                     sss_iobuf_get_size(ccwrap->cc->creds->cred_blob));
+        crd = kcm_cc_get_cred(ccwrap->cc);
+        if (crd != NULL) {
+            crd_blob = kcm_cred_get_creds(crd);
+            if (crd_blob != NULL) {
+                safezero(sss_iobuf_get_data(crd_blob),
+                         sss_iobuf_get_size(crd_blob));
+            }
         }
     }
 
@@ -151,7 +147,8 @@ static int ccwrap_destructor(void *ptr)
     return 0;
 }
 
-static errno_t ccdb_mem_init(struct kcm_ccdb *db)
+static errno_t ccdb_mem_init(struct kcm_ccdb *db,
+                             struct tevent_context *ev)
 {
     struct ccdb_mem *memdb = NULL;
 
@@ -159,8 +156,8 @@ static errno_t ccdb_mem_init(struct kcm_ccdb *db)
     if (memdb == NULL) {
         return ENOMEM;
     }
-    db->db_handle = memdb;
 
+    kcm_ccdb_set_handle(db, memdb);
     return EOK;
 }
 
@@ -183,7 +180,7 @@ static struct tevent_req *ccdb_mem_nextid_send(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    memdb = kcm_ccdb_get_handle(db);
     if (memdb == NULL) {
         ret = EIO;
         goto immediate;
@@ -225,21 +222,18 @@ static struct tevent_req *ccdb_mem_list_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct ccache_mem_wrap *ccwrap = NULL;
     struct ccdb_mem_list_state *state = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     size_t num_ccaches = 0;
     size_t cc_index = 0;
     errno_t ret;
-    uid_t uid;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_list_state);
     if (req == NULL) {
         return NULL;
     }
 
-    uid = cli_creds_get_uid(client);
-
     DLIST_FOR_EACH(ccwrap, memdb->head) {
-        if (ccwrap->cc->owner->uid == uid) {
+        if (kcm_cc_access(ccwrap->cc, client)) {
             num_ccaches++;
         }
     }
@@ -252,8 +246,11 @@ static struct tevent_req *ccdb_mem_list_send(TALLOC_CTX *mem_ctx,
 
     cc_index = 0;
     DLIST_FOR_EACH(ccwrap, memdb->head) {
-        if (ccwrap->cc->owner->uid == uid) {
-            uuid_copy(state->uuid_list[cc_index], ccwrap->cc->uuid);
+        if (kcm_cc_access(ccwrap->cc, client)) {
+            ret = kcm_cc_get_uuid(ccwrap->cc, state->uuid_list[cc_index]);
+            if (ret != EOK) {
+                continue;
+            }
             cc_index++;
         }
     }
@@ -290,9 +287,8 @@ static struct tevent_req *ccdb_mem_set_default_send(TALLOC_CTX *mem_ctx,
 {
     struct tevent_req *req = NULL;
     struct ccdb_mem_dummy_state *state = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     struct ccache_mem_wrap *ccwrap = NULL;
-    uid_t uid = cli_creds_get_uid(client);
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_dummy_state);
     if (req == NULL) {
@@ -307,7 +303,7 @@ static struct tevent_req *ccdb_mem_set_default_send(TALLOC_CTX *mem_ctx,
             continue;
         }
 
-        if (ccwrap->cc->owner->uid == uid) {
+        if (kcm_cc_access(ccwrap->cc, client)) {
             ccwrap->is_default = false;
         }
     }
@@ -344,8 +340,8 @@ static struct tevent_req *ccdb_mem_get_default_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct ccdb_mem_get_default_state *state = NULL;
     struct ccache_mem_wrap *ccwrap = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
-    uid_t uid = cli_creds_get_uid(client);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
+    errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_get_default_state);
     if (req == NULL) {
@@ -361,7 +357,7 @@ static struct tevent_req *ccdb_mem_get_default_send(TALLOC_CTX *mem_ctx,
             continue;
         }
 
-        if (ccwrap->cc->owner->uid == uid && ccwrap->is_default == true) {
+        if (kcm_cc_access(ccwrap->cc, client) && ccwrap->is_default == true) {
             break;
         }
     }
@@ -371,10 +367,18 @@ static struct tevent_req *ccdb_mem_get_default_send(TALLOC_CTX *mem_ctx,
                "No ccache marked as default, returning null ccache\n");
         uuid_clear(state->dfl_uuid);
     } else {
-        uuid_copy(state->dfl_uuid, ccwrap->cc->uuid);
+        ret = kcm_cc_get_uuid(ccwrap->cc, state->dfl_uuid);
+        if (ret != EOK) {
+            goto fail;
+        }
     }
 
     tevent_req_done(req);
+    tevent_req_post(req, ev);
+    return req;
+
+fail:
+    tevent_req_error(req, ret);
     tevent_req_post(req, ev);
     return req;
 }
@@ -403,7 +407,7 @@ static struct tevent_req *ccdb_mem_getbyuuid_send(TALLOC_CTX *mem_ctx,
 {
     struct tevent_req *req = NULL;
     struct ccdb_mem_getbyuuid_state *state = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     struct ccache_mem_wrap *ccwrap = NULL;
     errno_t ret;
 
@@ -414,7 +418,7 @@ static struct tevent_req *ccdb_mem_getbyuuid_send(TALLOC_CTX *mem_ctx,
 
     ccwrap = memdb_get_by_uuid(memdb, client, uuid);
     if (ccwrap != NULL) {
-        state->cc = kcm_ccache_dup(state, ccwrap->cc);
+        state->cc = kcm_ccache_shallow_dup(state, ccwrap->cc);
         if (state->cc == NULL) {
             ret = ENOMEM;
             goto immediate;
@@ -457,7 +461,7 @@ static struct tevent_req *ccdb_mem_getbyname_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct ccdb_mem_getbyname_state *state = NULL;
     struct ccache_mem_wrap *ccwrap = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_getbyname_state);
@@ -467,7 +471,7 @@ static struct tevent_req *ccdb_mem_getbyname_send(TALLOC_CTX *mem_ctx,
 
     ccwrap = memdb_get_by_name(memdb, client, name);
     if (ccwrap != NULL) {
-        state->cc = kcm_ccache_dup(state, ccwrap->cc);
+        state->cc = kcm_ccache_shallow_dup(state, ccwrap->cc);
         if (state->cc == NULL) {
             ret = ENOMEM;
             goto immediate;
@@ -509,7 +513,7 @@ struct tevent_req *ccdb_mem_name_by_uuid_send(TALLOC_CTX *mem_ctx,
 {
     struct tevent_req *req = NULL;
     struct ccdb_mem_name_by_uuid_state *state = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     struct ccache_mem_wrap *ccwrap = NULL;
     errno_t ret;
 
@@ -524,7 +528,8 @@ struct tevent_req *ccdb_mem_name_by_uuid_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    state->name = talloc_strdup(state, ccwrap->cc->name);
+    state->name = talloc_strdup(state,
+                                kcm_cc_get_name(ccwrap->cc));
     if (state->name == NULL) {
         ret = ENOMEM;
         goto immediate;
@@ -564,7 +569,7 @@ struct tevent_req *ccdb_mem_uuid_by_name_send(TALLOC_CTX *mem_ctx,
 {
     struct tevent_req *req = NULL;
     struct ccdb_mem_uuid_by_name_state *state = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     struct ccache_mem_wrap *ccwrap = NULL;
     errno_t ret;
 
@@ -579,7 +584,10 @@ struct tevent_req *ccdb_mem_uuid_by_name_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    uuid_copy(state->uuid, ccwrap->cc->uuid);
+    ret = kcm_cc_get_uuid(ccwrap->cc, state->uuid);
+    if (ret != EOK) {
+        goto immediate;
+    }
 
     ret = EOK;
 immediate:
@@ -612,7 +620,7 @@ static struct tevent_req *ccdb_mem_create_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct ccdb_mem_dummy_state *state = NULL;
     struct ccache_mem_wrap *ccwrap;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_dummy_state);
@@ -660,7 +668,7 @@ static struct tevent_req *ccdb_mem_mod_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct ccdb_mem_dummy_state *state = NULL;
     struct ccache_mem_wrap *ccwrap = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_dummy_state);
     if (req == NULL) {
@@ -702,7 +710,7 @@ static struct tevent_req *ccdb_mem_store_cred_send(TALLOC_CTX *mem_ctx,
 {
     struct tevent_req *req = NULL;
     struct ccdb_mem_dummy_state *state = NULL;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     struct ccache_mem_wrap *ccwrap = NULL;
     errno_t ret;
 
@@ -751,7 +759,7 @@ static struct tevent_req *ccdb_mem_delete_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct ccdb_mem_dummy_state *state = NULL;
     struct ccache_mem_wrap *ccwrap;
-    struct ccdb_mem *memdb = talloc_get_type(db->db_handle, struct ccdb_mem);
+    struct ccdb_mem *memdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_mem_dummy_state);

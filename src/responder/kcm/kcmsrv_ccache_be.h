@@ -29,8 +29,14 @@
 #include <talloc.h>
 #include "responder/kcm/kcmsrv_ccache.h"
 
+/* Backchannel for the init function to set the db_handle */
+void kcm_ccdb_set_handle(struct kcm_ccdb *db,
+                         void *db_handle);
+void *kcm_ccdb_get_handle(struct kcm_ccdb *db);
+
 typedef errno_t
-(*ccdb_init_fn)(struct kcm_ccdb *db);
+(*ccdb_init_fn)(struct kcm_ccdb *db,
+                struct tevent_context *ev);
 
 typedef struct tevent_req *
 (*ccdb_nextid_send_fn)(TALLOC_CTX *mem_ctx,

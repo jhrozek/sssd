@@ -79,6 +79,14 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
                    struct kcm_ccache **_cc);
 
 /*
+ * Creates a shallow copy of "in". This is mostly a one-off
+ * for the memory back end, but we keep the function in
+ * the public API to keep the ccache struct totally opaque
+ */
+struct kcm_ccache *kcm_ccache_shallow_dup(TALLOC_CTX *mem_ctx,
+                                          struct kcm_ccache *in);
+
+/*
  * Returns true if a client can access a ccache.
  *
  * Note that root can access any ccache */

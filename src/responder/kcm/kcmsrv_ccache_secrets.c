@@ -28,7 +28,6 @@
 #include "util/util.h"
 #include "util/crypto/sss_crypto.h"
 #include "util/tev_curl.h"
-#include "responder/kcm/kcmsrv_ccache_pvt.h"
 #include "responder/kcm/kcmsrv_ccache_be.h"
 
 #ifndef SSSD_SECRETS_SOCKET
@@ -571,7 +570,8 @@ static errno_t sec_get_ccache_recv(struct tevent_req *req,
 /*
  * The actual sssd-secrets back end
  */
-static errno_t ccdb_sec_init(struct kcm_ccdb *db)
+static errno_t ccdb_sec_init(struct kcm_ccdb *db,
+                             struct tevent_context *ev)
 {
     struct ccdb_sec *secdb = NULL;
 
@@ -580,7 +580,7 @@ static errno_t ccdb_sec_init(struct kcm_ccdb *db)
         return ENOMEM;
     }
 
-    secdb->tctx = tcurl_init(secdb, db->ev);
+    secdb->tctx = tcurl_init(secdb, ev);
     if (secdb->tctx == NULL) {
         DEBUG(SSSDBG_FATAL_FAILURE, "Cannot initialize tcurl\n");
         talloc_zfree(secdb);
@@ -591,7 +591,7 @@ static errno_t ccdb_sec_init(struct kcm_ccdb *db)
      * and avoid conflicts */
     srand(time(NULL));
 
-    db->db_handle = secdb;
+    kcm_ccdb_set_handle(db, secdb);
     return EOK;
 }
 
@@ -760,7 +760,7 @@ static struct tevent_req *ccdb_sec_nextid_send(TALLOC_CTX *mem_ctx,
 {
     struct tevent_req *req = NULL;
     struct ccdb_sec_nextid_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_nextid_state);
@@ -889,7 +889,7 @@ static struct tevent_req *ccdb_sec_set_default_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_set_default_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     struct sss_iobuf *uuid_iobuf;
     errno_t ret;
     const char *url;
@@ -973,7 +973,7 @@ static struct tevent_req *ccdb_sec_get_default_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_get_default_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     const char *url;
     errno_t ret;
 
@@ -1080,7 +1080,7 @@ static struct tevent_req *ccdb_sec_list_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_list_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_list_state);
@@ -1181,7 +1181,7 @@ static struct tevent_req *ccdb_sec_getbyuuid_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_getbyuuid_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_getbyuuid_state);
     if (req == NULL) {
@@ -1258,7 +1258,7 @@ static struct tevent_req *ccdb_sec_getbyname_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_getbyname_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     uuid_t null_uuid;
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_getbyname_state);
@@ -1337,7 +1337,7 @@ struct tevent_req *ccdb_sec_name_by_uuid_send(TALLOC_CTX *sec_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_name_by_uuid_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(sec_ctx, &state, struct ccdb_sec_name_by_uuid_state);
@@ -1444,7 +1444,7 @@ struct tevent_req *ccdb_sec_uuid_by_name_send(TALLOC_CTX *sec_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_uuid_by_name_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     errno_t ret;
 
     req = tevent_req_create(sec_ctx, &state, struct ccdb_sec_uuid_by_name_state);
@@ -1547,7 +1547,7 @@ static struct tevent_req *ccdb_sec_create_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *subreq = NULL;
     struct tevent_req *req = NULL;
     struct ccdb_sec_create_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
     errno_t ret;
     const char *container_url;
 
@@ -1558,7 +1558,8 @@ static struct tevent_req *ccdb_sec_create_send(TALLOC_CTX *mem_ctx,
     state->ev = ev;
     state->secdb = secdb;
 
-    DEBUG(SSSDBG_TRACE_INTERNAL, "Creating ccache storage for %s\n", cc->name);
+    DEBUG(SSSDBG_TRACE_INTERNAL,
+          "Creating ccache storage for %s\n", kcm_cc_get_name(cc));
 
     /* Do the encoding asap so that if we fail, we don't even attempt any
      * writes */
@@ -1566,7 +1567,7 @@ static struct tevent_req *ccdb_sec_create_send(TALLOC_CTX *mem_ctx,
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannot convert cache %s to JSON [%d]: %s\n",
-              cc->name, ret, sss_strerror(ret));
+              kcm_cc_get_name(cc), ret, sss_strerror(ret));
         goto immediate;
     }
 
@@ -1703,7 +1704,7 @@ static struct tevent_req *ccdb_sec_mod_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_mod_cred_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_mod_cred_state);
     if (req == NULL) {
@@ -1830,7 +1831,7 @@ static struct tevent_req *ccdb_sec_store_cred_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_store_cred_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_store_cred_state);
     if (req == NULL) {
@@ -1956,7 +1957,7 @@ static struct tevent_req *ccdb_sec_delete_send(TALLOC_CTX *mem_ctx,
     struct tevent_req *req = NULL;
     struct tevent_req *subreq = NULL;
     struct ccdb_sec_delete_state *state = NULL;
-    struct ccdb_sec *secdb = talloc_get_type(db->db_handle, struct ccdb_sec);
+    struct ccdb_sec *secdb = kcm_ccdb_get_handle(db);
 
     req = tevent_req_create(mem_ctx, &state, struct ccdb_sec_delete_state);
     if (req == NULL) {
