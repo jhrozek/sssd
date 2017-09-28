@@ -29,7 +29,7 @@
 #include "util/util.h"
 #include "util/util_creds.h"
 #include "util/crypto/sss_crypto.h"
-#include "responder/kcm/kcmsrv_ccache_pvt.h"
+#include "responder/kcm/kcmsrv_ccache.h"
 
 /* The base for storing secrets is:
  *  http://localhost/kcm/persistent/$uid
@@ -327,10 +327,26 @@ static json_t *cred_to_json(struct kcm_cred *crd)
     json_t *jcred;
     json_error_t error;
     char *base64_cred_blob;
+    struct sss_iobuf *cred_blob;
+    uuid_t crd_uuid;
+    errno_t ret;
 
-    uuid_unparse(crd->uuid, uuid_str);
-    cred_blob_data = sss_iobuf_get_data(crd->cred_blob);
-    cred_blob_size = sss_iobuf_get_size(crd->cred_blob);
+    ret = kcm_cred_get_uuid(crd, crd_uuid);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "No UUID in credentials\n.");
+        return NULL;
+    }
+
+    uuid_unparse(crd_uuid, uuid_str);
+
+    cred_blob = kcm_cred_get_creds(crd);
+    if (cred_blob == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "No credentials\n.");
+        return NULL;
+    }
+
+    cred_blob_data = sss_iobuf_get_data(cred_blob);
+    cred_blob_size = sss_iobuf_get_size(cred_blob);
 
     base64_cred_blob = sss_base64_encode(crd, cred_blob_data, cred_blob_size);
     if (base64_cred_blob == NULL) {
@@ -375,7 +391,7 @@ static json_t *creds_to_json_array(struct kcm_cred *creds)
         return NULL;
     }
 
-    DLIST_FOR_EACH(crd, creds) {
+    for (crd = creds; crd != NULL; crd = kcm_cc_next_cred(crd)) {
         jcred = cred_to_json(crd);
         if (jcred == NULL) {
             DEBUG(SSSDBG_CRIT_FAILURE,
@@ -416,23 +432,34 @@ static json_t *creds_to_json_array(struct kcm_cred *creds)
  */
 static json_t *ccache_to_json(struct kcm_ccache *cc)
 {
-    json_t *princ = NULL;
+    json_t *jprinc = NULL;
     json_t *creds = NULL;
     json_t *jcc = NULL;
     json_error_t error;
+    krb5_principal princ;
+    struct kcm_cred *crd;
 
-    princ = princ_to_json(cc, cc->client);
+    princ = kcm_cc_get_client_principal(cc);
     if (princ == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot retrieve the principal\n");
+        return NULL;
+    }
+
+    jprinc = princ_to_json(cc, princ);
+    if (jprinc == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannot convert princ to JSON\n");
         return NULL;
     }
 
-    creds = creds_to_json_array(cc->creds);
+    /* Empty credentials will yield NULL crd -> no crd != NULL check */
+    crd = kcm_cc_get_cred(cc);
+
+    creds = creds_to_json_array(crd);
     if (creds == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannot convert creds to JSON array\n");
-        json_decref(princ);
+        json_decref(jprinc);
         return NULL;
     }
 
@@ -440,15 +467,15 @@ static json_t *ccache_to_json(struct kcm_ccache *cc)
                        JSON_STRICT,
                        "{s:i, s:i, s:o, s:o}",
                        "version", KS_JSON_VERSION,
-                       "kdc_offset", cc->kdc_offset,
-                       "principal", princ,
+                       "kdc_offset", kcm_cc_get_offset(cc),
+                       "principal", jprinc,
                        "creds", creds);
     if (jcc == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Failed to pack JSON ccache structure on line %d: %s\n",
               error.line, error.text);
         json_decref(creds);
-        json_decref(princ);
+        json_decref(jprinc);
         return NULL;
     }
 
@@ -462,6 +489,9 @@ static errno_t ccache_to_sec_kv(TALLOC_CTX *mem_ctx,
 {
     json_t *jcc = NULL;
     char *jdump;
+    const char *name;
+    uuid_t uuid;
+    errno_t ret;
 
     jcc = ccache_to_json(cc);
     if (jcc == NULL) {
@@ -480,7 +510,21 @@ static errno_t ccache_to_sec_kv(TALLOC_CTX *mem_ctx,
         return ERR_JSON_ENCODING;
     }
 
-    *_sec_key = sec_key_create(mem_ctx, cc->name, cc->uuid);
+    name = kcm_cc_get_name(cc);
+    if (name == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "ccache has no name\n.");
+        free(jdump);
+        return EIO;
+    }
+
+    ret = kcm_cc_get_uuid(cc, uuid);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "ccache has no UUID?\n.");
+        free(jdump);
+        return EIO;
+    }
+
+    *_sec_key = sec_key_create(mem_ctx, name, uuid);
     *_sec_value = talloc_strdup(mem_ctx, jdump);
     free(jdump);
     json_decref(jcc);
@@ -513,7 +557,7 @@ errno_t kcm_ccache_to_sec_input(TALLOC_CTX *mem_ctx,
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannot convert cache %s to JSON [%d]: %s\n",
-              cc->name, ret, sss_strerror(ret));
+              kcm_cc_get_name(cc), ret, sss_strerror(ret));
         goto done;
     }
 
