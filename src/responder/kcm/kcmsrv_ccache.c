@@ -78,7 +78,6 @@ static errno_t kcm_cc_chown(struct kcm_ccache *cc,
         return ENOMEM;
     }
     cc->owner->uid = cli_creds_get_uid(owner);
-    cc->owner->gid = cli_creds_get_gid(owner);
 
     ret = kcm_cc_set_sectx(cc->owner, owner);
     if (ret != EOK) {
@@ -220,24 +219,22 @@ bool kcm_cc_access(struct kcm_ccache *cc,
 {
     bool ok;
     uid_t uid = cli_creds_get_uid(client);
-    gid_t gid = cli_creds_get_gid(client);
 
     if (cc == NULL || client == NULL) {
         DEBUG(SSSDBG_OP_FAILURE, "Invalid input, denying access\n");
         return false;
     }
 
-    if (uid == 0 && gid == 0) {
+    if (uid == 0) {
         /* root can access any ccache */
         return true;
     }
 
-    ok = ((cc->owner->uid == uid) && (cc->owner->gid == gid));
+    ok = (cc->owner->uid == uid);
     if (!ok) {
         DEBUG(SSSDBG_MINOR_FAILURE,
-              "Client %"SPRIuid":%"SPRIgid" has no access to ccache %s\n",
+              "Client %"SPRIuid" has no access to ccache %s\n",
               cli_creds_get_uid(client),
-              cli_creds_get_gid(client),
               cc->name);
         return false;
     }
