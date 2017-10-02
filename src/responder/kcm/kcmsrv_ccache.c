@@ -193,6 +193,15 @@ krb5_principal kcm_cc_get_client_principal(struct kcm_ccache *cc)
 static bool kcm_cc_seaccess(struct kcm_ccache *cc,
                             struct cli_creds *client)
 {
+    DEBUG(SSSDBG_TRACE_LIBS,
+          "Comparing SELinux context of owner %s and client %s:%s:%s\n",
+          cc->owner->selinux_context,
+          SELINUX_context_user_get(client->selinux_ctx),
+          SELINUX_context_role_get(client->selinux_ctx),
+          SELINUX_context_type_get(client->selinux_ctx));
+
+    /* FIXME - we'll call selinux_access_check(3) here */
+
     return true;
 }
 
@@ -250,6 +259,15 @@ bool kcm_cc_access(struct kcm_ccache *cc,
 int32_t kcm_cc_get_offset(struct kcm_ccache *cc)
 {
     return cc ? cc->kdc_offset : INT32_MAX;
+}
+
+const char *kcm_cc_get_sectx(struct kcm_ccache *cc)
+{
+#ifdef HAVE_SELINUX
+    return cc->owner->selinux_context;
+#else
+    return NULL;
+#endif /* HAVE_SELINUX */
 }
 
 errno_t kcm_cc_store_cred_blob(struct kcm_ccache *cc,
