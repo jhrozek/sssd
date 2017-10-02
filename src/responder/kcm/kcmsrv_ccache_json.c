@@ -56,7 +56,11 @@
  * We keep the JSON representation of the ccache versioned to allow
  * us to modify the format in a future version
  */
-#define KS_JSON_VERSION     1
+#define KS_JSON_V_UNKNOWN   0
+#define KS_JSON_V_ORIG      1
+#define KS_JSON_V_SECTX     2
+
+#define KS_JSON_VERSION     KS_JSON_V_SECTX
 
 /*
  * The secrets store is a key-value store at heart. We store the UUID
@@ -408,6 +412,29 @@ static json_t *creds_to_json_array(struct kcm_cred *creds)
     return array;
 }
 
+ /*
+ * Creates a JSON object with a string. If SELinux is supported
+ * on this platform, then the string will be non-empty, otherwise
+ * we just use an empty string.
+ */
+static json_t *sec_ctx_to_json(struct kcm_ccache *cc)
+{
+    const char *sec_ctx;
+
+#ifdef HAVE_SELINUX
+    sec_ctx = kcm_cc_get_sectx(cc);
+    if (sec_ctx == NULL) {
+        /* FIXME - test how this works with disabled SELinux */
+        return NULL;
+    }
+#else
+    sec_ctx = "";
+#endif /* HAVE_SELINUX */
+
+    /* Now we have the string, let's turn it into a JSON object */
+    return json_string(sec_ctx);
+}
+
 /*
  * The ccache is formatted in JSON as:
  * {
@@ -435,6 +462,7 @@ static json_t *ccache_to_json(struct kcm_ccache *cc)
     json_t *jprinc = NULL;
     json_t *creds = NULL;
     json_t *jcc = NULL;
+    json_t *sec_ctx = NULL;
     json_error_t error;
     krb5_principal princ;
     struct kcm_cred *crd;
@@ -463,19 +491,30 @@ static json_t *ccache_to_json(struct kcm_ccache *cc)
         return NULL;
     }
 
+    sec_ctx = sec_ctx_to_json(cc);
+    if (sec_ctx == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot convert creds to JSON array\n");
+        json_decref(creds);
+        json_decref(jprinc);
+        return NULL;
+    }
+
     jcc = json_pack_ex(&error,
                        JSON_STRICT,
-                       "{s:i, s:i, s:o, s:o}",
+                       "{s:i, s:i, s:o, s:o, s:o}",
                        "version", KS_JSON_VERSION,
                        "kdc_offset", kcm_cc_get_offset(cc),
                        "principal", jprinc,
-                       "creds", creds);
+                       "creds", creds,
+                       "sec_ctx", sec_ctx);
     if (jcc == NULL) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Failed to pack JSON ccache structure on line %d: %s\n",
               error.line, error.text);
         json_decref(creds);
         json_decref(jprinc);
+        json_decref(sec_ctx);
         return NULL;
     }
 

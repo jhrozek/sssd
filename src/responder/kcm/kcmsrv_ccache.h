@@ -103,6 +103,12 @@ errno_t kcm_cc_get_uuid(struct kcm_ccache *cc, uuid_t _uuid);
 krb5_principal kcm_cc_get_client_principal(struct kcm_ccache *cc);
 int32_t kcm_cc_get_offset(struct kcm_ccache *cc);
 
+/* Return the SELinux context of the owner of the ccache.
+ *
+ * Return NULL on systems that do not support SELinux
+ */
+const char *kcm_cc_get_sectx(struct kcm_ccache *cc);
+
 /* Mainly useful for creating a cred structure from a persistent
  * storage
  */
