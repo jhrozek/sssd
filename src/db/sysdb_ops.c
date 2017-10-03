@@ -2588,11 +2588,6 @@ int sysdb_store_user(struct sss_domain_info *domain,
         }
     }
 
-    if (pwd && (domain->legacy_passwords || !*pwd)) {
-        ret = sysdb_attrs_add_string(attrs, SYSDB_PWD, pwd);
-        if (ret) goto done;
-    }
-
     ret = sysdb_transaction_start(domain->sysdb);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to start transaction\n");

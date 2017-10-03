@@ -150,7 +150,6 @@ class SSSDConfigFile(SSSDChangeConf):
                        'chpass_provider' : 'chpass-module',
                        'session_provider' : 'session-module',
                        'use_fully_qualified_names' : 'useFullyQualifiedNames',
-                       'store_legacy_passwords' : 'store-legacy-passwords',
                       }
         # Proxy options
         proxy_kw = { 'proxy_pam_target' : 'pam-target',
