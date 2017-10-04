@@ -763,6 +763,7 @@ static void auth_connect_done(struct tevent_req *subreq)
             be_fo_set_port_status(state->ctx->be,
                                   state->sdap_service->name,
                                   state->srv, PORT_NOT_WORKING);
+            fo_set_server_status(state->srv, SERVER_NOT_WORKING);
         }
 
         if (auth_get_server(req) == NULL) {

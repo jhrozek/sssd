@@ -2046,6 +2046,7 @@ int sdap_cli_connect_recv(struct tevent_req *req,
 
             be_fo_set_port_status(state->be, state->service->name,
                                   state->srv, PORT_NOT_WORKING);
+            fo_set_server_status(state->srv, SERVER_NOT_WORKING);
         } else {
             if (can_retry) {
                 *can_retry = false;
