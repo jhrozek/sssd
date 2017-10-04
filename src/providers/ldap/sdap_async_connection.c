@@ -1644,6 +1644,7 @@ static void sdap_cli_rootdse_done(struct tevent_req *subreq)
         if (ret == ETIMEDOUT) { /* retry another server */
             be_fo_set_port_status(state->be, state->service->name,
                                   state->srv, PORT_NOT_WORKING);
+            fo_set_server_status(state->srv, SERVER_NOT_WORKING);
             ret = sdap_cli_resolve_next(req);
             if (ret != EOK) {
                 tevent_req_error(req, ret);
@@ -1990,9 +1991,10 @@ static void sdap_cli_rootdse_auth_done(struct tevent_req *subreq)
     if (ret) {
         if (ret == ETIMEDOUT) {
             /* The server we authenticated against went down. Retry another
-             * one */
+             * one and set the server status to not working */
             be_fo_set_port_status(state->be, state->service->name,
                                   state->srv, PORT_NOT_WORKING);
+            fo_set_server_status(state->srv, SERVER_NOT_WORKING);
             ret = sdap_cli_resolve_next(req);
             if (ret != EOK) {
                 tevent_req_error(req, ret);
