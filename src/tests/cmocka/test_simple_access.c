@@ -734,6 +734,161 @@ static void test_group_space(void **state)
     run_simple_access_check(simple_test_ctx, "u3@simple_test", EOK, false);
 }
 
+static errno_t add_zero_gid_group(TALLOC_CTX *mem_ctx,
+                                  struct simple_test_ctx *simple_test_ctx,
+                                  const char **_name)
+{
+    errno_t ret;
+    const char *name;
+    struct sysdb_attrs *attrs;
+    struct ldb_message *msg;
+    TALLOC_CTX *tmp_ctx;
+    struct ldb_context *ldb;
+
+    ldb  = sysdb_ctx_get_ldb(simple_test_ctx->be_ctx->domain->sysdb);
+    if (ldb == NULL) {
+        return EINVAL;
+    }
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    attrs = sysdb_new_attrs(tmp_ctx);
+    if (attrs == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = sysdb_attrs_add_bool(attrs, SYSDB_POSIX, false);
+    if (ret != EOK) {
+        goto done;
+    }
+
+    name = sss_create_internal_fqname(attrs, "zero_gid_posix_group",
+                                      simple_test_ctx->be_ctx->domain->name);
+    if (name == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    /* Add a broken group to the cache - it has GID 0, but no isPosix=false */
+    ret = sysdb_add_group(simple_test_ctx->be_ctx->domain, name, 0, attrs, 0, 0);
+    if (ret != EOK) {
+        goto done;
+    }
+
+    /* Remove the isPosix attribute, thus breaking the group */
+    msg = ldb_msg_new(tmp_ctx);
+    if (msg == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    msg->dn = sysdb_group_dn(msg, simple_test_ctx->be_ctx->domain, name);
+    if (msg->dn == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = ldb_msg_add_empty(msg, SYSDB_POSIX, LDB_FLAG_MOD_DELETE, NULL);
+    if (ret != LDB_SUCCESS) {
+        DEBUG(SSSDBG_OP_FAILURE, "ldb_msg_add_empty() failed\n");
+        ret = sysdb_error_to_errno(ret);
+        goto done;
+    }
+
+    ret = ldb_modify(ldb, msg);
+    if (ret != LDB_SUCCESS) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "ldb_modify() failed: [%s](%d)[%s]\n",
+              ldb_strerror(ret), ret, ldb_errstring(ldb));
+        ret = sysdb_error_to_errno(ret);
+        goto done;
+    }
+
+    ret = EOK;
+    *_name = talloc_steal(mem_ctx, name);
+done:
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static void test_posix_group_with_zero(struct simple_test_ctx *simple_test_ctx)
+{
+    errno_t ret;
+    const char *u1;
+    const char *g1;
+    const char *g0;
+
+    ret = add_zero_gid_group(simple_test_ctx, simple_test_ctx, &g0);
+    assert_int_equal(ret, EOK);
+
+    u1 = sss_create_internal_fqname(simple_test_ctx, "u1",
+                                    simple_test_ctx->be_ctx->domain->name);
+    assert_non_null(u1);
+
+    ret = sysdb_store_user(simple_test_ctx->be_ctx->domain,
+                           u1, NULL, 123, 999, "u1", "/home/u1",
+                           "/bin/bash", NULL, NULL, NULL, -1, 0);
+    assert_int_equal(ret, EOK);
+
+    g1 = sss_create_internal_fqname(simple_test_ctx, "g1",
+                                    simple_test_ctx->be_ctx->domain->name);
+    assert_int_equal(ret, EOK);
+
+    ret = sysdb_add_group(simple_test_ctx->be_ctx->domain, g1, 321, NULL, 0, 0);
+    assert_int_equal(ret, EOK);
+
+    ret = sysdb_add_group_member(simple_test_ctx->be_ctx->domain,
+                                 g1, u1, SYSDB_MEMBER_USER, false);
+    assert_int_equal(ret, EOK);
+
+    ret = sysdb_add_group_member(simple_test_ctx->be_ctx->domain,
+                                 g0, u1, SYSDB_MEMBER_USER, false);
+    assert_int_equal(ret, EOK);
+}
+
+static void test_posix_group_with_zero_gid_allow_only(void **state)
+{
+    errno_t ret;
+    struct simple_test_ctx *simple_test_ctx = \
+                            talloc_get_type(*state, struct simple_test_ctx);
+    struct sss_test_conf_param params[] = {
+        { "simple_allow_groups", "g1" },
+        { NULL, NULL },
+    };
+
+    ret = setup_with_params(simple_test_ctx,
+                            simple_test_ctx->tctx->dom,
+                            params);
+    assert_int_equal(ret, EOK);
+
+    test_posix_group_with_zero(simple_test_ctx);
+    run_simple_access_check(simple_test_ctx, "u1@simple_test", EOK, true);
+}
+
+static void test_posix_group_with_zero_gid_deny(void **state)
+{
+    errno_t ret;
+    struct simple_test_ctx *simple_test_ctx = \
+                            talloc_get_type(*state, struct simple_test_ctx);
+    struct sss_test_conf_param params[] = {
+        { "simple_allow_groups", "g1" },
+        { "simple_deny_groups", "deny_group" },
+        { NULL, NULL },
+    };
+
+    ret = setup_with_params(simple_test_ctx,
+                            simple_test_ctx->tctx->dom,
+                            params);
+    assert_int_equal(ret, EOK);
+
+    test_posix_group_with_zero(simple_test_ctx);
+    run_simple_access_check(simple_test_ctx, "u1@simple_test", EOK, false);
+}
+
 int main(int argc, const char *argv[])
 {
     int rv;
@@ -801,6 +956,12 @@ int main(int argc, const char *argv[])
                                         simple_test_setup,
                                         simple_test_teardown),
         cmocka_unit_test_setup_teardown(test_unparseable_deny_group,
+                                        simple_test_setup,
+                                        simple_test_teardown),
+        cmocka_unit_test_setup_teardown(test_posix_group_with_zero_gid_allow_only,
+                                        simple_test_setup,
+                                        simple_test_teardown),
+        cmocka_unit_test_setup_teardown(test_posix_group_with_zero_gid_deny,
                                         simple_test_setup,
                                         simple_test_teardown),
     };

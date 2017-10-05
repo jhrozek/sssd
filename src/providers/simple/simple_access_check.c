@@ -484,7 +484,21 @@ simple_check_get_groups_send(TALLOC_CTX *mem_ctx,
          * attribute is set to SID and they are set as non-POSIX
          */
         ret = simple_check_process_group(state, groups[i]);
-        if (ret != EOK) {
+        if (ret == ERR_SIMPLE_GROUPS_MISSING) {
+            if (state->ctx->deny_groups == NULL) {
+                DEBUG(SSSDBG_MINOR_FAILURE,
+                    "One of the groups could not be resolved, "
+                    "ignoring, but %s might be denied access\n",
+                    username);
+                continue;
+            } else {
+                DEBUG(SSSDBG_CRIT_FAILURE,
+                      "Cannot resolve groups and deny rules present, error\n");
+                ret = EINVAL;
+                goto done;
+            }
+        } else if (ret != EOK) {
+            DEBUG(SSSDBG_CRIT_FAILURE, "Error resolving %s groups\n", username);
             goto done;
         }
     }
@@ -587,13 +601,13 @@ simple_check_process_group(struct simple_check_groups_state *state,
 
     /* With the current sysdb layout, every group has a name */
     if (name == NULL) {
-        return EINVAL;
+        return ERR_SIMPLE_GROUPS_MISSING;
     }
 
     if (gid == 0) {
         if (posix == true) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "POSIX group without GID\n");
-            return EINVAL;
+            DEBUG(SSSDBG_CRIT_FAILURE, "POSIX group %s without GID\n", name);
+            return ERR_SIMPLE_GROUPS_MISSING;
         }
 
         /* Non-posix group with a name. Still can be used for access
