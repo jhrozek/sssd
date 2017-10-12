@@ -110,6 +110,8 @@
 #define CONFDB_MEMCACHE_TIMEOUT "memcache_timeout"
 #define CONFDB_NSS_HOMEDIR_SUBSTRING "homedir_substring"
 #define CONFDB_DEFAULT_HOMEDIR_SUBSTRING "/home"
+#define CONFDB_NSS_TRUSTED_USERS "nss_trusted_users"
+#define DEFAULT_TRUSTED_UIDS "0"
 
 /* PAM */
 #define CONFDB_PAM_CONF_ENTRY "config/pam"

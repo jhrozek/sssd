@@ -75,6 +75,8 @@ struct nss_ctx {
     char *fallback_homedir;
     char *homedir_substr;
     const char **extra_attributes;
+    size_t trusted_uids_count;
+    uid_t *trusted_uids;
 
     /* Enumeration. */
     struct nss_enum_ctx pwent;

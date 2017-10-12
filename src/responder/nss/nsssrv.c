@@ -151,7 +151,7 @@ static int nss_get_config(struct nss_ctx *nctx,
                           struct confdb_ctx *cdb)
 {
     int ret;
-    char *tmp_str;
+    char *tmp_str = NULL;
 
     ret = confdb_get_int(cdb, CONFDB_NSS_CONF_ENTRY,
                          CONFDB_NSS_ENUM_CACHE_TIMEOUT, 120,
@@ -214,10 +214,28 @@ static int nss_get_config(struct nss_ctx *nctx,
 
     if (tmp_str != NULL) {
         nctx->extra_attributes = parse_attr_list_ex(nctx, tmp_str, NULL);
+        talloc_free(tmp_str);
         if (nctx->extra_attributes == NULL) {
             ret = ENOMEM;
             goto done;
         }
+    }
+
+    ret = confdb_get_string(cdb, nctx, CONFDB_NSS_CONF_ENTRY,
+                            CONFDB_NSS_TRUSTED_USERS,
+                            DEFAULT_TRUSTED_UIDS, &tmp_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to get trusted UIDs.\n");
+        goto done;
+    }
+
+    ret = csv_string_to_uid_array(nctx, tmp_str, true,
+                                  &nctx->trusted_uids_count,
+                                  &nctx->trusted_uids);
+    talloc_free(tmp_str);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "Failed to set trusted UIDs.\n");
+        goto done;
     }
 
     ret = 0;
