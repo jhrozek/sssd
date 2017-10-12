@@ -50,6 +50,24 @@ nss_cmd_ctx_create(TALLOC_CTX *mem_ctx,
     return cmd_ctx;
 }
 
+static bool nss_is_uid_trusted(struct cli_creds *creds,
+                               size_t trusted_uids_count,
+                               uid_t *trusted_uids)
+{
+    errno_t ret;
+
+    /* root is always trusted */
+    if (client_euid(creds) == 0) {
+        return true;
+    }
+
+    ret = check_allowed_uids(client_euid(creds),
+                             trusted_uids_count, trusted_uids);
+    if (ret == EOK) return true;
+
+    return false;
+}
+
 static void nss_getby_done(struct tevent_req *subreq);
 static void nss_getlistby_done(struct tevent_req *subreq);
 
@@ -90,6 +108,19 @@ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set cache request data!\n");
         ret = ENOMEM;
         goto done;
+    }
+
+    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0) {
+        if (cli_ctx->creds != NULL
+                && nss_is_uid_trusted(cli_ctx->creds,
+                                  cmd_ctx->nss_ctx->trusted_uids_count,
+                                  cmd_ctx->nss_ctx->trusted_uids)) {
+            cache_req_data_set_bypass_cache(data, true);
+        } else {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "UID [%d] is not allowed to bypass the cache.\n",
+                  client_euid(cli_ctx->creds));
+        }
     }
 
     subreq = nss_get_object_send(cmd_ctx, cli_ctx->ev, cli_ctx,
@@ -150,6 +181,19 @@ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set cache request data!\n");
         ret = ENOMEM;
         goto done;
+    }
+
+    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0) {
+        if (cli_ctx->creds != NULL
+                && nss_is_uid_trusted(cli_ctx->creds,
+                                  cmd_ctx->nss_ctx->trusted_uids_count,
+                                  cmd_ctx->nss_ctx->trusted_uids)) {
+            cache_req_data_set_bypass_cache(data, true);
+        } else {
+            DEBUG(SSSDBG_CRIT_FAILURE,
+                  "UID [%d] is not allowed to bypass the cache.\n",
+                  client_euid(cli_ctx->creds));
+        }
     }
 
     subreq = nss_get_object_send(cmd_ctx, cli_ctx->ev, cli_ctx,
