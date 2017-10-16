@@ -233,6 +233,7 @@ BuildRequires: libuuid-devel
 BuildRequires: jansson-devel
 BuildRequires: libcurl-devel
 %endif
+BuildRequires: gdm-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
