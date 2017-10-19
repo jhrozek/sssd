@@ -551,6 +551,11 @@ static int memberof_add(struct ldb_module *module, struct ldb_request *req)
     }
 
 done:
+    if (!add_ctx->terminate) {
+        ldb_debug(ldb, LDB_DEBUG_TRACE, "rhbz#1497739 | %s\n",
+                  ldb_ldif_message_string(ldb, add_ctx, LDB_CHANGETYPE_ADD, req->op.add.message));
+    }
+
     /* add original object */
     ret = ldb_build_add_req(&add_req, ldb, add_ctx,
                             add_ctx->msg, req->controls,
@@ -890,8 +895,16 @@ static int mbof_add_operation(struct mbof_add_operation *addop)
         /* it's a user object  */
         name = ldb_msg_find_attr_as_string(addop->entry, DB_NAME, NULL);
         if (!name) {
+            ldb_debug(ldb_module_get_ctx(add_ctx->ctx->module),
+                      LDB_DEBUG_TRACE,
+                      "rhbz#1497739 | failed to get user object's name\n");
             return LDB_ERR_OPERATIONS_ERROR;
         }
+
+        ldb_debug(ldb_module_get_ctx(add_ctx->ctx->module),
+                  LDB_DEBUG_TRACE,
+                  "rhbz#1497739 | Filling operation for adding '%s' user to %d parents\n",
+                  name, parents->num);
 
         for (i = 0; i < parents->num; i++) {
             ret = mbof_append_muop(add_ctx, &add_ctx->muops,
@@ -899,6 +912,12 @@ static int mbof_add_operation(struct mbof_add_operation *addop)
                                    LDB_FLAG_MOD_ADD,
                                    parents->dns[i], name,
                                    DB_MEMBERUID);
+            ldb_debug(ldb_module_get_ctx(add_ctx->ctx->module),
+                      LDB_DEBUG_TRACE,
+                      "rhbz#1497739 | Filling operation for adding '%s' user to '%s' parents' dn %s\n",
+                      name,
+                      ldb_dn_get_linearized(parents->dns[i]),
+                      ret == LDB_SUCCESS ? "successfully" : "failed");
             if (ret != LDB_SUCCESS) {
                 return ret;
             }
@@ -1378,13 +1397,17 @@ static int memberof_del(struct ldb_module *module, struct ldb_request *req)
         talloc_free(ctx);
         return LDB_ERR_OPERATIONS_ERROR;
     }
-    talloc_zfree(clean_dn);
 
     ret = ldb_build_search_req(&search, ldb, del_ctx,
                                NULL, LDB_SCOPE_SUBTREE,
                                expression, attrs, NULL,
                                first, mbof_del_search_callback,
                                req);
+    ldb_debug(ldb, LDB_DEBUG_TRACE,
+              "rhbz#1497739 | Requesting to delete '%s' dn %s\n",
+              clean_dn,
+              ret == LDB_SUCCESS ? "successfully" : "failed");
+    talloc_zfree(clean_dn);
     if (ret != LDB_SUCCESS) {
         talloc_free(ctx);
         return ret;
@@ -2238,6 +2261,12 @@ static int mbof_del_mod_entry(struct mbof_del_operation *delop)
                                    LDB_FLAG_MOD_DELETE,
                                    diff[i], name,
                                    DB_MEMBERUID);
+            ldb_debug(ldb_module_get_ctx(del_ctx->ctx->module),
+                      LDB_DEBUG_TRACE,
+                      "rhbz#1497739 | Filling operation for deleting '%s' user from '%s' parents' dn %s\n",
+                      name,
+                      ldb_dn_get_linearized(diff[i]),
+                      ret == LDB_SUCCESS ? "successfully" : "failed");
             if (ret != LDB_SUCCESS) {
                 return ret;
             }
@@ -2486,6 +2515,12 @@ static int mbof_del_fill_muop(struct mbof_del_ctx *del_ctx,
                                LDB_FLAG_MOD_DELETE,
                                valdn, name,
                                DB_MEMBERUID);
+        ldb_debug(ldb_module_get_ctx(del_ctx->ctx->module),
+                  LDB_DEBUG_TRACE,
+                  "rhbz#1497739 | Appending operation for deleting '%s' user from '%s' parent dn %s\n",
+                  name,
+                  ldb_dn_get_linearized(valdn),
+                  ret == LDB_SUCCESS ? "successfully" : "failed");
         if (ret != LDB_SUCCESS) {
             return ret;
         }
@@ -2932,6 +2967,9 @@ static int memberof_mod(struct ldb_module *module, struct ldb_request *req)
         talloc_free(ctx);
         return ret;
     }
+
+    ldb_debug(ldb, LDB_DEBUG_TRACE, "rhbz#1497739 | %s\n",
+              ldb_ldif_message_string(ldb, mod_ctx, LDB_CHANGETYPE_MODIFY, req->op.mod.message));
 
     return ldb_request(ldb, search);
 }
@@ -3950,6 +3988,9 @@ static int memberof_recompute_task(struct ldb_module *module,
         return ret;
     }
 
+    ldb_debug(ldb, LDB_DEBUG_TRACE, "rhbz#1497739 | %s\n",
+              ldb_ldif_message_string(ldb, ctx, LDB_CHANGETYPE_ADD, req->op.add.message));
+
     return ldb_request(ldb, src_req);
 }
 
@@ -4475,12 +4516,21 @@ static int mbof_rcmp_update(struct mbof_rcmp_context *ctx)
         }
 
         ret = ldb_msg_add(msg, x->memuids, flags);
+        ldb_debug(ldb, LDB_DEBUG_TRACE,
+                  "rhbz#1497739 | Adding to the msg to %s '%s' user %s\n",
+                  flags == LDB_FLAG_MOD_REPLACE ? "REPLACE" : "ADD",
+                  x->name,
+                  ret == LDB_SUCCESS ? "successfully" : "failed");
         if (ret != LDB_SUCCESS) {
             goto done;
         }
     }
     else if (x->orig_has_memberuid) {
         ret = ldb_msg_add_empty(msg, DB_MEMBERUID, LDB_FLAG_MOD_DELETE, NULL);
+        ldb_debug(ldb, LDB_DEBUG_TRACE,
+                  "rhbz#1497739 | Adding to the msg to DELETE '%s' user %s\n",
+                  x->name,
+                  ret == LDB_SUCCESS ? "successfully" : "failed");
         if (ret != LDB_SUCCESS) {
             goto done;
         }
@@ -4489,6 +4539,9 @@ static int mbof_rcmp_update(struct mbof_rcmp_context *ctx)
     ret = ldb_build_mod_req(&req, ldb, ctx, msg, NULL,
                             ctx, mbof_rcmp_mod_callback,
                             ctx->req);
+    ldb_debug(ldb, LDB_DEBUG_TRACE,
+              "rhbz#1497739 | Built the modify request %s",
+              ret == LDB_SUCCESS ? "successfully" : "failed");
     if (ret != LDB_SUCCESS) {
         goto done;
     }
