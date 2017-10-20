@@ -22,6 +22,12 @@
 #define _CACHE_REQ_DOMAIN_H_
 
 #include "responder/common/responder.h"
+#include "util/refcount.h"
+
+struct cache_req_domains {
+    REFCOUNT_COMMON;
+    struct cache_req_domain *list;
+};
 
 struct cache_req_domain {
     struct sss_domain_info *domain;

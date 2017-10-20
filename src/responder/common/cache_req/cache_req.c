@@ -699,6 +699,7 @@ struct cache_req_state {
     const char *domain_name;
 
     /* work data */
+    struct cache_req_domains *cr_domains;
     struct cache_req_result **results;
     size_t num_results;
     bool first_iteration;
@@ -964,12 +965,21 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
         return EOK;
     }
 
+    state->cr_domains = rc_reference(state,
+                                     struct cache_req_domains,
+                                     state->cr->rctx->cr_domains);
+    if (state->cr_domains == NULL) {
+        CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
+                        "rc_reference() failed\n");
+        return ENOMEM;
+    }
+
     if (domain_name != NULL) {
         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
                         "Performing a single domain search\n");
 
         cr_domain = cache_req_domain_get_domain_by_name(
-                                    state->cr->rctx->cr_domains, domain_name);
+                                    state->cr_domains->list, domain_name);
         if (cr_domain == NULL) {
             return ERR_DOMAIN_NOT_FOUND;
         }
@@ -978,7 +988,7 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
                         "Performing a multi-domain search\n");
 
-        cr_domain = state->cr->rctx->cr_domains;
+        cr_domain = state->cr_domains->list;
         check_next = true;
     }
 

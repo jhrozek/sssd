@@ -1701,14 +1701,22 @@ done:
 
 errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
 {
-    struct cache_req_domain *cr_domains = NULL;
+    struct cache_req_domains *cr_domains = NULL;
+    struct cache_req_domain *cr_domains_list = NULL;
     struct sss_domain_info *dom;
     errno_t ret;
 
+    cr_domains = rc_alloc(rctx, struct cache_req_domains);
+    if (cr_domains == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "rc_alloc() failed\n");
+        ret = ENOMEM;
+        goto done;
+    }
+
     if (rctx->domain_resolution_order != NULL) {
         ret = cache_req_domain_new_list_from_domain_resolution_order(
-                rctx, rctx->domains,
-                rctx->domain_resolution_order, &cr_domains);
+                cr_domains, rctx->domains,
+                rctx->domain_resolution_order, &cr_domains_list);
         if (ret == EOK) {
             DEBUG(SSSDBG_TRACE_FUNC,
                   "Using domain_resolution_order from sssd.conf\n");
@@ -1729,7 +1737,8 @@ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
 
     if (dom == NULL) {
         ret = cache_req_domain_new_list_from_domain_resolution_order(
-                                        rctx, rctx->domains, NULL, &cr_domains);
+                                        cr_domains, rctx->domains, NULL,
+                                        &cr_domains_list);
         if (ret != EOK) {
             DEBUG(SSSDBG_CRIT_FAILURE,
                   "Failed to flatten the list of domains.\n");
@@ -1738,9 +1747,9 @@ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
     }
 
     if (dom->has_views) {
-        ret = sss_resp_new_cr_domains_from_ipa_id_view(rctx, rctx->domains,
+        ret = sss_resp_new_cr_domains_from_ipa_id_view(cr_domains, rctx->domains,
                                                        dom->sysdb,
-                                                       &cr_domains);
+                                                       &cr_domains_list);
         if (ret == EOK) {
             DEBUG(SSSDBG_TRACE_FUNC,
                   "Using domain_resolution_order from IPA ID View\n");
@@ -1757,9 +1766,9 @@ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
         }
     }
 
-    ret = sss_resp_new_cr_domains_from_ipa_config(rctx, rctx->domains,
+    ret = sss_resp_new_cr_domains_from_ipa_config(cr_domains, rctx->domains,
                                                   dom->sysdb, dom->name,
-                                                  &cr_domains);
+                                                  &cr_domains_list);
     if (ret == EOK) {
         DEBUG(SSSDBG_TRACE_FUNC,
               "Using domain_resolution_order from IPA Config\n");
@@ -1775,17 +1784,24 @@ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
     }
 
     ret = cache_req_domain_new_list_from_domain_resolution_order(
-                                        rctx, rctx->domains, NULL, &cr_domains);
+                                        cr_domains, rctx->domains, NULL,
+                                        &cr_domains_list);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to flatten the list of domains.\n");
         goto done;
     }
 
+
     ret = EOK;
 
 done:
-    cache_req_domain_list_zfree(&rctx->cr_domains);
-    rctx->cr_domains = cr_domains;
+    if (ret == EOK ) {
+        cr_domains->list = cr_domains_list;
+        talloc_zfree(rctx->cr_domains);
+        rctx->cr_domains = cr_domains;
+    } else {
+        talloc_zfree(cr_domains);
+    }
 
     return ret;
 }
