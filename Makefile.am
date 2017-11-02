@@ -1174,6 +1174,7 @@ libsss_nss_idmap_la_SOURCES = \
     src/util/io.c \
     $(NULL)
 libsss_nss_idmap_la_LIBADD = \
+    $(LIBCLOCK_GETTIME) \
     $(CLIENT_LIBS) \
     -lpthread \
     $(NULL)
