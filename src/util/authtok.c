@@ -27,6 +27,10 @@ struct sss_auth_token {
 
 enum sss_authtok_type sss_authtok_get_type(struct sss_auth_token *tok)
 {
+    if (tok == NULL) {
+        return SSS_AUTHTOK_TYPE_EMPTY;
+    }
+
     return tok->type;
 }
 
