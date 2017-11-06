@@ -500,6 +500,12 @@ sss_groupshow_LDADD = \
 #################
 # Feature Tests #
 #################
+TESTS_ENVIRONMENT = LDB_MODULES_PATH=$(abs_top_builddir)/ldb_mod_test_dir
+
+ldb_mod_test_dir: memberof.la
+	mkdir -p $(builddir)/ldb_mod_test_dir
+	cp $(builddir)/.libs/memberof.so $(builddir)/ldb_mod_test_dir
+
 noinst_LTLIBRARIES += \
     libsss_test_common.la
 
@@ -1076,7 +1082,7 @@ docs:
 	@exit 1
 endif
 
-all-local:
+all-local: ldb_mod_test_dir
 if BUILD_PYTHON_BINDINGS
 	cd $(srcdir)/src/config; $(PYTHON) setup.py build --build-base $(abs_builddir)/src/config
 endif
@@ -1111,6 +1117,7 @@ if BUILD_PYTHON_BINDINGS
 	cd $(srcdir)/src/config; $(PYTHON) setup.py build --build-base $(abs_builddir)/src/config clean --all
 endif
 	rm -Rf doc
+	rm -Rf ldb_mod_test_dir
 
 CLEANFILES = *.X */*.X */*/*.X
 
