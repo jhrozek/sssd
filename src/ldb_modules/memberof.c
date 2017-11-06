@@ -3636,3 +3636,11 @@ const struct ldb_module_ops ldb_memberof_module_ops = {
     .modify = memberof_mod,
     .del = memberof_del,
 };
+
+int ldb_init_module(const char *version)
+{
+#ifdef LDB_MODULE_CHECK_VERSION
+    LDB_MODULE_CHECK_VERSION(version);
+#endif
+    return ldb_register_module(&ldb_memberof_module_ops);
+}
