@@ -661,8 +661,8 @@ static void check_enumpwent(int ret, struct sss_domain_info *dom,
     assert_int_equal(res->count, N_ELEMENTS(users)-1);
 
     assert_user_attrs(res->msgs[0], dom, "barney", views);
-    assert_user_attrs(res->msgs[1], dom, "alice", views);
-    assert_user_attrs(res->msgs[2], dom, "bob", views);
+    assert_user_attrs(res->msgs[2], dom, "alice", views);
+    assert_user_attrs(res->msgs[1], dom, "bob", views);
 }
 
 static void test_sysdb_enumpwent(void **state)
@@ -898,9 +898,9 @@ static void check_enumgrent(int ret, struct sss_domain_info *dom,
     assert_int_equal(res->count, N_ELEMENTS(groups)-1);
     assert_group_attrs(res->msgs[0], dom, "three",
                        views ? TEST_GID_OVERRIDE_BASE + 2 : 0);
-    assert_group_attrs(res->msgs[1], dom, "one",
+    assert_group_attrs(res->msgs[2], dom, "one",
                        views ? TEST_GID_OVERRIDE_BASE : 0);
-    assert_group_attrs(res->msgs[2], dom, "two",
+    assert_group_attrs(res->msgs[1], dom, "two",
                        views ? TEST_GID_OVERRIDE_BASE + 1 : 0);
 }
 
