@@ -10,7 +10,7 @@ Prerequisites
     pytest-multihost-plugin
     -----------------------
     To execute tests with multiple tests, pytest-multihost plugin is required. Refer to Install section for
-    installing the plugin 
+    installing the plugin
 
     sssd pytest framework
     ---------------------

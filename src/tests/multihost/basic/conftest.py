@@ -115,7 +115,8 @@ def setup_sssd(session_multihost, request):
     temp_fd, temp_file_path = tempfile.mkstemp(suffix='conf', prefix='sssd')
     with open(temp_file_path, "wb") as outfile:
         sssdConfig.write(outfile)
-    session_multihost.master[0].transport.put_file(temp_file_path, '/etc/sssd/sssd.conf')
+    session_multihost.master[0].transport.put_file(temp_file_path,
+                                                   '/etc/sssd/sssd.conf')
     chg_perm = 'chmod 600 /etc/sssd/sssd.conf'
     session_multihost.master[0].run_command(chg_perm)
     os.close(temp_fd)
@@ -131,9 +132,11 @@ def setup_sssd(session_multihost, request):
 
     def stop_sssd():
         session_multihost.master[0].service_sssd('stop')
-        session_multihost.master[0].run_command(['systemctl', 'stop', 'sssd-kcm'])
-        sssd_cache = ['cache_%s.ldb' % ('EXAMPLE.TEST'), 'config.ldb', 'sssd.ldb',
-                      'timestamps_%s.ldb' % ('EXAMPLE.TEST')]
+        session_multihost.master[0].run_command(['systemctl',
+                                                 'stop',
+                                                 'sssd-kcm'])
+        sssd_cache = ['cache_%s.ldb' % ('EXAMPLE.TEST'), 'config.ldb',
+                      'sssd.ldb', 'timestamps_%s.ldb' % ('EXAMPLE.TEST')]
         for cache_file in sssd_cache:
             db_file = '/var/lib/sss/db/%s' % (cache_file)
             session_multihost.master[0].run_command(['rm', '-f', db_file])

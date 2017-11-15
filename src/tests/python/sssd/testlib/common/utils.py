@@ -308,7 +308,8 @@ class sssdTools(object):
             krb5config.add_section('logging')
             krb5config.set("logging", "default", "FILE:/var/log/krb5libs.log")
             krb5config.set("logging", "kdc", "FILE:/var/log/krb5kdc.log")
-            krb5config.set("logging", "admin_server", "FILE:/var/log/kadmind.log")
+            krb5config.set("logging", "admin_server",
+                           "FILE:/var/log/kadmind.log")
             krb5config.add_section('libdefaults')
             krb5config.set("libdefaults", "ticket_lifetime", "3600")
             krb5config.set("libdefaults", "default_realm", realm.upper())
@@ -466,7 +467,8 @@ class LdapOperations(object):
         """
 
         self.conn.set_option(ldap.OPT_REFERRALS, 0)
-        result = self.conn.search_s(basedn, ldap.SCOPE_SUBTREE, criteria, attributes)
+        result = self.conn.search_s(basedn, ldap.SCOPE_SUBTREE,
+                                    criteria, attributes)
         result_set = [entry for _, entry in result if isinstance(entry, dict)]
         return result_set
 
@@ -647,7 +649,8 @@ class PkiTools(object):
         """
         with open(self.pwdfilepath, 'w') as outfile:
             outfile.write(self.nssdb_pwd)
-        certutil_cmd = 'certutil -N -d %s -f %s' % (self.nssdb, self.pwdfilepath)
+        certutil_cmd = 'certutil -N -d %s -f %s' % (self.nssdb,
+                                                    self.pwdfilepath)
         _, _, ret = self.execute(shlex.split(certutil_cmd))
         if ret != 0:
             raise PkiLibException('Could not setup NSS DB on %s' % self.nssdb)
@@ -725,10 +728,9 @@ class PkiTools(object):
                                            canickname, ca_dn,
                                            self.noisefilepath)
 
-        ca_pem = 'certutil -d %s -f %s -L -n "%s" -a -o %s' % (nss_dir,
-                                                               self.pwdfilepath,
-                                                               canickname,
-                                                               ca_pempath)
+        ca_pem = 'certutil -d %s -f %s -L -n "%s"' \
+                 '-a -o %s' % (nss_dir, self.pwdfilepath,
+                               canickname, ca_pempath)
 
         with open(pin_filepath, 'w') as outfile:
             outfile.write('Internal (Software) Token:%s' % nss_passphrase)
@@ -773,16 +775,17 @@ class ADOperations(object):
     def __init__(self, ad_host):
         self.ad_host = ad_host
         self.ad_uri = 'ldap://%s' % ad_host.external_hostname
+        host_domain_basedn_entry = self.ad_host.domain_basedn_entry
         self.ad_users_dn_entry = '{},{}'.format('CN=Users',
-                                                self.ad_host.domain_basedn_entry)
+                                                host_domain_basedn_entry)
         self.ad_dn = 'CN={},{}'.format("Administrator", self.ad_users_dn_entry)
         self.ad_admin_passwd = self.ad_host.ssh_password
-        cmd = self.ad_host.run_command(['powershell.exe',
-                                        '-inputformat',
-                                        'none',
-                                        '-noprofile',
-                                        '(Get-ADDomain -Current LocalComputer).NetBIOSName'])
-        self.ad_netbiosname = cmd.stdout_text
+        cmd = ['powershell.exe',
+               '-inputformat',
+               'none',
+               '-noprofile',
+               '(Get-ADDomain -Current LocalComputer).NetBIOSName']
+        self._ad_netbionsname = self.ad_host.run_command(cmd).stdout_text
 
     def ad_conn(self):
         """ Create a LDAP Connection with AD
@@ -823,7 +826,8 @@ class ADOperations(object):
             (_, _) = ad_conn_inst.modify_ldap(user_dn, mod_dn)
             mod_dn = [(ldap.MOD_ADD, 'gidNumber', str(uid))]
             (_, _) = ad_conn_inst.modify_ldap(user_dn, mod_dn)
-            mod_dn = [(ldap.MOD_ADD, 'unixHomeDirectory', '/home/%s' % (username))]
+            mod_dn = [(ldap.MOD_ADD, 'unixHomeDirectory',
+                       '/home/%s' % (username))]
             (_, _) = ad_conn_inst.modify_ldap(user_dn, mod_dn)
             mod_dn = [(ldap.MOD_ADD, 'loginShell', '/bin/bash')]
             (_, _) = ad_conn_inst.modify_ldap(user_dn, mod_dn)
