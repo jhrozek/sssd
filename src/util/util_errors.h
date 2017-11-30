@@ -138,6 +138,7 @@ enum sssd_errors {
     ERR_SSL_FAILURE,
     ERR_UNABLE_TO_VERIFY_PEER,
     ERR_UNABLE_TO_RESOLVE_HOST,
+    ERR_ID_OUTSIDE_RANGE,
     ERR_LAST            /* ALWAYS LAST */
 };
 

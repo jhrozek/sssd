@@ -116,6 +116,7 @@ struct err_string error_to_str[] = {
     { "Unable to initialize SSL" }, /* ERR_SSL_FAILURE */
     { "Unable to verify peer" }, /* ERR_UNABLE_TO_VERIFY_PEER */
     { "Unable to resolve host" }, /* ERR_UNABLE_TO_RESOLVE_HOST */
+    { "ID is outside the allowed range" }, /* ERR_ID_OUTSIDE_RANGE */
     { "ERR_LAST" } /* ERR_LAST */
 };
 
