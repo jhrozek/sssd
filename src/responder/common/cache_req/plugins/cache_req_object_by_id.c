@@ -91,6 +91,7 @@ cache_req_object_by_id_lookup(TALLOC_CTX *mem_ctx,
                               struct ldb_result **_result)
 {
     errno_t ret;
+
     ret = cache_req_idminmax_check(data, domain);
     if (ret != EOK) {
         return ret;
