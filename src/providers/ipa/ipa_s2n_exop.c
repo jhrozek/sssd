@@ -2193,7 +2193,11 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
     struct sysdb_attrs *gid_override_attrs = NULL;
     struct ldb_message *msg;
     struct ldb_message_element *el = NULL;
-    const char *missing[] = {NULL, NULL};
+
+    /* SYSDB_ORIG_MEMBEROF and/or SYSDB_USER_CERT might be missing, the
+     * missing array will 3 entries including the trailing NULL at the end. */
+    size_t missing_count = 0;
+    const char *missing[] = {NULL, NULL, NULL};
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -2435,7 +2439,13 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
             ret = sysdb_attrs_get_el_ext(attrs->sysdb_attrs,
                                          SYSDB_ORIG_MEMBEROF, false, &el);
             if (ret == ENOENT) {
-                missing[0] = SYSDB_ORIG_MEMBEROF;
+                missing[missing_count++] = SYSDB_ORIG_MEMBEROF;
+            }
+
+            ret = sysdb_attrs_get_el_ext(attrs->sysdb_attrs,
+                                         SYSDB_USER_CERT, false, &el);
+            if (ret == ENOENT) {
+                missing[missing_count++] = SYSDB_USER_CERT;
             }
 
             ret = sysdb_transaction_start(dom->sysdb);
