@@ -85,66 +85,6 @@ static int sss_nss_crypto_ctx_destructor(struct sss_nss_crypto_ctx *cctx)
     return EOK;
 }
 
-static int generate_random_key(TALLOC_CTX *mem_ctx,
-                               PK11SlotInfo *slot,
-                               struct crypto_mech_data *mech_props,
-                               SECItem **_key)
-{
-    SECStatus sret;
-    SECItem      *randkeydata;
-    SECItem      *key = NULL;
-    PK11SymKey   *randkey;
-    int ret;
-
-    randkey = PK11_KeyGen(slot, mech_props->cipher,
-                          NULL, mech_props->keylen, NULL);
-    if (randkey == NULL) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "Failure to generate key (err %d)\n",
-                  PR_GetError());
-        ret = EIO;
-        goto done;
-    }
-
-    sret = PK11_ExtractKeyValue(randkey);
-    if (sret != SECSuccess) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "Failure to extract key value (err %d)\n",
-                  PR_GetError());
-        ret = EIO;
-        goto done;
-    }
-
-    randkeydata = PK11_GetKeyData(randkey);
-    if (randkeydata == NULL) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "Failure to get key data (err %d)\n",
-                  PR_GetError());
-        ret = EIO;
-        goto done;
-    }
-
-    /* randkeydata is valid until randkey is. Copy with talloc to
-     * get a nice memory hierarchy symmetrical in encrypt
-     * and decrypt case */
-    key = talloc_zero(mem_ctx, SECItem);
-    if (!key) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    key->data = talloc_memdup(key, randkeydata->data, randkeydata->len);
-    if (!key->data) {
-        ret = ENOMEM;
-        goto done;
-    }
-    key->len = randkeydata->len;
-
-    *_key = key;
-    ret = EOK;
-done:
-    if (ret != EOK) talloc_zfree(key);
-    PK11_FreeSymKey(randkey);
-    return ret;
-}
-
 int nss_ctx_init(TALLOC_CTX *mem_ctx,
                  struct crypto_mech_data *mech_props,
                  uint8_t *key, int keylen,
@@ -153,6 +93,16 @@ int nss_ctx_init(TALLOC_CTX *mem_ctx,
 {
     struct sss_nss_crypto_ctx *cctx;
     int ret;
+
+    if (key == NULL || keylen == 0) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "No key or zero sized key\n");
+        return EINVAL;
+    }
+
+    if ((iv == NULL && ivlen > 0) || (iv != NULL && ivlen == 0)) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Mismatch between IV pointer and IV size\n");
+        return EINVAL;
+    }
 
     cctx = talloc_zero(mem_ctx, struct sss_nss_crypto_ctx);
     if (!cctx) {
@@ -168,27 +118,14 @@ int nss_ctx_init(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    if (keylen > 0) {
-        cctx->key = talloc(cctx, SECItem);
-        if (cctx->key == NULL) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Failed to allocate Key buffer\n");
-            ret = ENOMEM;
-            goto done;
-        }
-        if (key) {
-            MAKE_SECITEM(key, keylen, cctx->key);
-        } else {
-            ret = generate_random_key(cctx, cctx->slot,
-                                      mech_props, &cctx->key);
-            if (ret != EOK) {
-                DEBUG(SSSDBG_CRIT_FAILURE,
-                      "Could not generate encryption key\n");
-                goto done;
-            }
-        }
-
+    cctx->key = talloc(cctx, SECItem);
+    if (cctx->key == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+                "Failed to allocate Key buffer\n");
+        ret = ENOMEM;
+        goto done;
     }
+    MAKE_SECITEM(key, keylen, cctx->key);
 
     if (ivlen > 0) {
         cctx->iv = talloc(cctx, SECItem);
@@ -197,17 +134,7 @@ int nss_ctx_init(TALLOC_CTX *mem_ctx,
             ret = ENOMEM;
             goto done;
         }
-        if (iv) {
-            MAKE_SECITEM(iv, ivlen, cctx->iv);
-        } else {
-            ret = generate_random_key(cctx, cctx->slot,
-                                      mech_props, &cctx->iv);
-            if (ret != EOK) {
-                DEBUG(SSSDBG_CRIT_FAILURE,
-                      "Could not generate initialization vector\n");
-                goto done;
-            }
-        }
+        MAKE_SECITEM(iv, ivlen, cctx->iv);
     }
 
     ret = EOK;
@@ -238,12 +165,9 @@ int nss_crypto_init(struct crypto_mech_data *mech_props,
         return EFAULT;
     }
 
-    /* turn the raw key into a key object */
     cctx->keyobj = PK11_ImportSymKey(cctx->slot, mech_props->cipher,
                                      PK11_OriginUnwrap, op, cctx->key, NULL);
     if (cctx->keyobj == NULL) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "Failure to import key into NSS (err %d)\n",
-                  PR_GetError());
         ret = EIO;
         goto done;
     }

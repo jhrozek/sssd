@@ -78,6 +78,8 @@ int sss_password_encrypt(TALLOC_CTX *mem_ctx, const char *password, int plen,
     unsigned char *obfbuf;
     size_t obufsize = 0;
     size_t p = 0;
+    uint8_t *ivdata;
+    uint8_t *keydata;
 
     tmp_ctx = talloc_new(mem_ctx);
     if (!tmp_ctx) {
@@ -97,8 +99,33 @@ int sss_password_encrypt(TALLOC_CTX *mem_ctx, const char *password, int plen,
         goto done;
     }
 
+    ivdata = talloc_zero_size(tmp_ctx, mech_props->bsize);
+    if (ivdata == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    keydata = talloc_zero_size(tmp_ctx, mech_props->keylen);
+    if (keydata == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = generate_csprng_buffer(ivdata, mech_props->bsize);
+    if (ret) {
+        goto done;
+    }
+
+    ret = generate_csprng_buffer(keydata, mech_props->keylen);
+    if (ret) {
+        goto done;
+    }
+
     /* Initiualize ctx and generate random encryption and IV key */
-    ret = nss_ctx_init(tmp_ctx, mech_props, NULL, 1, NULL, 1, &cctx);
+    ret = nss_ctx_init(tmp_ctx, mech_props,
+                       keydata, mech_props->keylen,
+                       ivdata, mech_props->bsize,
+                       &cctx);
     if (ret) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot initialize NSS context\n");
         goto done;

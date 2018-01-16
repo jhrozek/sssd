@@ -56,6 +56,10 @@ enum crypto_mech_op {
     op_sign
 };
 
+/*
+ * Note that the key must always be passed. The IV can either
+ * be passed in full (both iv and ivlen) or both can be NULL.
+ */
 int nss_ctx_init(TALLOC_CTX *mem_ctx,
                  struct crypto_mech_data *mech_props,
                  uint8_t *key, int keylen,
