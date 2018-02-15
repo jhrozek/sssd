@@ -53,16 +53,20 @@ static struct poptOption *sss_tool_common_opts_table(void)
 }
 
 static void sss_tool_common_opts(struct sss_tool_ctx *tool_ctx,
-                                 int *argc, const char **argv)
+                                 int *argc, const char **argv,
+                                 bool *_help)
 {
     poptContext pc;
     int debug = SSSDBG_DEFAULT;
     int orig_argc = *argc;
+    int help = 0;
     int opt;
 
     struct poptOption options[] = {
         {"debug", '\0', POPT_ARG_INT | POPT_ARGFLAG_STRIP, &debug,
             0, _("The debug level to run with"), NULL },
+        {"help", '?', POPT_ARG_VAL | POPT_ARGFLAG_DOC_HIDDEN, &help,
+            1, NULL, NULL },
         POPT_TABLEEND
     };
 
@@ -74,6 +78,7 @@ static void sss_tool_common_opts(struct sss_tool_ctx *tool_ctx,
     /* Strip common options from arguments. We will discard_const here,
      * since it is not worth the trouble to convert it back and forth. */
     *argc = poptStrippedArgv(pc, orig_argc, discard_const_p(char *, argv));
+    *_help = help;
 
     DEBUG_CLI_INIT(debug);
 
@@ -168,7 +173,8 @@ static errno_t sss_tool_domains_init(TALLOC_CTX *mem_ctx,
 
 errno_t sss_tool_init(TALLOC_CTX *mem_ctx,
                       int *argc, const char **argv,
-                      struct sss_tool_ctx **_tool_ctx)
+                      struct sss_tool_ctx **_tool_ctx,
+                      bool *_help)
 {
     struct sss_tool_ctx *tool_ctx;
 
@@ -178,8 +184,7 @@ errno_t sss_tool_init(TALLOC_CTX *mem_ctx,
         return ENOMEM;
     }
 
-    sss_tool_common_opts(tool_ctx, argc, argv);
-
+    sss_tool_common_opts(tool_ctx, argc, argv, _help);
     *_tool_ctx = tool_ctx;
 
     return EOK;
@@ -296,7 +301,7 @@ done:
 errno_t sss_tool_route(int argc, const char **argv,
                        struct sss_tool_ctx *tool_ctx,
                        struct sss_route_cmd *commands,
-                       void *pvt)
+                       void *pvt, bool help)
 {
     struct sss_cmdline cmdline;
     const char *cmd;
@@ -333,13 +338,15 @@ errno_t sss_tool_route(int argc, const char **argv,
                 return tool_ctx->init_err;
             }
 
-            ret = tool_cmd_init(tool_ctx, &commands[i]);
-            if (ret != EOK) {
-                DEBUG(SSSDBG_FATAL_FAILURE,
-                      "Command initialization failed [%d] %s\n",
-                      ret, sss_strerror(ret));
-                return ret;
-            }
+	    if (!help) {
+                ret = tool_cmd_init(tool_ctx, &commands[i]);
+                if (ret != EOK) {
+                    DEBUG(SSSDBG_FATAL_FAILURE,
+                          "Command initialization failed [%d] %s\n",
+                          ret, sss_strerror(ret));
+                    return ret;
+                }
+	    }
 
             return commands[i].fn(&cmdline, tool_ctx, pvt);
         }
@@ -494,6 +501,7 @@ int sss_tool_main(int argc, const char **argv,
     struct sss_tool_ctx *tool_ctx;
     uid_t uid;
     errno_t ret;
+    bool _help = false;
 
     uid = getuid();
     if (uid != 0) {
@@ -502,7 +510,7 @@ int sss_tool_main(int argc, const char **argv,
         return EXIT_FAILURE;
     }
 
-    ret = sss_tool_init(NULL, &argc, argv, &tool_ctx);
+    ret = sss_tool_init(NULL, &argc, argv, &tool_ctx, &_help);
     if (ret == ERR_SYSDB_VERSION_TOO_OLD) {
         tool_ctx->init_err = ret;
     } else if (ret != EOK) {
@@ -510,7 +518,7 @@ int sss_tool_main(int argc, const char **argv,
         return EXIT_FAILURE;
     }
 
-    ret = sss_tool_route(argc, argv, tool_ctx, commands, pvt);
+    ret = sss_tool_route(argc, argv, tool_ctx, commands, pvt, _help);
     SYSDB_VERSION_ERROR(ret);
     talloc_free(tool_ctx);
     if (ret != EOK) {
