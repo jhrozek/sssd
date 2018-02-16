@@ -17,6 +17,7 @@
 #define IFACE_NSS_MEMORYCACHE_INVALIDATEALLUSERS "InvalidateAllUsers"
 #define IFACE_NSS_MEMORYCACHE_INVALIDATEALLGROUPS "InvalidateAllGroups"
 #define IFACE_NSS_MEMORYCACHE_INVALIDATEALLINITGROUPS "InvalidateAllInitgroups"
+#define IFACE_NSS_MEMORYCACHE_INVALIDATEGROUPBYID "InvalidateGroupById"
 
 /* ------------------------------------------------------------------------
  * DBus handlers
@@ -43,6 +44,7 @@ struct iface_nss_memorycache {
     int (*InvalidateAllUsers)(struct sbus_request *req, void *data);
     int (*InvalidateAllGroups)(struct sbus_request *req, void *data);
     int (*InvalidateAllInitgroups)(struct sbus_request *req, void *data);
+    int (*InvalidateGroupById)(struct sbus_request *req, void *data, uint32_t arg_gid);
 };
 
 /* finish function for UpdateInitgroups */
@@ -56,6 +58,9 @@ int iface_nss_memorycache_InvalidateAllGroups_finish(struct sbus_request *req);
 
 /* finish function for InvalidateAllInitgroups */
 int iface_nss_memorycache_InvalidateAllInitgroups_finish(struct sbus_request *req);
+
+/* finish function for InvalidateGroupById */
+int iface_nss_memorycache_InvalidateGroupById_finish(struct sbus_request *req);
 
 /* ------------------------------------------------------------------------
  * DBus Interface Metadata
