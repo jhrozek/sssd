@@ -357,10 +357,6 @@ ad_account_info_handler(struct be_req *be_req)
     ar = talloc_get_type(be_req_get_data(be_req), struct be_acct_req);
     sdap_id_ctx = ad_ctx->sdap_id_ctx;
 
-    if (be_is_offline(be_ctx)) {
-        return be_req_terminate(be_req, DP_ERR_OFFLINE, EAGAIN, "Offline");
-    }
-
     if (sdap_is_enum_request(ar)) {
         DEBUG(SSSDBG_TRACE_LIBS, "Skipping enumeration on demand\n");
         return sdap_handler_done(be_req, DP_ERR_OK, EOK, "Success");

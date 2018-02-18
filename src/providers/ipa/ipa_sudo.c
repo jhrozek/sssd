@@ -249,11 +249,6 @@ ipa_sudo_handler(struct be_req *be_req)
     struct tevent_req *req;
     int ret;
 
-    if (be_is_offline(be_ctx)) {
-        sdap_handler_done(be_req, DP_ERR_OFFLINE, EAGAIN, "Offline");
-        return;
-    }
-
     sudo_ctx = talloc_get_type(be_ctx->bet_info[BET_SUDO].pvt_bet_data,
                                struct ipa_sudo_ctx);
 

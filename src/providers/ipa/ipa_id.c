@@ -96,17 +96,11 @@ void ipa_account_info_handler(struct be_req *breq)
 {
     struct be_ctx *be_ctx = be_req_get_be_ctx(breq);
     struct ipa_id_ctx *ipa_ctx;
-    struct sdap_id_ctx *ctx;
     struct be_acct_req *ar;
     struct tevent_req *req = NULL;
 
     ipa_ctx = talloc_get_type(be_ctx->bet_info[BET_ID].pvt_bet_data,
                               struct ipa_id_ctx);
-    ctx = ipa_ctx->sdap_id_ctx;
-
-    if (be_is_offline(ctx->be)) {
-        return sdap_handler_done(breq, DP_ERR_OFFLINE, EAGAIN, "Offline");
-    }
 
     ar = talloc_get_type(be_req_get_data(breq), struct be_acct_req);
 
