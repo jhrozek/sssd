@@ -1381,10 +1381,6 @@ void proxy_get_account_info(struct be_req *breq)
     sysdb = be_ctx->domain->sysdb;
     domain = be_ctx->domain;
 
-    if (be_is_offline(be_ctx)) {
-        return be_req_terminate(breq, DP_ERR_OFFLINE, EAGAIN, "Offline");
-    }
-
     /* for now we support only core attrs */
     if (ar->attr_type != BE_ATTR_CORE) {
         return be_req_terminate(breq, DP_ERR_FATAL, EINVAL, "Invalid attr type");

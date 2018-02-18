@@ -1186,7 +1186,7 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
     /* If we are offline and fast reply was requested
      * return offline immediately
      */
-    if ((type & BE_REQ_FAST) && becli->bectx->offstat.offline) {
+    if ((type & BE_REQ_FAST) && be_is_offline(becli->bectx)) {
         /* Send back an immediate reply */
         err_maj = DP_ERR_OFFLINE;
         err_min = EAGAIN;
@@ -1205,12 +1205,11 @@ static int be_get_account_info(struct sbus_request *dbus_req, void *user_data)
                   err_maj, err_min, err_msg);
 
         dbus_req = NULL;
-        /* This reply will be queued and sent
-         * when we reenter the mainloop.
-         *
-         * Continue processing in case we are
-         * going back online.
-         */
+         /* Don't continue processing fast requests
+          * in offline mode, rely on mechanisms
+          * such as periodic go-online task
+          */
+        goto done;
     }
 
     be_req = be_req_create(becli, becli, becli->bectx,
