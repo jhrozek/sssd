@@ -388,6 +388,11 @@ struct sdap_initgr_rfc2307_state {
 
     size_t base_iter;
     struct sdap_search_base **search_bases;
+
+    /* Provider will be used to send a d-bus message to NSS responder in case
+     * group id collision has been detected. In this case we'd have to also
+     * invalidate the group in the memcache. */
+    void *provider;
 };
 
 static errno_t sdap_initgr_rfc2307_next_base(struct tevent_req *req);
@@ -398,7 +403,8 @@ struct tevent_req *sdap_initgr_rfc2307_send(TALLOC_CTX *memctx,
                                             struct sysdb_ctx *sysdb,
                                             struct sss_domain_info *domain,
                                             struct sdap_handle *sh,
-                                            const char *name)
+                                            const char *name,
+                                            void *provider)
 {
     struct tevent_req *req;
     struct sdap_initgr_rfc2307_state *state;
@@ -422,6 +428,7 @@ struct tevent_req *sdap_initgr_rfc2307_send(TALLOC_CTX *memctx,
     state->ldap_groups_count = 0;
     state->base_iter = 0;
     state->search_bases = opts->sdom->group_search_bases;
+    state->provider = provider;
 
     if (!state->search_bases) {
         DEBUG(SSSDBG_CRIT_FAILURE,
@@ -3041,7 +3048,8 @@ static void sdap_get_initgr_user(struct tevent_req *subreq)
     case SDAP_SCHEMA_RFC2307:
         subreq = sdap_initgr_rfc2307_send(state, state->ev, state->opts,
                                           state->sysdb, state->dom, state->sh,
-                                          cname);
+                                          cname,
+                                          state->id_ctx->be->provider);
         if (!subreq) {
             tevent_req_error(req, ENOMEM);
             return;
