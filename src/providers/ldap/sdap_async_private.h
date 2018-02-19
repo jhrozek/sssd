@@ -104,7 +104,8 @@ int sdap_initgr_common_store(struct sysdb_ctx *sysdb,
                              enum sysdb_member_type type,
                              char **sysdb_grouplist,
                              struct sysdb_attrs **ldap_groups,
-                             int ldap_groups_count);
+                             int ldap_groups_count,
+                             void *provider);
 
 errno_t get_sysdb_grouplist(TALLOC_CTX *mem_ctx,
                             struct sysdb_ctx *sysdb,

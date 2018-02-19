@@ -266,7 +266,8 @@ int sdap_initgr_common_store(struct sysdb_ctx *sysdb,
                              enum sysdb_member_type type,
                              char **sysdb_grouplist,
                              struct sysdb_attrs **ldap_groups,
-                             int ldap_groups_count)
+                             int ldap_groups_count,
+                             void *provider)
 {
     TALLOC_CTX *tmp_ctx;
     char **ldap_grouplist = NULL;
@@ -627,7 +628,8 @@ static void sdap_initgr_rfc2307_process(struct tevent_req *subreq)
                                    SYSDB_MEMBER_USER,
                                    sysdb_grouplist,
                                    state->ldap_groups,
-                                   state->ldap_groups_count);
+                                   state->ldap_groups_count,
+                                   state->provider);
     if (ret != EOK) {
         tevent_req_error(req, ret);
         return;
