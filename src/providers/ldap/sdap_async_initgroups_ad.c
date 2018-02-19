@@ -921,6 +921,19 @@ errno_t sdap_ad_save_group_membership_with_idmapping(const char *username,
 
             ret = sysdb_add_incomplete_group(domain, name, gid,
                                              NULL, sid, NULL, false, now);
+            if (ret == ERR_GID_DUPLICATED) {
+                /* In case o group id-collision, do:
+                 * - Delete the group from sysdb
+                 * - Add the new incomplete group
+                 * - Notify the NSS responder that the entry has also to be
+                 *   removed from the memory cache
+                 */
+                ret = sdap_handle_id_collision_for_incomplete_groups(
+                                            idmap_ctx->id_ctx->be->provider,
+                                            domain, name, gid, NULL, sid, NULL,
+                                            false, now);
+            }
+
             if (ret != EOK) {
                 DEBUG(SSSDBG_MINOR_FAILURE, "Could not create incomplete "
                                              "group: [%s]\n", strerror(ret));
