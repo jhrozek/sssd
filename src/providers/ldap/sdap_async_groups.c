@@ -1817,6 +1817,11 @@ struct sdap_get_groups_state {
 
     struct sdap_handle *ldap_sh;
     struct sdap_id_op *op;
+
+    /* Provider will be used to send a d-bus message to NSS responder in case
+     * group id collision has been detected. In this case we'd have to also
+     * invalidate the group in the memcache. */
+    void *provider;
 };
 
 static errno_t sdap_get_groups_next_base(struct tevent_req *req);
@@ -1833,7 +1838,8 @@ struct tevent_req *sdap_get_groups_send(TALLOC_CTX *memctx,
                                        const char *filter,
                                        int timeout,
                                        enum sdap_entry_lookup_type lookup_type,
-                                       bool no_members)
+                                       bool no_members,
+                                       void *provider)
 {
     errno_t ret;
     struct tevent_req *req;
@@ -1860,6 +1866,7 @@ struct tevent_req *sdap_get_groups_send(TALLOC_CTX *memctx,
     state->base_filter = filter;
     state->base_iter = 0;
     state->search_bases = sdom->group_search_bases;
+    state->provider = provider;
 
     if (!state->search_bases) {
         DEBUG(SSSDBG_CRIT_FAILURE,

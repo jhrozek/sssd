@@ -104,7 +104,8 @@ struct tevent_req *sdap_get_groups_send(TALLOC_CTX *memctx,
                                        const char *filter,
                                        int timeout,
                                        enum sdap_entry_lookup_type lookup_type,
-                                       bool no_members);
+                                       bool no_members,
+                                       void *provider);
 int sdap_get_groups_recv(struct tevent_req *req,
                          TALLOC_CTX *mem_ctx, char **timestamp);
 

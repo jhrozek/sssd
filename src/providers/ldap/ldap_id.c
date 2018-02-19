@@ -1037,7 +1037,8 @@ static void groups_get_search(struct tevent_req *req)
                                   dp_opt_get_int(state->ctx->opts->basic,
                                                  SDAP_SEARCH_TIMEOUT),
                                   lookup_type,
-                                  state->no_members);
+                                  state->no_members,
+                                  state->ctx->be->provider);
     if (!subreq) {
         tevent_req_error(req, ENOMEM);
         return;
