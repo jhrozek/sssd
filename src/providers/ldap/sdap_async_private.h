@@ -151,7 +151,8 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
                                    struct sdap_options *opts,
                                    char **sysdb_groupnames,
                                    struct sysdb_attrs **ldap_groups,
-                                   int ldap_groups_count);
+                                   int ldap_groups_count,
+                                   void *provider);
 
 /* from sdap_ad_groups.c */
 errno_t sdap_check_ad_group_type(struct sss_domain_info *dom,
