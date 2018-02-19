@@ -291,7 +291,8 @@ sdap_get_ad_match_rule_initgroups_step(struct tevent_req *subreq)
                                    SYSDB_MEMBER_USER,
                                    sysdb_grouplist,
                                    state->groups,
-                                   state->count);
+                                   state->count,
+                                   state->provider);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               "Could not store groups for user [%s]: [%s]\n",
