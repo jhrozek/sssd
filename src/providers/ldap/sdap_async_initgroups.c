@@ -35,7 +35,8 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
                                    struct sdap_options *opts,
                                    char **sysdb_groupnames,
                                    struct sysdb_attrs **ldap_groups,
-                                   int ldap_groups_count)
+                                   int ldap_groups_count,
+                                   void *provider)
 {
     TALLOC_CTX *tmp_ctx;
     struct ldb_message *msg;
@@ -331,7 +332,7 @@ int sdap_initgr_common_store(struct sysdb_ctx *sysdb,
     if (add_groups && add_groups[0]) {
         ret = sdap_add_incomplete_groups(sysdb, domain, opts,
                                          add_groups, ldap_groups,
-                                         ldap_groups_count);
+                                         ldap_groups_count, provider);
         if (ret != EOK) {
             DEBUG(SSSDBG_CRIT_FAILURE, "Adding incomplete users failed\n");
             goto done;
@@ -683,7 +684,7 @@ sdap_nested_groups_store(struct sysdb_ctx *sysdb,
     in_transaction = true;
 
     ret = sdap_add_incomplete_groups(sysdb, domain, opts, groupnamelist,
-                                     groups, count);
+                                     groups, count, provider);
     if (ret != EOK) {
         DEBUG(SSSDBG_TRACE_FUNC, "Could not add incomplete groups [%d]: %s\n",
                    ret, strerror(ret));
