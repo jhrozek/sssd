@@ -1549,6 +1549,7 @@ sdap_ad_get_domain_local_groups_parse_parents(TALLOC_CTX *mem_ctx,
                                               struct sss_domain_info *dom,
                                               struct sysdb_ctx *sysdb,
                                               struct sdap_options *opts,
+                                              void *provider,
                                               const char **_sysdb_name,
                                               enum sysdb_member_type *_type,
                                               char ***_add_list,
@@ -1778,14 +1779,16 @@ static void sdap_ad_get_domain_local_groups_done(struct tevent_req *subreq)
          * nested parents found during the request. The nested parents contain
          * the processed LDAP data and can be identified by a missing
          * objectclass attribute. */
-        ret = sdap_ad_get_domain_local_groups_parse_parents(state, gr,
-                                                            state->dom,
-                                                            state->sysdb,
-                                                            state->opts,
-                                                            &sysdb_name,
-                                                            &type,
-                                                            &add_list,
-                                                            &del_list);
+        ret = sdap_ad_get_domain_local_groups_parse_parents(
+                                            state, gr,
+                                            state->dom,
+                                            state->sysdb,
+                                            state->opts,
+                                            state->conn->id_ctx->be->provider,
+                                            &sysdb_name,
+                                            &type,
+                                            &add_list,
+                                            &del_list);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE,
                   "sdap_ad_get_domain_local_groups_parse_parents failed.\n");
