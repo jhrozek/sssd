@@ -3572,3 +3572,37 @@ errno_t get_sysdb_grouplist_dn(TALLOC_CTX *mem_ctx,
     return get_sysdb_grouplist_ex(mem_ctx, sysdb, domain,
                                   name, grouplist, true);
 }
+
+errno_t
+sdap_handle_id_collision_for_incomplete_groups(void *provider,
+                                               struct sss_domain_info *domain,
+                                               const char *name,
+                                               gid_t gid,
+                                               const char *original_dn,
+                                               const char *sid_str,
+                                               const char *uuid,
+                                               bool posix,
+                                               time_t now)
+{
+    errno_t ret;
+
+    ret = sysdb_delete_group(domain, NULL, gid);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Due to an id collision, the new group with gid [\"%"PRIu32"\"] "
+              "will not be added as the old group (with the same gid) could "
+              "not be removed from the sysdb!",
+              gid);
+        return ret;
+    }
+
+    ret = sysdb_add_incomplete_group(domain, name, gid, original_dn, sid_str,
+                                     uuid, posix, now);
+    if (ret != EOK) {
+        return ret;
+    }
+
+    dp_sbus_invalidate_group_memcache(provider, gid);
+
+    return EOK;
+}
