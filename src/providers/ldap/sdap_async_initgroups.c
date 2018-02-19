@@ -651,7 +651,8 @@ sdap_nested_groups_store(struct sysdb_ctx *sysdb,
                          struct sss_domain_info *domain,
                          struct sdap_options *opts,
                          struct sysdb_attrs **groups,
-                         unsigned long count)
+                         unsigned long count,
+                         void *provider)
 {
     errno_t ret, tret;
     TALLOC_CTX *tmp_ctx;
@@ -790,6 +791,11 @@ struct sdap_initgr_nested_state {
 
     struct sysdb_attrs **groups;
     int groups_cur;
+
+    /* Provider will be used to send a d-bus message to NSS responder in case
+     * group id collision has been detected. In this case we'd have to also
+     * invalidate the group in the memcache. */
+    void *provider;
 };
 
 static errno_t sdap_initgr_nested_deref_search(struct tevent_req *req);
@@ -1145,7 +1151,8 @@ sdap_initgr_store_groups(struct sdap_initgr_nested_state *state)
 {
     return sdap_nested_groups_store(state->sysdb, state->dom,
                                     state->opts, state->groups,
-                                    state->groups_cur);
+                                    state->groups_cur,
+                                    state->provider);
 }
 
 static errno_t
@@ -1952,7 +1959,7 @@ save_rfc2307bis_groups(struct sdap_initgr_rfc2307bis_state *state)
     talloc_zfree(values);
 
     ret = sdap_nested_groups_store(state->sysdb, state->dom, state->opts,
-                                   groups, count);
+                                   groups, count, state->provider);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE, "Could not save groups [%d]: %s\n",
                   ret, strerror(ret));

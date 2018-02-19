@@ -1587,7 +1587,8 @@ sdap_ad_get_domain_local_groups_parse_parents(TALLOC_CTX *mem_ctx,
     if (gr->parents_count != 0) {
         /* Store the parents if needed */
         ret = sdap_nested_groups_store(sysdb, dom, opts,
-                                       gr->ldap_parents, gr->parents_count);
+                                       gr->ldap_parents, gr->parents_count,
+                                       provider);
         if (ret != EOK) {
             DEBUG(SSSDBG_MINOR_FAILURE, "Could not save groups [%d]: %s\n",
                       ret, strerror(ret));
@@ -1623,7 +1624,7 @@ sdap_ad_get_domain_local_groups_parse_parents(TALLOC_CTX *mem_ctx,
 
         /* make sure group exists in cache */
         groups[0]= gr->group;
-        ret = sdap_nested_groups_store(sysdb, dom, opts, groups, 1);
+        ret = sdap_nested_groups_store(sysdb, dom, opts, groups, 1, provider);
         if (ret != EOK) {
             DEBUG(SSSDBG_MINOR_FAILURE, "Could not save groups [%d]: %s\n",
                       ret, strerror(ret));
