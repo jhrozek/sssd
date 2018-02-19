@@ -3095,13 +3095,15 @@ static void sdap_get_initgr_user(struct tevent_req *subreq)
             /* Take advantage of AD's extensibleMatch filter to look up
              * all parent groups in a single request.
              */
-            subreq = sdap_get_ad_match_rule_initgroups_send(state, state->ev,
-                                                            state->opts,
-                                                            state->sysdb,
-                                                            state->dom,
-                                                            state->sh,
-                                                            cname, orig_dn,
-                                                            state->timeout);
+            subreq = sdap_get_ad_match_rule_initgroups_send(
+                                                state, state->ev,
+                                                state->opts,
+                                                state->sysdb,
+                                                state->dom,
+                                                state->sh,
+                                                cname, orig_dn,
+                                                state->timeout,
+                                                state->id_ctx->be->provider);
         } else {
             subreq = sdap_initgr_rfc2307bis_send(
                     state, state->ev, state->opts,

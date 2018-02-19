@@ -47,6 +47,11 @@ struct sdap_ad_match_rule_initgr_state {
 
     size_t base_iter;
     struct sdap_search_base **search_bases;
+
+    /* Provider will be used to send a d-bus message to NSS responder in case
+     * group id collision has been detected. In this case we'd have to also
+     * invalidate the group in the memcache. */
+    void *provider;
 };
 
 static errno_t
@@ -64,7 +69,8 @@ sdap_get_ad_match_rule_initgroups_send(TALLOC_CTX *mem_ctx,
                                        struct sdap_handle *sh,
                                        const char *name,
                                        const char *orig_dn,
-                                       int timeout)
+                                       int timeout,
+                                       void *provider)
 {
     errno_t ret;
     struct tevent_req *req;
@@ -86,6 +92,7 @@ sdap_get_ad_match_rule_initgroups_send(TALLOC_CTX *mem_ctx,
     state->orig_dn = orig_dn;
     state->base_iter = 0;
     state->search_bases = opts->sdom->group_search_bases;
+    state->provider = provider;
 
     /* Request all of the group attributes that we know
      * about, except for 'member' because that wastes a

@@ -370,7 +370,8 @@ sdap_get_ad_match_rule_initgroups_send(TALLOC_CTX *mem_ctx,
                                        struct sdap_handle *sh,
                                        const char *name,
                                        const char *orig_dn,
-                                       int timeout);
+                                       int timeout,
+                                       void *provider);
 
 errno_t
 sdap_get_ad_match_rule_initgroups_recv(struct tevent_req *req);
