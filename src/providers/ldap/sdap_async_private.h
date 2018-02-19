@@ -173,7 +173,8 @@ errno_t sdap_nested_groups_store(struct sysdb_ctx *sysdb,
                                  struct sss_domain_info *domain,
                                  struct sdap_options *opts,
                                  struct sysdb_attrs **groups,
-                                 unsigned long count);
+                                 unsigned long count,
+                                 void *provider);
 
 struct tevent_req *
 sdap_ad_get_domain_local_groups_send(TALLOC_CTX *mem_ctx,
