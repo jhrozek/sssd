@@ -176,9 +176,10 @@ int ipa_get_id_options(struct ipa_options *ipa_opts,
     TALLOC_CTX *tmpctx;
     char *basedn;
     char *realm;
-    char *value;
+    char *value, *user_base;
     int ret;
     int i;
+    bool server_mode;
 
     tmpctx = talloc_new(ipa_opts);
     if (!tmpctx) {
@@ -272,11 +273,36 @@ int ipa_get_id_options(struct ipa_options *ipa_opts,
     ipa_opts->id->schema_type = SDAP_SCHEMA_IPA_V1;
 
     /* set user/group search bases if they are not specified */
-    if (NULL == dp_opt_get_string(ipa_opts->id->basic,
-                                  SDAP_USER_SEARCH_BASE)) {
+    user_base = dp_opt_get_string(ipa_opts->id->basic, SDAP_USER_SEARCH_BASE);
+
+    /* In server mode we need to search both cn=accounts,$SUFFIX and
+     * cn=trusts,$SUFFIX to allow trusted domain object accounts to be found.
+     * Update user base if it wasn't set explicitly to multiple base DNs
+     */
+    server_mode = dp_opt_get_bool(ipa_opts->basic, IPA_SERVER_MODE);
+    if (server_mode != false) {
+        if ((NULL == user_base) || (NULL == strstr(user_base, "?cn=trusts,"))) {
+            /* Search both cn=accounts,$SUFFIX and cn=trusts,$SUFFIX.  This allows
+             * to catch trusted domain objects used by trusted AD DCs to talk to
+             * Samba on IPA master */
+            value = talloc_asprintf(tmpctx,
+                                    "%s?cn=trusts,%s??(objectclass=ipaIDObject)",
+                                    user_base ? user_base :
+                                    dp_opt_get_string(ipa_opts->id->basic,
+                                                      SDAP_SEARCH_BASE),
+                                    basedn);
+        }
+    } else {
+        value = dp_opt_get_string(ipa_opts->id->basic, SDAP_SEARCH_BASE);
+    }
+
+    if (NULL == user_base) {
+        if (!value) {
+            ret = ENOMEM;
+            goto done;
+        }
         ret = dp_opt_set_string(ipa_opts->id->basic, SDAP_USER_SEARCH_BASE,
-                                dp_opt_get_string(ipa_opts->id->basic,
-                                                  SDAP_SEARCH_BASE));
+                                value);
         if (ret != EOK) {
             goto done;
         }
