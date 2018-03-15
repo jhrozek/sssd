@@ -1813,7 +1813,8 @@ done:
 
 errno_t sysdb_netgr_to_entries(TALLOC_CTX *mem_ctx,
                                struct ldb_result *res,
-                               struct sysdb_netgroup_ctx ***entries)
+                               struct sysdb_netgroup_ctx ***entries,
+                               size_t *netgroup_count)
 {
     errno_t ret;
     size_t size = 0;
@@ -1917,6 +1918,8 @@ errno_t sysdb_netgr_to_entries(TALLOC_CTX *mem_ctx,
     tmp_entry[c] = NULL;
 
     *entries = talloc_steal(mem_ctx, tmp_entry);
+    *netgroup_count = c;
+
     ret = EOK;
 
 done:
