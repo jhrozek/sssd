@@ -26,7 +26,6 @@
 #define DEFAULT_PASSWD_FILE "/etc/passwd"
 #define DEFAULT_GROUP_FILE "/etc/group"
 
-
 static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
                                        struct be_ctx *be_ctx,
                                        const char ***_passwd_files,
@@ -43,6 +42,8 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
     int num_group_files = 0;
     const char **passwd_files = NULL;
     const char **group_files = NULL;
+    const char *env_passwd_files = NULL;
+    const char *env_group_files = NULL;
     int i;
     errno_t ret;
 
@@ -52,15 +53,33 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
+    env_passwd_files = getenv("SSS_FILES_PASSWD");
+    if (env_passwd_files) {
+        sss_log(SSS_LOG_ALERT,
+                "Defaulting to %s for the passwd file, "
+                "this should only be used for testing!\n",
+                env_passwd_files);
+    }
+
+    env_group_files = getenv("SSS_FILES_GROUP");
+    if (env_group_files) {
+        sss_log(SSS_LOG_ALERT,
+                "Defaulting to %s for the group file, "
+                "this should only be used for testing!\n",
+                env_group_files);
+    }
+
     ret = confdb_get_string(be_ctx->cdb, tmp_ctx, be_ctx->conf_path,
-                            CONFDB_FILES_PASSWD, NULL, &conf_passwd_files);
+                            CONFDB_FILES_PASSWD, env_passwd_files,
+                            &conf_passwd_files);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to retrieve confdb passwd files!\n");
         goto done;
     }
 
     ret = confdb_get_string(be_ctx->cdb, tmp_ctx, be_ctx->conf_path,
-                            CONFDB_FILES_GROUP, NULL, &conf_group_files);
+                            CONFDB_FILES_GROUP, env_group_files,
+                            &conf_group_files);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to retrieve confdb group files!\n");
         goto done;
