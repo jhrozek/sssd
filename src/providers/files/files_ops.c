@@ -774,7 +774,7 @@ static int sf_passwd_cb(const char *filename, uint32_t flags, void *pvt)
 
     /* All groups were deleted, therefore we need to enumerate each file again */
     for (size_t i = 0; i < id_ctx->num_group_files; i++) {
-        ret = sf_process_group_file(id_ctx, id_ctx->group_files[i]);
+        ret = sf_enum_groups(id_ctx, id_ctx->group_files[i]);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate groups\n");
             goto done;

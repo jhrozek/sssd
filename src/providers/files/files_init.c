@@ -42,7 +42,7 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
     int num_group_files = 0;
     const char **passwd_files = NULL;
     const char **group_files = NULL;
-    const char *env_passwd_files = NULL;
+    const char *dfl_passwd_files = NULL;
     const char *env_group_files = NULL;
     int i;
     errno_t ret;
@@ -53,13 +53,17 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    env_passwd_files = getenv("SSS_FILES_PASSWD");
-    if (env_passwd_files) {
+    dfl_passwd_files = getenv("SSS_FILES_PASSWD");
+    if (dfl_passwd_files) {
         sss_log(SSS_LOG_ALERT,
                 "Defaulting to %s for the passwd file, "
                 "this should only be used for testing!\n",
-                env_passwd_files);
+                dfl_passwd_files);
+    } else {
+        dfl_passwd_files = DEFAULT_PASSWD_FILE;
     }
+    DEBUG(SSSDBG_TRACE_FUNC,
+          "Using default passwd file: [%s].\n", dfl_passwd_files);
 
     env_group_files = getenv("SSS_FILES_GROUP");
     if (env_group_files) {
@@ -67,10 +71,14 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
                 "Defaulting to %s for the group file, "
                 "this should only be used for testing!\n",
                 env_group_files);
+    } else {
+        env_group_files = DEFAULT_GROUP_FILE;
     }
+    DEBUG(SSSDBG_TRACE_FUNC,
+          "Using default group file: [%s].\n", DEFAULT_GROUP_FILE);
 
     ret = confdb_get_string(be_ctx->cdb, tmp_ctx, be_ctx->conf_path,
-                            CONFDB_FILES_PASSWD, env_passwd_files,
+                            CONFDB_FILES_PASSWD, dfl_passwd_files,
                             &conf_passwd_files);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to retrieve confdb passwd files!\n");
@@ -85,98 +93,57 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    /* Default to /etc/passwd standard */
-    if (conf_passwd_files == NULL) {
-        num_passwd_files = 1;
+    ret = split_on_separator(tmp_ctx, conf_passwd_files, ',', true, true,
+                             &passwd_list, &num_passwd_files);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+                "Failed to parse passwd list!\n");
+        goto done;
+    }
 
-        passwd_files = talloc_zero_array(tmp_ctx, const char *, 2);
-        if (passwd_files == NULL) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
-            ret = ENOMEM;
-            goto done;
-        }
+    passwd_files = talloc_zero_array(tmp_ctx, const char *,
+                                     num_passwd_files + 1);
+    if (passwd_files == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
+        ret = ENOMEM;
+        goto done;
+    }
 
+    for (i = 0; i < num_passwd_files; i++) {
         DEBUG(SSSDBG_TRACE_FUNC,
-              "Using default passwd file: [%s].\n", DEFAULT_PASSWD_FILE);
-        passwd_files[0] = talloc_strdup(passwd_files, DEFAULT_PASSWD_FILE);
-        if (passwd_files[0] == NULL) {
+              "Using passwd file: [%s].\n", passwd_list[i]);
+
+        passwd_files[i] = talloc_strdup(passwd_files, passwd_list[i]);
+        if (passwd_files[i] == NULL) {
             ret = ENOMEM;
             goto done;
-        }
-    /* Retrieve list of passwd files */
-    } else {
-        ret = split_on_separator(tmp_ctx, conf_passwd_files, ',', true, true,
-                                 &passwd_list, &num_passwd_files);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Failed to parse passwd list!\n");
-            goto done;
-        }
-
-        passwd_files = talloc_zero_array(tmp_ctx, const char *,
-                                         num_passwd_files + 1);
-        if (passwd_files == NULL) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
-            ret = ENOMEM;
-            goto done;
-        }
-
-        for (i = 0; i < num_passwd_files; i++) {
-            DEBUG(SSSDBG_TRACE_FUNC,
-                  "Using passwd file: [%s].\n", passwd_list[i]);
-
-            passwd_files[i] = talloc_strdup(passwd_files, passwd_list[i]);
-                if (passwd_files[i] == NULL) {
-                    ret = ENOMEM;
-                    goto done;
-                }
         }
     }
 
-    /* Default to /etc/group standard */
-    if (conf_group_files == NULL) {
-        num_group_files = 1;
-
-        group_files = talloc_zero_array(tmp_ctx, const char *, 2);
-        if (group_files == NULL) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
-            ret = ENOMEM;
-            goto done;
-        }
-
-        DEBUG(SSSDBG_TRACE_FUNC,
-              "Using default group file: [%s].\n", DEFAULT_GROUP_FILE);
-        group_files[0] = talloc_strdup(group_files, DEFAULT_GROUP_FILE);
-        if (group_files[0] == NULL) {
-            ret = ENOMEM;
-            goto done;
-        }
     /* Retrieve list of group files */
-    } else {
-        ret = split_on_separator(tmp_ctx, conf_group_files, ',', true, true,
-                                 &group_list, &num_group_files);
-        if (ret != EOK) {
-            DEBUG(SSSDBG_CRIT_FAILURE,
-                  "Failed to parse group files!\n");
-            goto done;
-        }
+    ret = split_on_separator(tmp_ctx, conf_group_files, ',', true, true,
+                             &group_list, &num_group_files);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+                "Failed to parse group files!\n");
+        goto done;
+    }
 
-        group_files = talloc_zero_array(tmp_ctx, const char *,
-                                         num_group_files + 1);
-        if (group_files == NULL) {
-            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
+    group_files = talloc_zero_array(tmp_ctx, const char *,
+                                    num_group_files + 1);
+    if (group_files == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
+        ret = ENOMEM;
+        goto done;
+    }
+
+    for (i = 0; i < num_group_files; i++) {
+        DEBUG(SSSDBG_TRACE_FUNC,
+              "Using group file: [%s].\n", group_list[i]);
+        group_files[i] = talloc_strdup(group_files, group_list[i]);
+        if (group_files[i] == NULL) {
             ret = ENOMEM;
             goto done;
-        }
-
-        for (i = 0; i < num_group_files; i++) {
-            DEBUG(SSSDBG_TRACE_FUNC,
-                  "Using group file: [%s].\n", group_list[i]);
-            group_files[i] = talloc_strdup(group_files, group_list[i]);
-                if (group_files[i] == NULL) {
-                    ret = ENOMEM;
-                    goto done;
-                }
         }
     }
 
