@@ -162,17 +162,7 @@ int sssm_files_init(TALLOC_CTX *mem_ctx,
                     void **_module_data)
 {
     struct files_id_ctx *ctx;
-    const char **passwd_files = NULL;
-    const char **group_files = NULL;
     errno_t ret;
-
-    ret = files_init_file_sources(mem_ctx, be_ctx,
-                                  &passwd_files,
-                                  &group_files);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot initialize the passwd/group source files\n");
-        goto done;
-    }
 
     ctx = talloc_zero(mem_ctx, struct files_id_ctx);
     if (ctx == NULL) {
@@ -181,8 +171,14 @@ int sssm_files_init(TALLOC_CTX *mem_ctx,
 
     ctx->be = be_ctx;
     ctx->domain = be_ctx->domain;
-    ctx->passwd_files = passwd_files;
-    ctx->group_files = group_files;
+
+    ret = files_init_file_sources(ctx, be_ctx,
+                                  &ctx->passwd_files,
+                                  &ctx->group_files);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot initialize the passwd/group source files\n");
+        goto done;
+    }
 
     ctx->fctx = sf_init(ctx, be_ctx->ev,
                         ctx->passwd_files,
