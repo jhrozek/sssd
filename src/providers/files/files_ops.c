@@ -893,12 +893,6 @@ static void startup_enum_files(struct tevent_context *ev,
     }
 
     for (i = 0; i < id_ctx->num_passwd_files; i++) {
-        if (fopen(id_ctx->passwd_files[i], "r") == NULL) {
-            DEBUG(SSSDBG_MINOR_FAILURE,
-                  "Cannot open passwd file [%s]\n", id_ctx->passwd_files[i]);
-            continue;
-        }
-
         DEBUG(SSSDBG_TRACE_FUNC,
               "Startup user enumeration of [%s]\n", id_ctx->passwd_files[i]);
         ret = sf_enum_users(id_ctx, id_ctx->passwd_files[i]);
@@ -910,12 +904,6 @@ static void startup_enum_files(struct tevent_context *ev,
     }
 
     for (i = 0; i < id_ctx->num_group_files; i++) {
-        if (fopen(id_ctx->group_files[i], "r") == NULL) {
-            DEBUG(SSSDBG_MINOR_FAILURE,
-                  "Cannot open group file [%s]\n", id_ctx->group_files[i]);
-            continue;
-        }
-
         DEBUG(SSSDBG_TRACE_FUNC,
               "Startup group enumeration of [%s]\n", id_ctx->group_files[i]);
         ret = sf_enum_groups(id_ctx, id_ctx->group_files[i]);
