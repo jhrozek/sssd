@@ -755,7 +755,7 @@ static int sf_passwd_cb(const char *filename, uint32_t flags, void *pvt)
     }
 
     /* All users were deleted, therefore we need to enumerate each file again */
-    for (size_t i = 0; i < id_ctx->num_passwd_files; i++) {
+    for (size_t i = 0; id_ctx->passwd_files[i] != NULL; i++) {
         ret = sf_enum_users(id_ctx, id_ctx->passwd_files[i]);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate users\n");
@@ -773,14 +773,13 @@ static int sf_passwd_cb(const char *filename, uint32_t flags, void *pvt)
     }
 
     /* All groups were deleted, therefore we need to enumerate each file again */
-    for (size_t i = 0; i < id_ctx->num_group_files; i++) {
+    for (size_t i = 0; id_ctx->group_files[i] != NULL; i++) {
         ret = sf_enum_groups(id_ctx, id_ctx->group_files[i]);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate groups\n");
             goto done;
         }
     }
-
 
     ret = sysdb_transaction_commit(id_ctx->domain->sysdb);
     if (ret != EOK) {
@@ -839,7 +838,7 @@ static int sf_group_cb(const char *filename, uint32_t flags, void *pvt)
     }
 
     /* All groups were deleted, therefore we need to enumerate each file again */
-    for (size_t i = 0; i < id_ctx->num_group_files; i++) {
+    for (size_t i = 0; id_ctx->group_files[i] != NULL; i++) {
         ret = sf_enum_groups(id_ctx, id_ctx->group_files[i]);
         if (ret != EOK) {
             DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate groups\n");
@@ -879,7 +878,6 @@ static void startup_enum_files(struct tevent_context *ev,
     errno_t ret;
     errno_t tret;
     bool in_transaction = false;
-    int i;
 
     talloc_zfree(imm);
 
@@ -899,7 +897,7 @@ static void startup_enum_files(struct tevent_context *ev,
         goto done;
     }
 
-    for (i = 0; i < id_ctx->num_passwd_files; i++) {
+    for (size_t i = 0; id_ctx->passwd_files[i] != NULL; i++) {
         DEBUG(SSSDBG_TRACE_FUNC,
               "Startup user enumeration of [%s]\n", id_ctx->passwd_files[i]);
         ret = sf_enum_users(id_ctx, id_ctx->passwd_files[i]);
@@ -910,7 +908,7 @@ static void startup_enum_files(struct tevent_context *ev,
         }
     }
 
-    for (i = 0; i < id_ctx->num_group_files; i++) {
+    for (size_t i = 0; id_ctx->group_files[i] != NULL; i++) {
         DEBUG(SSSDBG_TRACE_FUNC,
               "Startup group enumeration of [%s]\n", id_ctx->group_files[i]);
         ret = sf_enum_groups(id_ctx, id_ctx->group_files[i]);
@@ -954,8 +952,6 @@ struct files_ctx *sf_init(TALLOC_CTX *mem_ctx,
                           struct tevent_context *ev,
                           const char **passwd_files,
                           const char **group_files,
-                          int num_passwd_files,
-                          int num_group_files,
                           struct files_id_ctx *id_ctx)
 {
     struct files_ctx *fctx;
@@ -967,12 +963,12 @@ struct files_ctx *sf_init(TALLOC_CTX *mem_ctx,
         return NULL;
     }
 
-    for (i = 0; i < num_passwd_files; i++) {
+    for (i = 0; passwd_files[i]; i++) {
         fctx->pwd_watch = sf_setup_watch(fctx, ev, passwd_files[i],
                                          sf_passwd_cb, id_ctx);
         }
 
-    for (i = 0; i < num_group_files; i++) {
+    for (i = 0; group_files[i]; i++) {
         fctx->grp_watch = sf_setup_watch(fctx, ev, group_files[i],
                                          sf_group_cb, id_ctx);
     }

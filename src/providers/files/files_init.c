@@ -29,9 +29,7 @@
 static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
                                        struct be_ctx *be_ctx,
                                        const char ***_passwd_files,
-                                       const char ***_group_files,
-                                       int *_num_passwd_files,
-                                       int *_num_group_files)
+                                       const char ***_group_files)
 {
     TALLOC_CTX *tmp_ctx = NULL;
     char *conf_passwd_files;
@@ -149,8 +147,6 @@ static errno_t files_init_file_sources(TALLOC_CTX *mem_ctx,
 
     *_passwd_files = talloc_steal(mem_ctx, passwd_files);
     *_group_files = talloc_steal(mem_ctx, group_files);
-    *_num_passwd_files = num_passwd_files;
-    *_num_group_files = num_group_files;
 
     ret = EOK;
 
@@ -168,13 +164,15 @@ int sssm_files_init(TALLOC_CTX *mem_ctx,
     struct files_id_ctx *ctx;
     const char **passwd_files = NULL;
     const char **group_files = NULL;
-    int num_passwd_files = 0;
-    int num_group_files = 0;
     errno_t ret;
 
-    ret = files_init_file_sources(mem_ctx, be_ctx, &passwd_files,
-                               &group_files, &num_passwd_files,
-                               &num_group_files);
+    ret = files_init_file_sources(mem_ctx, be_ctx,
+                                  &passwd_files,
+                                  &group_files);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot initialize the passwd/group source files\n");
+        goto done;
+    }
 
     ctx = talloc_zero(mem_ctx, struct files_id_ctx);
     if (ctx == NULL) {
@@ -185,14 +183,10 @@ int sssm_files_init(TALLOC_CTX *mem_ctx,
     ctx->domain = be_ctx->domain;
     ctx->passwd_files = passwd_files;
     ctx->group_files = group_files;
-    ctx->num_passwd_files = num_passwd_files;
-    ctx->num_group_files = num_group_files;
 
     ctx->fctx = sf_init(ctx, be_ctx->ev,
                         ctx->passwd_files,
                         ctx->group_files,
-                        ctx->num_passwd_files,
-                        ctx->num_group_files,
                         ctx);
     if (ctx->fctx == NULL) {
         ret = ENOMEM;
