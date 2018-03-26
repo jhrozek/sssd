@@ -486,16 +486,6 @@ errno_t sf_enum_users(struct files_id_ctx *id_ctx,
               "override values might not be available.\n");
     }
 
-    /* Covers the case when someone edits /etc/group, adds a group member and
-     * only then edits passwd and adds the user. The reverse is not needed,
-     * because member/memberof links are established when groups are saved.
-     */
-    ret = sf_enum_groups(id_ctx, id_ctx->group_files[0]);
-    if (ret != EOK) {
-        DEBUG(SSSDBG_OP_FAILURE, "Cannot refresh groups\n");
-        goto done;
-    }
-
     ret = EOK;
 done:
     talloc_free(tmp_ctx);
@@ -772,6 +762,25 @@ static int sf_passwd_cb(const char *filename, uint32_t flags, void *pvt)
             goto done;
         }
     }
+
+    /* Covers the case when someone edits /etc/group, adds a group member and
+     * only then edits passwd and adds the user. The reverse is not needed,
+     * because member/memberof links are established when groups are saved.
+     */
+    ret = delete_all_groups(id_ctx->domain);
+    if (ret != EOK) {
+        goto done;
+    }
+
+    /* All groups were deleted, therefore we need to enumerate each file again */
+    for (size_t i = 0; i < id_ctx->num_group_files; i++) {
+        ret = sf_process_group_file(id_ctx, id_ctx->group_files[i]);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate groups\n");
+            goto done;
+        }
+    }
+
 
     ret = sysdb_transaction_commit(id_ctx->domain->sysdb);
     if (ret != EOK) {
