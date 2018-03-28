@@ -706,7 +706,7 @@
                             or D-Bus activated.
                         </para>
                         <para>
-                            Default: 300
+                            Default: 0
                         </para>
                     </listitem>
                 </varlistentry>
