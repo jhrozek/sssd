@@ -29,6 +29,7 @@
 struct sss_tool_ctx {
     struct confdb_ctx *confdb;
 
+    bool print_help;
     errno_t init_err;
     char *default_domain;
     struct sss_domain_info *domains;
@@ -36,8 +37,7 @@ struct sss_tool_ctx {
 
 errno_t sss_tool_init(TALLOC_CTX *mem_ctx,
                       int *argc, const char **argv,
-                      struct sss_tool_ctx **_tool_ctx,
-                      bool *_help);
+                      struct sss_tool_ctx **_tool_ctx);
 
 struct sss_cmdline {
     const char *exec; /* argv[0] */
@@ -75,7 +75,7 @@ void sss_tool_usage(const char *tool_name,
 errno_t sss_tool_route(int argc, const char **argv,
                        struct sss_tool_ctx *tool_ctx,
                        struct sss_route_cmd *commands,
-                       void *pvt, bool _help);
+                       void *pvt);
 
 typedef errno_t (*sss_popt_fn)(poptContext pc, char option, void *pvt);
 
