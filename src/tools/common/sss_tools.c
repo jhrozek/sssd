@@ -338,7 +338,7 @@ errno_t sss_tool_route(int argc, const char **argv,
                 return tool_ctx->init_err;
             }
 
-	    if (!help) {
+            if (!help) {
                 ret = tool_cmd_init(tool_ctx, &commands[i]);
                 if (ret != EOK) {
                     DEBUG(SSSDBG_FATAL_FAILURE,
@@ -346,7 +346,7 @@ errno_t sss_tool_route(int argc, const char **argv,
                           ret, sss_strerror(ret));
                     return ret;
                 }
-	    }
+            }
 
             return commands[i].fn(&cmdline, tool_ctx, pvt);
         }
@@ -501,7 +501,7 @@ int sss_tool_main(int argc, const char **argv,
     struct sss_tool_ctx *tool_ctx;
     uid_t uid;
     errno_t ret;
-    bool _help = false;
+    bool help = false;
 
     uid = getuid();
     if (uid != 0) {
@@ -510,7 +510,7 @@ int sss_tool_main(int argc, const char **argv,
         return EXIT_FAILURE;
     }
 
-    ret = sss_tool_init(NULL, &argc, argv, &tool_ctx, &_help);
+    ret = sss_tool_init(NULL, &argc, argv, &tool_ctx, &help);
     if (ret == ERR_SYSDB_VERSION_TOO_OLD) {
         tool_ctx->init_err = ret;
     } else if (ret != EOK) {
@@ -518,7 +518,7 @@ int sss_tool_main(int argc, const char **argv,
         return EXIT_FAILURE;
     }
 
-    ret = sss_tool_route(argc, argv, tool_ctx, commands, pvt, _help);
+    ret = sss_tool_route(argc, argv, tool_ctx, commands, pvt, help);
     SYSDB_VERSION_ERROR(ret);
     talloc_free(tool_ctx);
     if (ret != EOK) {
