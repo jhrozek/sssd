@@ -139,6 +139,7 @@ enum sssd_errors {
     ERR_UNABLE_TO_VERIFY_PEER,
     ERR_UNABLE_TO_RESOLVE_HOST,
     ERR_ID_OUTSIDE_RANGE,
+    ERR_GID_DUPLICATED,
     ERR_LAST            /* ALWAYS LAST */
 };
 
