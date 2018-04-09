@@ -233,7 +233,7 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
                      *   removed from the memory cache
                      */
                     ret = sdap_handle_id_collision_for_incomplete_groups(
-                                            provider, domain, groupname, gid,
+                                            opts->dp, domain, groupname, gid,
                                             original_dn, sid_str, uuid, posix,
                                             now);
                 }

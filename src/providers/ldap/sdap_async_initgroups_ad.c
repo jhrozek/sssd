@@ -836,6 +836,7 @@ sdap_ad_tokengroups_initgr_mapping_connect_done(struct tevent_req *subreq)
 }
 
 errno_t sdap_ad_save_group_membership_with_idmapping(const char *username,
+                                               struct sdap_options *opts,
                                                struct sss_domain_info *user_dom,
                                                struct sdap_idmap_ctx *idmap_ctx,
                                                size_t num_sids,
@@ -1005,6 +1006,7 @@ static void sdap_ad_tokengroups_initgr_mapping_done(struct tevent_req *subreq)
     }
 
     ret = sdap_ad_save_group_membership_with_idmapping(state->username,
+                                                       state->opts,
                                                        state->domain,
                                                        state->idmap_ctx,
                                                        num_sids,
