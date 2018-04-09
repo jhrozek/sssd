@@ -413,7 +413,7 @@ errno_t
 sdap_ad_tokengroups_initgroups_recv(struct tevent_req *req);
 
 errno_t
-sdap_handle_id_collision_for_incomplete_groups(void *provider,
+sdap_handle_id_collision_for_incomplete_groups(struct data_provider *dp,
                                                struct sss_domain_info *domain,
                                                const char *name,
                                                gid_t gid,

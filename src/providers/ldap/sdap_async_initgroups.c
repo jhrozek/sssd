@@ -3545,7 +3545,7 @@ errno_t get_sysdb_grouplist_dn(TALLOC_CTX *mem_ctx,
 }
 
 errno_t
-sdap_handle_id_collision_for_incomplete_groups(void *provider,
+sdap_handle_id_collision_for_incomplete_groups(struct data_provider *dp,
                                                struct sss_domain_info *domain,
                                                const char *name,
                                                gid_t gid,
@@ -3573,7 +3573,7 @@ sdap_handle_id_collision_for_incomplete_groups(void *provider,
         return ret;
     }
 
-    dp_sbus_invalidate_group_memcache(provider, gid);
+    dp_sbus_invalidate_group_memcache(dp, gid);
 
     return EOK;
 }
