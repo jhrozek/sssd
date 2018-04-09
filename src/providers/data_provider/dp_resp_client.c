@@ -197,6 +197,11 @@ void dp_sbus_invalidate_group_memcache(struct data_provider *provider,
     DBusMessage *msg;
     dbus_bool_t dbret;
 
+    if (provider == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "No provider pointer\n");
+        return;
+    }
+
     dp_cli = provider->clients[DPC_NSS];
     if (dp_cli == NULL) {
         return;
