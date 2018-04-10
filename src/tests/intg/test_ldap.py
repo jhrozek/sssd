@@ -1444,7 +1444,11 @@ def rename_setup_no_cleanup(request, ldap_conn, cleanup_ent=None):
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     ent_list.add_user("user1", 1001, 2001)
     ent_list.add_group_bis("user1_private", 2001)
-    ent_list.add_group_bis("group1", 2015, ["user1"])
+
+    ent_list.add_user("user2", 1002, 2002)
+    ent_list.add_group_bis("user2_private", 2002)
+
+    ent_list.add_group_bis("group1", 2015, ["user1", "user2"])
 
     if cleanup_ent is None:
         create_ldap_fixture(request, ldap_conn, ent_list)
@@ -1460,7 +1464,11 @@ def rename_setup_cleanup(request, ldap_conn):
     cleanup_ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
     cleanup_ent_list.add_user("user1", 1001, 2001)
     cleanup_ent_list.add_group_bis("new_user1_private", 2001)
-    cleanup_ent_list.add_group_bis("new_group1", 2015, ["user1"])
+
+    cleanup_ent_list.add_user("user2", 1002, 2002)
+    cleanup_ent_list.add_group_bis("new_user2_private", 2002)
+
+    cleanup_ent_list.add_group_bis("new_group1", 2015, ["user1", "user2"])
 
     rename_setup_no_cleanup(request, ldap_conn, cleanup_ent_list)
 
@@ -1497,7 +1505,8 @@ def test_rename_incomplete_group_same_dn(ldap_conn, rename_setup_with_name):
 
     Regression test for https://pagure.io/SSSD/sssd/issue/3282
     """
-    pvt_dn = 'cn=user1_private,ou=Groups,' + ldap_conn.ds_inst.base_dn
+    pvt_dn1 = 'cn=user1_private,ou=Groups,' + ldap_conn.ds_inst.base_dn
+    pvt_dn2 = 'cn=user2_private,ou=Groups,' + ldap_conn.ds_inst.base_dn
     group1_dn = 'cn=group1,ou=Groups,' + ldap_conn.ds_inst.base_dn
 
     # Add the name we want for both private and secondary group
@@ -1508,7 +1517,11 @@ def test_rename_incomplete_group_same_dn(ldap_conn, rename_setup_with_name):
 
     new = {'name': [b"pvt_user1"]}
     ldif = ldap.modlist.modifyModlist(old, new)
-    ldap_conn.modify_s(pvt_dn, ldif)
+    ldap_conn.modify_s(pvt_dn1, ldif)
+
+    new = {'name': [b"pvt_user2"]}
+    ldif = ldap.modlist.modifyModlist(old, new)
+    ldap_conn.modify_s(pvt_dn2, ldif)
 
     # Make sure the old name shows up in the id output
     (res, errno, grp_list) = sssd_id.get_user_groups("user1")
@@ -1523,8 +1536,11 @@ def test_rename_incomplete_group_same_dn(ldap_conn, rename_setup_with_name):
     ldif = ldap.modlist.modifyModlist(old, new)
     ldap_conn.modify_s(group1_dn, ldif)
 
-    if subprocess.call(["sss_cache", "-GU"]) != 0:
-        raise Exception("sssd_cache failed")
+    (res, errno, grp_list) = sssd_id.get_user_groups("user2")
+    assert res == sssd_id.NssReturnCode.SUCCESS, \
+        "Could not find groups for user2, %d" % errno
+
+    assert sorted(grp_list) == sorted(["pvt_user2", "new_user1_group1"])
 
     (res, errno, grp_list) = sssd_id.get_user_groups("user1")
     assert res == sssd_id.NssReturnCode.SUCCESS, \
