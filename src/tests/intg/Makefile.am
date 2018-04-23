@@ -3,6 +3,7 @@ dist_noinst_DATA = \
     config.py.m4 \
     util.py \
     sssd_nss.py \
+    sssd_nss_ex.py \
     sssd_id.py \
     sssd_ldb.py \
     sssd_netgroup.py \
@@ -36,6 +37,7 @@ dist_noinst_DATA = \
     data/ad_schema.ldif \
     test_pysss_nss_idmap.py \
     test_infopipe.py \
+    test_nss_ex.py \
     $(NULL)
 
 EXTRA_DIST = data/cwrap-dbus-system.conf.in
