@@ -204,28 +204,10 @@ static void sss_ini_config_print_errors(char **error_list)
 
 /* Load configuration */
 
-int sss_ini_get_config(struct sss_ini_initdata *init_data,
-                       const char *config_file,
-                       const char *config_dir)
+#ifdef HAVE_LIBINI_CONFIG_V1
+static int sss_ini_read_sssd_conf(struct sss_ini_initdata *init_data)
 {
     int ret;
-#ifdef HAVE_LIBINI_CONFIG_V1
-#ifdef HAVE_LIBINI_CONFIG_V1_3
-    const char *patterns[] = { "^[^\\.].*\\.conf$", NULL };
-    const char *sections[] = { ".*", NULL };
-    uint32_t i = 0;
-    char *msg = NULL;
-    struct access_check snip_check;
-    struct ini_cfgobj *modified_sssd_config = NULL;
-#endif /* HAVE_LIBINI_CONFIG_V1_3 */
-
-    /* Create config object */
-    ret = ini_config_create(&(init_data->sssd_config));
-    if (ret != EOK) {
-        DEBUG(SSSDBG_FATAL_FAILURE,
-                "Failed to create config object. Error %d.\n", ret);
-        return ret;
-    }
 
     /* Parse file */
     ret = ini_config_parse(init_data->file,
@@ -253,7 +235,14 @@ int sss_ini_get_config(struct sss_ini_initdata *init_data,
         return ret;
     }
 
+    return EOK;
+}
+
 #ifdef HAVE_LIBINI_CONFIG_V1_3
+static int sss_ini_augment_with_snippets(struct sss_ini_initdata *init_data,
+                                         const char *config_file,
+                                         const char *config_dir)
+{
     snip_check.flags = INI_ACCESS_CHECK_MODE | INI_ACCESS_CHECK_UID
                        | INI_ACCESS_CHECK_GID;
     snip_check.uid = 0; /* owned by root */
@@ -296,13 +285,55 @@ int sss_ini_get_config(struct sss_ini_initdata *init_data,
     if (modified_sssd_config != NULL) {
         ini_config_destroy(init_data->sssd_config);
         init_data->sssd_config = modified_sssd_config;
-    } else {
-        DEBUG(SSSDBG_TRACE_FUNC,
-              "Using only main configuration file due to errors in merging\n");
+        return EOK;
     }
-#endif
 
-    return ret;
+    } else {
+    }
+}
+#endif /* HAVE_LIBINI_CONFIG_V1_3 */
+
+#endif /* HAVE_LIBINI_CONFIG_V1 */
+
+int sss_ini_get_config(struct sss_ini_initdata *init_data,
+                       const char *config_file,
+                       const char *config_dir)
+{
+    int ret;
+#ifdef HAVE_LIBINI_CONFIG_V1
+#ifdef HAVE_LIBINI_CONFIG_V1_3
+    const char *patterns[] = { "^[^\\.].*\\.conf$", NULL };
+    const char *sections[] = { ".*", NULL };
+    uint32_t i = 0;
+    char *msg = NULL;
+    struct access_check snip_check;
+    struct ini_cfgobj *modified_sssd_config = NULL;
+#endif /* HAVE_LIBINI_CONFIG_V1_3 */
+
+    /* Create config object */
+    ret = ini_config_create(&(init_data->sssd_config));
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE,
+                "Failed to create config object. Error %d.\n", ret);
+        return ret;
+    }
+
+    ret = sss_ini_read_sssd_conf(init_data);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_FATAL_FAILURE,
+                "Failed to read sssd.conf [%d]: %s\n",
+                ret, sss_strerror(ret));
+        return ret;
+    }
+
+    ret = sss_ini_augment_with_snippets(init_data, config_file, config_dir);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_IMPORTANT_INFO,
+              "Using only main configuration file due to errors in merging\n");
+        /* Not fatal */
+    }
+
+    return EOK;
 
 #else
 
