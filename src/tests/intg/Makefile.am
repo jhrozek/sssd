@@ -35,6 +35,7 @@ dist_noinst_DATA = \
     data/ad_data.ldif \
     data/ad_schema.ldif \
     test_pysss_nss_idmap.py \
+    test_ssh_pubkey.py \
     $(NULL)
 
 config.py: config.py.m4
