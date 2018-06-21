@@ -76,7 +76,7 @@ struct parse_inp_test_ctx {
     struct resp_ctx *rctx;
 };
 
-static int parse_inp_test_setup(void **state)
+int parse_inp_test_setup(void **state)
 {
     struct parse_inp_test_ctx *parse_inp_ctx;
     int ret;
@@ -110,7 +110,7 @@ static int parse_inp_test_setup(void **state)
     return 0;
 }
 
-static int parse_inp_test_teardown(void **state)
+int parse_inp_test_teardown(void **state)
 {
     struct parse_inp_test_ctx *parse_inp_ctx = talloc_get_type(*state,
                                                    struct parse_inp_test_ctx);
@@ -332,9 +332,9 @@ int main(int argc, const char *argv[])
 //        cmocka_unit_test_setup_teardown(parse_inp_simple,
 //                                        parse_inp_test_setup,
 //                                        parse_inp_test_teardown),
-        cmocka_unit_test_setup_teardown(parse_inp_call_dp,
-                                        parse_inp_test_setup,
-                                        parse_inp_test_teardown),
+//        cmocka_unit_test_setup_teardown(parse_inp_call_dp,
+//                                        parse_inp_test_setup,
+//                                        parse_inp_test_teardown),
 //        cmocka_unit_test_setup_teardown(parse_inp_call_attach,
 //                                        parse_inp_test_setup,
 //                                        parse_inp_test_teardown),
