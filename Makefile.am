@@ -2718,6 +2718,8 @@ responder_get_domains_tests_SOURCES = \
 responder_get_domains_tests_CFLAGS = \
     $(AM_CFLAGS)
 responder_get_domains_tests_LDFLAGS = \
+    -Wl,-wrap,sss_dp_get_domains_send \
+    -Wl,-wrap,sss_dp_get_domains_recv \
     -Wl,-wrap,sss_parse_name_for_domains \
     -Wl,-wrap,sss_ncache_reset_repopulate_permanent
 responder_get_domains_tests_LDADD = \
