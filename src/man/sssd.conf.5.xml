@@ -3074,7 +3074,7 @@ ldap_user_extra_attrs = phone:telephoneNumber
 </programlisting>
         </refsect2>
 
-        <refsect2 id='local_domain'>
+        <refsect2 id='local_domain' condition="with_local_provider">
             <title>The local domain section</title>
             <para>
                 This section contains settings for domain that stores users and

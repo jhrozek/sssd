@@ -8,6 +8,9 @@ top_builddir = ../..
 
 # If no conditions are given, *all* conditionals are expanded. We don't want
 # to include any conditions by default, so we need to pass a phony conditional
+if BUILD_LOCAL_PROVIDER
+LOCAL_PROVIDER_CONDS = ;with_local_provider
+endif
 if BUILD_SUDO
 # conditionals are delimeted with a semicolon
 SUDO_CONDS = ;with_sudo
@@ -51,7 +54,7 @@ CRYPTO_CONDS = ;with_nss
 else
 CRYPTO_CONDS = ;with_openssl
 endif
-CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SEC_CONDS)$(SYSTEMD_CONDS)$(FILES_CONDS)$(KCM_CONDS)$(STAP_CONDS)$(CRYPTO_CONDS)
+CONDS = with_false$(LOCAL_PROVIDER_CONDS)$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SEC_CONDS)$(SYSTEMD_CONDS)$(FILES_CONDS)$(KCM_CONDS)$(STAP_CONDS)$(CRYPTO_CONDS)
 
 
 #Special Rules:
