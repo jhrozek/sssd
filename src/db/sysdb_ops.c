@@ -494,7 +494,9 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
         break;
     case SYSDB_GROUP:
         def_attrs[1] = SYSDB_GIDNUM;
-        if (domain->mpg && strcasecmp(domain->provider, "local") != 0) {
+        if (domain->mpg &&
+                (!local_provider_is_built()
+                 || strcasecmp(domain->provider, "local") != 0)) {
             /* When searching a group by name in a MPG domain, we also
              * need to search the user space in order to be able to match
              * a user private group/
@@ -1530,7 +1532,8 @@ int sysdb_get_new_id(struct sss_domain_info *domain,
         return ENOMEM;
     }
 
-    if (strcasecmp(domain->provider, "local") != 0) {
+    if (!local_provider_is_built()
+            || strcasecmp(domain->provider, "local") != 0) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Generating new ID is only supported in the local domain!\n");
         return ENOTSUP;
@@ -2025,7 +2028,8 @@ int sysdb_add_user(struct sss_domain_info *domain,
             goto done;
         }
 
-        if (strcasecmp(domain->provider, "local") != 0) {
+        if (!local_provider_is_built()
+                || strcasecmp(domain->provider, "local") != 0) {
             ret = sysdb_search_group_by_gid(tmp_ctx, domain, uid, NULL, &msg);
             if (ret != ENOENT) {
                 if (ret == EOK) {
@@ -2245,7 +2249,8 @@ int sysdb_add_group(struct sss_domain_info *domain,
             goto done;
         }
 
-        if (strcasecmp(domain->provider, "local") != 0) {
+        if (!local_provider_is_built()
+                || strcasecmp(domain->provider, "local") != 0) {
             ret = sysdb_search_user_by_uid(tmp_ctx, domain, gid, NULL, &msg);
             if (ret != ENOENT) {
                 if (ret == EOK) {

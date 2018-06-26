@@ -311,7 +311,8 @@ sss_dp_issue_request(TALLOC_CTX *mem_ctx, struct resp_ctx *rctx,
         goto fail;
     }
 
-    if (strcasecmp(dom->provider, "local") == 0) {
+    if (local_provider_is_built()
+            && strcasecmp(dom->provider, "local") == 0) {
         DEBUG(SSSDBG_TRACE_FUNC, "Issuing local provider request for [%s]\n",
               key->str);
         sss_dp_issue_local_request(rctx->ev, nreq);

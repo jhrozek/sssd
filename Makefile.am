@@ -3682,6 +3682,7 @@ intgcheck-prepare:
 	    --enable-intgcheck-reqs \
 	    --without-semanage \
 	    --with-session-recording-shell=/bin/false \
+	    --enable-local-provider \
 	    $(INTGCHECK_CONFIGURE_FLAGS) \
 	    CFLAGS="-O2 -g $$CFLAGS -DKCM_PEER_UID=$$(id -u)"; \
 	$(MAKE) $(AM_MAKEFLAGS) ; \
