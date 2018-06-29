@@ -558,6 +558,8 @@ static void enum_test_add_users(struct sysdb_test_ctx *test_ctx,
     int ret;
     struct sysdb_attrs *attrs;
     char *fqname = NULL;
+    uid_t uid;
+    gid_t gid;
 
     for (i = 0; usernames[i] != NULL; i++) {
         attrs = talloc(test_ctx, struct sysdb_attrs);
@@ -565,8 +567,16 @@ static void enum_test_add_users(struct sysdb_test_ctx *test_ctx,
         fqname = sss_create_internal_fqname(test_ctx, usernames[i],
                                             test_ctx->domain->name);
         assert_non_null(fqname);
+
+        if (local_provider_is_built()) {
+            uid = 0;
+            gid = 0;
+        } else {
+            uid = 1234 + i;
+            gid = 1234 + i;
+        }
         ret = sysdb_store_user(test_ctx->domain, fqname,
-                               NULL, 0, 0, fqname, "/", "/bin/sh",
+                               NULL, uid, gid, fqname, "/", "/bin/sh",
                                NULL, NULL, NULL, 1, 1234 + i);
         assert_int_equal(ret, EOK);
 
