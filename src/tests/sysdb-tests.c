@@ -680,6 +680,8 @@ START_TEST (test_sysdb_user_new_id)
     const char *desc;
     const char *desc_in = "testuser_new_id_desc";
     const char *username = "testuser_newid";
+    uid_t uid;
+    gid_t gid;
 
     /* Setup */
     ret = setup_sysdb_tests(&test_ctx);
@@ -699,8 +701,16 @@ START_TEST (test_sysdb_user_new_id)
     ret = sysdb_attrs_add_string(attrs, SYSDB_DESCRIPTION, desc_in);
     fail_if(ret != EOK);
 
+    if (local_provider_is_built()) {
+        uid = 0;
+        gid = 0;
+    } else {
+        uid = 1234;
+        gid = 1234;
+    }
+
     ret = sysdb_add_user(test_ctx->domain, fqname,
-                         0, 0, fqname, "/", "/bin/bash",
+                         uid, gid, fqname, "/", "/bin/bash",
                          NULL, attrs, 0, 0);
     fail_if(ret != EOK, "Could not store user %s", fqname);
 
@@ -1095,6 +1105,9 @@ START_TEST(test_user_group_by_name)
      * ldap provider differently with auto_private_groups.
      */
     test_ctx->domain->provider = discard_const_p(char, "ldap");
+    if (!local_provider_is_built()) {
+        test_ctx->domain->mpg = true;
+    }
 
     data = test_data_new_user(test_ctx, _i);
     fail_if(data == NULL);
@@ -1334,6 +1347,10 @@ START_TEST (test_sysdb_enumgrent)
     if (ret != EOK) {
         fail("Could not set up the test");
         return;
+    }
+
+    if (!local_provider_is_built()) {
+        test_ctx->domain->mpg = true;
     }
 
     ret = sysdb_enumgrent(test_ctx,
@@ -1827,6 +1844,7 @@ START_TEST (test_sysdb_remove_nonexistent_group)
 }
 END_TEST
 
+#ifdef BUILD_LOCAL_PROVIDER
 START_TEST (test_sysdb_get_new_id)
 {
     struct sysdb_test_ctx *test_ctx;
@@ -1842,6 +1860,7 @@ START_TEST (test_sysdb_get_new_id)
     fail_if(id != test_ctx->domain->id_min);
 }
 END_TEST
+#endif
 
 START_TEST (test_sysdb_store_custom)
 {
@@ -7190,8 +7209,10 @@ Suite *create_sysdb_suite(void)
 
     TCase *tc_sysdb = tcase_create("SYSDB Tests");
 
+#ifdef BUILD_LOCAL_PROVIDER
     /* test getting next id works */
     tcase_add_test(tc_sysdb, test_sysdb_get_new_id);
+#endif
 
     /* Add a user with an automatic ID */
     tcase_add_test(tc_sysdb, test_sysdb_user_new_id);
