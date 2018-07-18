@@ -98,7 +98,7 @@ static int setup_sysdb_tests(struct sysdb_test_ctx **ctx)
         return ret;
     }
 
-    val[0] = "LOCAL";
+    val[0] = "FILES";
     ret = confdb_add_param(test_ctx->confdb, true,
                            "config/sssd", "domains", val);
     if (ret != EOK) {
@@ -107,9 +107,9 @@ static int setup_sysdb_tests(struct sysdb_test_ctx **ctx)
         return ret;
     }
 
-    val[0] = "local";
+    val[0] = "files";
     ret = confdb_add_param(test_ctx->confdb, true,
-                           "config/domain/LOCAL", "id_provider", val);
+                           "config/domain/FILES", "id_provider", val);
     if (ret != EOK) {
         fail("Could not initialize provider");
         talloc_free(test_ctx);
@@ -118,23 +118,23 @@ static int setup_sysdb_tests(struct sysdb_test_ctx **ctx)
 
     val[0] = "TRUE";
     ret = confdb_add_param(test_ctx->confdb, true,
-                           "config/domain/LOCAL", "enumerate", val);
+                           "config/domain/FILES", "enumerate", val);
     if (ret != EOK) {
-        fail("Could not initialize LOCAL domain");
+        fail("Could not initialize FILES domain");
         talloc_free(test_ctx);
         return ret;
     }
 
     val[0] = "TRUE";
     ret = confdb_add_param(test_ctx->confdb, true,
-                           "config/domain/LOCAL", "cache_credentials", val);
+                           "config/domain/FILES", "cache_credentials", val);
     if (ret != EOK) {
-        fail("Could not initialize LOCAL domain");
+        fail("Could not initialize FILES domain");
         talloc_free(test_ctx);
         return ret;
     }
 
-    ret = sssd_domain_init(test_ctx, test_ctx->confdb, "local",
+    ret = sssd_domain_init(test_ctx, test_ctx->confdb, "files",
                            TESTS_PATH, &test_ctx->domain);
     if (ret != EOK) {
         fail("Could not initialize connection to the sysdb (%d)", ret);
