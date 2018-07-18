@@ -341,11 +341,19 @@ void test_multidom_suite_cleanup(const char *tests_path,
     if (domains != NULL) {
         for (i = 0; domains[i] != NULL; i++) {
             if (strcmp(domains[i], LOCAL_SYSDB_FILE) == 0) {
-                /* local domain */
-                ret = sysdb_get_db_file(tmp_ctx, "local", domains[i], tests_path,
+                /* files domain */
+                ret = sysdb_get_db_file(tmp_ctx, "files", domains[i], tests_path,
                                         &sysdb_path, &sysdb_ts_path);
                 if (ret != EOK) {
-                    goto done;
+                    /* try again with local domain */
+                    if (local_provider_is_built()) {
+                        ret = sysdb_get_db_file(tmp_ctx, "local", domains[i], tests_path,
+                                                &sysdb_path, &sysdb_ts_path);
+                    }
+
+                    if (ret != EOK) {
+                        goto done;
+                    }
                 }
             } else {
                 /* The mocked database doesn't really care about its provider type, just
