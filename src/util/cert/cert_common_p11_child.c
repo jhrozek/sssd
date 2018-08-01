@@ -74,15 +74,6 @@ struct tevent_req *cert_to_ssh_key_send(TALLOC_CTX *mem_ctx,
                                                    : child_debug_fd;
     state->timeout = timeout;
     state->bin_certs = bin_certs;
-    state->io = talloc(state, struct child_io_fds);
-    if (state->io == NULL) {
-        DEBUG(SSSDBG_OP_FAILURE, "talloc failed.\n");
-        ret = ENOMEM;
-        goto done;
-    }
-    state->io->write_to_child_fd = -1;
-    state->io->read_from_child_fd = -1;
-    talloc_set_destructor((void *) state->io, child_io_destructor);
 
     state->keys = talloc_zero_array(state, struct ldb_val, cert_count);
     if (state->keys == NULL) {
@@ -174,6 +165,17 @@ static errno_t cert_to_ssh_key_step(struct tevent_req *req)
     }
 
     state->extra_args[0] = state->certs[state->iter];
+
+    talloc_zfree(state->io);
+    state->io = talloc(state, struct child_io_fds);
+    if (state->io == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "talloc failed.\n");
+        ret = ENOMEM;
+        goto done;
+    }
+    state->io->write_to_child_fd = -1;
+    state->io->read_from_child_fd = -1;
+    talloc_set_destructor((void *) state->io, child_io_destructor);
 
     ret = pipe(pipefd_from_child);
     if (ret == -1) {
