@@ -1012,7 +1012,9 @@ done
 %{_libdir}/%{name}/libsss_ldap_common.so
 %{_libdir}/%{name}/libsss_util.so
 %{_libdir}/%{name}/libsss_semanage.so
+%if (0%{?with_secrets} == 1 || 0%{?with_kcm} == 1)
 %{_libdir}/%{name}/libsss_secrets.so
+%endif
 
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
@@ -1340,7 +1342,7 @@ done
 
 %if (0%{?with_kcm} == 1)
 %files kcm -f sssd_kcm.lang
-%if (0%{?with_secrets} == 1)
+%if (0%{?with_secrets} == 1 || 0%{?with_kcm} == 1)
 %attr(700,root,root) %dir %{secdbpath}
 %endif
 %{_libexecdir}/%{servicename}/sssd_kcm
