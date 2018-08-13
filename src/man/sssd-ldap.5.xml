@@ -1453,7 +1453,7 @@
                             StartTLS operation.
                         </para>
                         <para>
-                            Default: 6
+                            Default: 24
                         </para>
                     </listitem>
                 </varlistentry>
