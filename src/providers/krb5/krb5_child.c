@@ -1822,6 +1822,7 @@ static errno_t map_krb5_error(krb5_error_code kerr)
     case KRB5_KDC_UNREACH:
     case KRB5_REALM_CANT_RESOLVE:
     case KRB5_REALM_UNKNOWN:
+    case KRB5KDC_ERR_SVC_UNAVAILABLE:
         return ERR_NETWORK_IO;
 
     case KRB5KDC_ERR_CLIENT_REVOKED:
