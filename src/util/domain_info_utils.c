@@ -928,3 +928,8 @@ bool sss_domain_info_get_output_fqnames(struct sss_domain_info *domain)
 {
     return domain->output_fqnames;
 }
+
+bool sss_domain_is_mpg(struct sss_domain_info *domain)
+{
+    return domain->mpg;
+}
