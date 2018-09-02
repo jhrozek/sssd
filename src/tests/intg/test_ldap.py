@@ -35,6 +35,7 @@ import ldap_ent
 import sssd_id
 import sssd_ldb
 from util import unindent
+from util import run_shell
 from sssd_nss import NssReturnCode
 from sssd_passwd import call_sssd_getpwnam, call_sssd_getpwuid
 from sssd_group import call_sssd_getgrnam, call_sssd_getgrgid
@@ -1449,6 +1450,94 @@ def test_ldap_auto_private_groups_direct_no_gid(ldap_conn, mpg_setup_no_gid):
             ", ".join(["%s" % s for s in sorted(gids)]),
             ", ".join(["%s" % s for s in sorted(user1_expected_gids)])
         )
+
+
+@pytest.fixture
+def mpg_setup_hybrid(request, ldap_conn):
+    """
+    This setup stores the primari GID in the "mail" attribute to simulate
+    the scenario where only some user have the gidNumber set at all.
+    """
+    ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
+
+    ent_list.add_user("user_with_gid", 1001, 5555, mail='2001')
+    ent_list.add_group_bis("group1", 2001)
+    ent_list.add_group_bis("with_gid_group1", 10010, ["user_with_gid"])
+    ent_list.add_group_bis("with_gid_group2", 10011, ["user_with_gid"])
+
+    ent_list.add_user("user_with_no_gid", 1002, 6666)
+    ent_list.add_group_bis("no_gid_group1", 10020, ["user_with_no_gid"])
+    ent_list.add_group_bis("no_gid_group2", 10021, ["user_with_no_gid"])
+
+    create_ldap_entries(ldap_conn, ent_list)
+    create_ldap_cleanup(request, ldap_conn, None)
+
+    conf = \
+        format_basic_conf(ldap_conn, SCHEMA_RFC2307_BIS) + \
+        unindent("""
+            [domain/LDAP]
+            auto_private_groups = hybrid
+            ldap_user_gid_number = mail
+        """).format(**locals())
+    create_conf_fixture(request, conf)
+    create_sssd_fixture(request)
+    return None
+
+
+def test_ldap_auto_private_groups_hybrid_direct(ldap_conn, mpg_setup_hybrid):
+    """
+    Integration test for auto_private_groups=hybrid. This test checks the
+    resolution of the users and their groups.
+
+    See also ticket https://pagure.io/SSSD/sssd/issue/1872
+    """
+    # Make sure the user's GID is taken from their gidNumber, if available
+    ent.assert_passwd_by_name("user_with_gid",
+                              dict(name="user_with_gid", uid=1001, gid=2001))
+
+    # The user's secondary groups list must be correct as well and include
+    # the primary gid, too
+    user_with_gid_ids = [2001, 10010, 10011]
+    (res, errno, gids) = sssd_id.call_sssd_initgroups("user_with_gid", 2001)
+    assert res == sssd_id.NssReturnCode.SUCCESS
+
+    assert sorted(gids) == sorted(user_with_gid_ids), \
+        "result: %s\n expected %s" % (
+            ", ".join(["%s" % s for s in sorted(gids)]),
+            ", ".join(["%s" % s for s in sorted(user_with_gid_ids)])
+        )
+
+    # On the other hand, if no gidNumber is available, sssd should generate
+    # the private group on its own
+    ent.assert_passwd_by_name("user_with_no_gid",
+                              dict(name="user_with_no_gid",
+                                   uid=1002, gid=1002))
+
+    # The user's secondary groups list must be correct as well. Since there was
+    # no original GID, it is not added to the list
+    user_without_gid_ids = [1002, 10020, 10021]
+    (res, errno, gids) = sssd_id.call_sssd_initgroups("user_with_no_gid", 1002)
+    assert res == sssd_id.NssReturnCode.SUCCESS
+
+    assert sorted(gids) == sorted(user_without_gid_ids), \
+        "result: %s\n expected %s" % (
+            ", ".join(["%s" % s for s in sorted(gids)]),
+            ", ".join(["%s" % s for s in sorted(user_without_gid_ids)])
+        )
+
+
+def test_ldap_auto_private_groups_hybrid_priv_group(ldap_conn,
+                                                    mpg_setup_hybrid):
+    """
+    Integration test for auto_private_groups=hybrid. This test checks the
+    resolution of user private groups.
+
+    See also ticket https://pagure.io/SSSD/sssd/issue/1872
+    """
+    # Make sure the private group of user who has this group set in their
+    # gidNumber is resolvable by name and by GID
+    ent.assert_group_by_name("group1", dict(gid=2001, mem=ent.contains_only()))
+    ent.assert_group_by_gid(2001, dict(name="group1", mem=ent.contains_only()))
 
 
 def rename_setup_no_cleanup(request, ldap_conn, cleanup_ent=None):

@@ -41,6 +41,17 @@ nss_get_gid(struct sss_domain_info *domain,
         return domain->override_gid;
     }
 
+    /* If this is a hybrid-MPG domain, and the original GID is available,
+     * use that */
+    if (get_domain_mpg_mode(domain) == MPG_HYBRID) {
+        gid = sss_view_ldb_msg_find_attr_as_uint64(domain, msg,
+                                                   SYSDB_PRIMARY_GROUP_GIDNUM,
+                                                   0);
+        if (gid != 0) {
+            return gid;
+        }
+    }
+
     /* Return original gid. */
     return ldb_msg_find_attr_as_uint64(msg, SYSDB_GIDNUM, 0);
 }
