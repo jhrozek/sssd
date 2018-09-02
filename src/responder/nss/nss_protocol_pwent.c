@@ -26,6 +26,7 @@ nss_get_gid(struct sss_domain_info *domain,
             struct ldb_message *msg)
 {
     uint32_t gid;
+    uint32_t uid;
 
     /* First, try to return overriden gid. */
     if (DOM_HAS_VIEWS(domain)) {
@@ -39,6 +40,18 @@ nss_get_gid(struct sss_domain_info *domain,
     /* Try to return domain gid override. */
     if (domain->override_gid != 0) {
         return domain->override_gid;
+    }
+
+    /* If this is a hybrid-MPG domain, and the original GID is different from
+     * user UID, use that */
+    if (get_domain_mpg_mode(domain) == MPG_HYBRID) {
+        uid = sss_view_ldb_msg_find_attr_as_uint64(domain, msg, SYSDB_UIDNUM, 0);
+        gid = sss_view_ldb_msg_find_attr_as_uint64(domain, msg,
+                                                   SYSDB_PRIMARY_GROUP_GIDNUM,
+                                                   0);
+        if (gid != 0 && gid != uid) {
+            return gid;
+        }
     }
 
     /* Return original gid. */
