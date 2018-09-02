@@ -946,6 +946,8 @@ static int confdb_get_domain_internal(struct confdb_ctx *cdb,
         domain->mpg_mode = MPG_DISABLED;
     } else if (strcasecmp(tmp, "TRUE") == 0) {
         domain->mpg_mode = MPG_ENABLED;
+    } else if (strcasecmp(tmp, "HYBRID") == 0) {
+        domain->mpg_mode = MPG_HYBRID;
     } else {
         DEBUG(SSSDBG_FATAL_FAILURE,
               "Invalid value for %s\n", CONFDB_DOMAIN_AUTO_UPG);
