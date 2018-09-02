@@ -2980,10 +2980,37 @@ subdomain_inherit = ldap_purge_cache_timeout
                     <term>auto_private_groups (string)</term>
                     <listitem>
                         <para>
-                            If this option is enabled, SSSD will automatically
-                            create user private groups based on user's
-                            UID number. The GID number is ignored in this case.
-		        </para>
+                            This option takes any of three available values:
+                            <variablelist>
+                                <varlistentry>
+                                    <term>true</term>
+                                    <listitem>
+                                        <para>
+                                            Create user's private group unconditionally from user's UID number.
+                                            The GID number is ignored in this case.
+                                        </para>
+                                    </listitem>
+                                </varlistentry>
+                                <varlistentry>
+                                    <term>false</term>
+                                    <listitem>
+                                        <para>
+                                            Always use the user's primary GID number.
+                                        </para>
+                                    </listitem>
+                                </varlistentry>
+                                <varlistentry>
+                                    <term>hybrid</term>
+                                    <listitem>
+                                        <para>
+                                            Use the user's primary GID number if available. If the primary GID
+                                            number is not available, generate a private user group using the
+                                            user's UID number.
+                                        </para>
+                                    </listitem>
+                                </varlistentry>
+                            </variablelist>
+                        </para>
 			<para>
 			    For POSIX subdomains, setting the option in the main
 			    domain is inherited in the subdomain.

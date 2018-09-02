@@ -348,6 +348,10 @@ nss_protocol_fill_initgr(struct nss_ctx *nss_ctx,
     orig_gid = sss_view_ldb_msg_find_attr_as_uint64(domain, user,
                                                     SYSDB_PRIMARY_GROUP_GIDNUM,
                                                     0);
+    if (get_domain_mpg_mode(domain) == MPG_HYBRID && orig_gid != 0) {
+        /* In the hybrid mode, we use the original GID, if available */
+        gid = orig_gid;
+    }
 
     /* If the GID of the original primary group is available but equal to the
      * current primary GID it must not be added. */
