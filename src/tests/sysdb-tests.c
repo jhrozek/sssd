@@ -1095,7 +1095,7 @@ START_TEST(test_user_group_by_name)
      * ldap provider differently with auto_private_groups.
      */
     test_ctx->domain->provider = discard_const_p(char, "ldap");
-    test_ctx->domain->mpg = true;
+    test_ctx->domain->mpg_mode = MPG_ENABLED;
 
     data = test_data_new_user(test_ctx, _i);
     fail_if(data == NULL);
@@ -1337,7 +1337,7 @@ START_TEST (test_sysdb_enumgrent)
         return;
     }
 
-    test_ctx->domain->mpg = true;
+    test_ctx->domain->mpg_mode = MPG_ENABLED;
 
     ret = sysdb_enumgrent(test_ctx,
                           test_ctx->domain,
@@ -5821,7 +5821,7 @@ START_TEST(test_sysdb_search_object_by_id)
     fail_unless(ret == EOK, "sysdb_add_group failed with [%d][%s].",
                 ret, strerror(ret));
 
-    test_ctx->domain->mpg = false;
+    test_ctx->domain->mpg_mode = MPG_DISABLED;
     ret = sysdb_add_user(test_ctx->domain, "user1", 4001, id,
                          "User 1", "/home/user1", "/bin/bash",
                          NULL, NULL, 0, 0);
