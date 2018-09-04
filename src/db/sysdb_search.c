@@ -883,6 +883,74 @@ done:
     return ret;
 }
 
+static int sysdb_getgrnam_int(TALLOC_CTX *mem_ctx,
+                              struct sss_domain_info *domain,
+                              struct ldb_dn *base_dn,
+                              const char *fmt_filter,
+                              const char *sanitized_name,
+                              const char *lc_sanitized_name,
+                              struct ldb_result **_res)
+{
+    static const char *attrs[] = SYSDB_GRSRC_ATTRS;
+    int ret;
+
+    ret = ldb_search(domain->sysdb->ldb, mem_ctx, _res, base_dn,
+                     LDB_SCOPE_SUBTREE, attrs, fmt_filter,
+                     lc_sanitized_name, sanitized_name, sanitized_name);
+    if (ret != EOK) {
+        ret = sysdb_error_to_errno(ret);
+        goto done;
+    }
+
+    ret = EOK;
+done:
+    return ret;
+}
+
+static int sysdb_getgrnam_mpg(TALLOC_CTX *mem_ctx,
+                              struct sss_domain_info *domain,
+                              const char *sanitized_name,
+                              const char *lc_sanitized_name,
+                              struct ldb_result **_res)
+{
+    struct ldb_dn *base_dn = NULL;
+    const char *fmt_filter = SYSDB_GRNAM_MPG_FILTER;
+    int ret;
+
+    base_dn = sysdb_domain_dn(mem_ctx, domain);
+    if (base_dn == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sysdb_getgrnam_int(mem_ctx, domain, base_dn, fmt_filter,
+                             sanitized_name, lc_sanitized_name,
+                             _res);
+    talloc_free(base_dn);
+    return ret;
+}
+
+static int sysdb_getgrnam_grp(TALLOC_CTX *mem_ctx,
+                              struct sss_domain_info *domain,
+                              const char *sanitized_name,
+                              const char *lc_sanitized_name,
+                              struct ldb_result **_res)
+{
+    struct ldb_dn *base_dn = NULL;
+    const char *fmt_filter = SYSDB_GRNAM_FILTER;
+    int ret;
+
+    base_dn = sysdb_group_base_dn(mem_ctx, domain);
+    if (base_dn == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sysdb_getgrnam_int(mem_ctx, domain, base_dn, fmt_filter,
+                             sanitized_name, lc_sanitized_name,
+                             _res);
+    talloc_free(base_dn);
+    return ret;
+}
+
 int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
                    struct sss_domain_info *domain,
                    const char *name,
@@ -890,9 +958,7 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
 {
     TALLOC_CTX *tmp_ctx;
     static const char *attrs[] = SYSDB_GRSRC_ATTRS;
-    const char *fmt_filter;
     char *sanitized_name;
-    struct ldb_dn *base_dn;
     struct ldb_result *res = NULL;
     char *lc_sanitized_name;
     const char *originalad_sanitized_name;
@@ -918,18 +984,10 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
          * override and in order to return the proper overridden group
          * we must use the very same search used by a non-mpg domain
          */
-        fmt_filter = SYSDB_GRNAM_MPG_FILTER;
-        base_dn = sysdb_domain_dn(tmp_ctx, domain);
-        if (base_dn == NULL) {
-            ret = ENOMEM;
-            goto done;
-        }
-
-        ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
-                         LDB_SCOPE_SUBTREE, attrs, fmt_filter,
-                         lc_sanitized_name, sanitized_name, sanitized_name);
+        ret = sysdb_getgrnam_mpg(tmp_ctx, domain,
+                                 sanitized_name, lc_sanitized_name,
+                                 &res);
         if (ret != EOK) {
-            ret = sysdb_error_to_errno(ret);
             goto done;
         }
 
@@ -939,29 +997,19 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
 
             if (originalad_sanitized_name != NULL
                     && strcmp(originalad_sanitized_name, sanitized_name) != 0) {
-                fmt_filter = SYSDB_GRNAM_FILTER;
-                base_dn = sysdb_group_base_dn(tmp_ctx, domain);
-                res = NULL;
+                ret = sysdb_getgrnam_grp(tmp_ctx, domain,
+                                         sanitized_name, lc_sanitized_name,
+                                         &res);
+                if (ret != EOK) {
+                    goto done;
+                }
             }
         }
     } else {
-        fmt_filter = SYSDB_GRNAM_FILTER;
-        base_dn = sysdb_group_base_dn(tmp_ctx, domain);
-    }
-    if (base_dn == NULL) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    /* We just do the ldb_search here in case domain is *not* a MPG *or*
-     * it's a MPG and we're dealing with a overriden group, which has to
-     * use the very same filter as a non MPG domain. */
-    if (res == NULL) {
-        ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
-                         LDB_SCOPE_SUBTREE, attrs, fmt_filter,
-                         lc_sanitized_name, sanitized_name, sanitized_name);
+        ret = sysdb_getgrnam_grp(tmp_ctx, domain,
+                                 sanitized_name, lc_sanitized_name,
+                                 &res);
         if (ret != EOK) {
-            ret = sysdb_error_to_errno(ret);
             goto done;
         }
     }
@@ -1076,6 +1124,72 @@ done:
     return ret;
 }
 
+
+static int sysdb_getgrgid_attrs_int(TALLOC_CTX *mem_ctx,
+                                    struct sss_domain_info *domain,
+                                    struct ldb_dn *base_dn,
+                                    const char *fmt_filter,
+                                    gid_t gid,
+                                    const char **attrs,
+                                    struct ldb_result **_res)
+{
+    int ret;
+
+    ret = ldb_search(domain->sysdb->ldb, mem_ctx, _res, base_dn,
+                     LDB_SCOPE_SUBTREE, attrs, fmt_filter,
+                     (unsigned long long) gid);
+    if (ret != EOK) {
+        ret = sysdb_error_to_errno(ret);
+        goto done;
+    }
+
+    ret = EOK;
+done:
+    return ret;
+}
+
+static int sysdb_getgrgid_attrs_mpg(TALLOC_CTX *mem_ctx,
+                                    struct sss_domain_info *domain,
+                                    gid_t gid,
+                                    const char **attrs,
+                                    struct ldb_result **_res)
+{
+    struct ldb_dn *base_dn = NULL;
+    const char *fmt_filter = SYSDB_GRGID_MPG_FILTER;
+    int ret;
+
+    base_dn = sysdb_domain_dn(mem_ctx, domain);
+    if (base_dn == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sysdb_getgrgid_attrs_int(mem_ctx, domain, base_dn, fmt_filter,
+                                   gid, attrs, _res);
+    talloc_free(base_dn);
+    return ret;
+}
+
+static int sysdb_getgrgid_attrs_grp(TALLOC_CTX *mem_ctx,
+                                    struct sss_domain_info *domain,
+                                    gid_t gid,
+                                    const char **attrs,
+                                    struct ldb_result **_res)
+{
+    struct ldb_dn *base_dn = NULL;
+    const char *fmt_filter = SYSDB_GRGID_FILTER;
+    int ret;
+
+    base_dn = sysdb_group_base_dn(mem_ctx, domain);
+    if (base_dn == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sysdb_getgrgid_attrs_int(mem_ctx, domain, base_dn, fmt_filter,
+                                   gid, attrs, _res);
+    talloc_free(base_dn);
+    return ret;
+}
+
 int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
                          struct sss_domain_info *domain,
                          gid_t gid,
@@ -1085,8 +1199,6 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
     TALLOC_CTX *tmp_ctx;
     unsigned long int ul_gid = gid;
     unsigned long int ul_originalad_gid;
-    const char *fmt_filter;
-    struct ldb_dn *base_dn;
     struct ldb_result *res = NULL;
     int ret;
     static const char *default_attrs[] = SYSDB_GRSRC_ATTRS;
@@ -1117,17 +1229,8 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
          * override and in order to return the proper overridden group
          * we must use the very same search used by a non-mpg domain
          */
-        fmt_filter = SYSDB_GRGID_MPG_FILTER;
-        base_dn = sysdb_domain_dn(tmp_ctx, domain);
-        if (base_dn == NULL) {
-            ret = ENOMEM;
-            goto done;
-        }
-
-        ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
-                         LDB_SCOPE_SUBTREE, attrs, fmt_filter, ul_gid);
+        ret = sysdb_getgrgid_attrs_mpg(mem_ctx, domain, gid, attrs, &res);
         if (ret != EOK) {
-            ret = sysdb_error_to_errno(ret);
             goto done;
         }
 
@@ -1136,28 +1239,17 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
                     res->msgs[0], ORIGINALAD_PREFIX SYSDB_GIDNUM, 0);
 
             if (ul_originalad_gid != 0 && ul_originalad_gid != ul_gid) {
-                fmt_filter = SYSDB_GRGID_FILTER;
-                base_dn = sysdb_group_base_dn(tmp_ctx, domain);
-                res = NULL;
+                ret = sysdb_getgrgid_attrs_grp(mem_ctx, domain,
+                                               gid, attrs,
+                                               &res);
+                if (ret != EOK) {
+                    goto done;
+                }
             }
         }
     } else {
-        fmt_filter = SYSDB_GRGID_FILTER;
-        base_dn = sysdb_group_base_dn(tmp_ctx, domain);
-    }
-    if (base_dn == NULL) {
-        ret = ENOMEM;
-        goto done;
-    }
-
-    /* We just do the ldb_search here in case domain is *not* a MPG *or*
-     * it's a MPG and we're dealing with a overriden group, which has to
-     * use the very same filter as a non MPG domain. */
-    if (res == NULL) {
-        ret = ldb_search(domain->sysdb->ldb, tmp_ctx, &res, base_dn,
-                         LDB_SCOPE_SUBTREE, attrs, fmt_filter, ul_gid);
+        ret = sysdb_getgrgid_attrs_grp(mem_ctx, domain, gid, attrs, &res);
         if (ret != EOK) {
-            ret = sysdb_error_to_errno(ret);
             goto done;
         }
     }
