@@ -463,6 +463,75 @@ done:
     return ret;
 }
 
+static int sysdb_group_search_hybrid_retry(TALLOC_CTX *mem_ctx,
+                                           struct sss_domain_info *domain,
+                                           const char *sanitized_name,
+                                           const char *lc_sanitized_name,
+                                           const char **additional_attrs,
+                                           size_t *_msgs_count,
+                                           struct ldb_message ***_msgs)
+{
+    gid_t orig_gid;
+    struct ldb_dn *basedn = NULL;
+    int ret;
+    TALLOC_CTX *tmp_ctx = NULL;
+    char *filter = NULL;
+    struct ldb_message **msgs = NULL;
+    size_t msgs_count = 0;
+    static const char *default_attrs[] = { SYSDB_PRIMARY_GROUP_GIDNUM, NULL };
+    const char **attrs = NULL;
+
+    tmp_ctx = talloc_new(NULL);
+    if (!tmp_ctx) {
+        return ENOMEM;
+    }
+
+    basedn = sysdb_domain_dn(tmp_ctx, domain);
+    if (basedn == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    filter = talloc_asprintf(tmp_ctx, SYSDB_GRNAM_MPG_FILTER, lc_sanitized_name,
+                             sanitized_name, sanitized_name);
+    if (filter == NULL) {
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = add_strings_lists(tmp_ctx, additional_attrs, default_attrs,
+                            false, discard_const(&attrs));
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Cannot combine string lists [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    ret = sysdb_search_entry(tmp_ctx, domain->sysdb, basedn, LDB_SCOPE_SUBTREE,
+                             filter, attrs,
+                             &msgs_count, &msgs);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE,
+              "sysdb_search_entry failed [%d]: %s\n", ret, sss_strerror(ret));
+        goto done;
+    }
+
+    orig_gid = sss_view_ldb_msg_find_attr_as_uint64(domain, msgs[0],
+                                                    SYSDB_PRIMARY_GROUP_GIDNUM,
+                                                    0);
+    if (orig_gid != 0) {
+        DEBUG(SSSDBG_TRACE_LIBS, "User entry has a GID set, not usable as a MPG group\n");
+        ret = ENOENT;
+        goto done;
+    }
+
+    *_msgs_count = msgs_count;
+    *_msgs = talloc_steal(mem_ctx, msgs);
+done:
+    talloc_zfree(tmp_ctx);
+    return ret;
+}
+
 static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
                                 struct sss_domain_info *domain,
                                 const char *name,
@@ -471,7 +540,7 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
                                 struct ldb_message **msg)
 {
     TALLOC_CTX *tmp_ctx;
-    const char *def_attrs[] = { SYSDB_NAME, NULL, NULL };
+    const char *def_attrs[] = { SYSDB_NAME, NULL, NULL, NULL };
     const char *filter_tmpl = NULL;
     struct ldb_message **msgs = NULL;
     struct ldb_dn *basedn;
@@ -480,6 +549,7 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
     char *lc_sanitized_name;
     char *filter;
     int ret;
+    enum sss_domain_mpg_mode mpg_mode = get_domain_mpg_mode(domain);
 
     tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
@@ -494,7 +564,11 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
         break;
     case SYSDB_GROUP:
         def_attrs[1] = SYSDB_GIDNUM;
-        if (sss_domain_is_mpg(domain) && strcasecmp(domain->provider, "local") != 0) {
+        if (mpg_mode == MPG_HYBRID) {
+            filter_tmpl = SYSDB_GRNAM_FILTER;
+            basedn = sysdb_group_base_dn(tmp_ctx, domain);
+        } else if (mpg_mode == MPG_ENABLED
+                   && strcasecmp(domain->provider, "local") != 0) {
             /* When searching a group by name in a MPG domain, we also
              * need to search the user space in order to be able to match
              * a user private group/
@@ -532,6 +606,14 @@ static int sysdb_search_by_name(TALLOC_CTX *mem_ctx,
     ret = sysdb_search_entry(tmp_ctx, domain->sysdb, basedn, LDB_SCOPE_SUBTREE,
                              filter, attrs?attrs:def_attrs,
                              &msgs_count, &msgs);
+    if (ret == ENOENT && mpg_mode == MPG_HYBRID) {
+        DEBUG(SSSDBG_TRACE_INTERNAL, "Retrying for MPG in a hybrid domain\n");
+        ret = sysdb_group_search_hybrid_retry(mem_ctx, domain,
+                                              sanitized_name, lc_sanitized_name,
+                                              attrs?attrs:def_attrs,
+                                              &msgs_count, &msgs);
+    }
+
     if (ret) {
         goto done;
     }

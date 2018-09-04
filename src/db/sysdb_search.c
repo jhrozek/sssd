@@ -963,6 +963,8 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
     char *lc_sanitized_name;
     const char *originalad_sanitized_name;
     int ret;
+    enum sss_domain_mpg_mode mpg_mode = get_domain_mpg_mode(domain);
+    gid_t orig_gid;
 
     tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
@@ -975,7 +977,64 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    if (sss_domain_is_mpg(domain)) {
+    switch (mpg_mode) {
+    case MPG_HYBRID:
+        /* In the hybrid MPG domain, we first search for the real group
+         * and only if it's not found, we fall back to searching the
+         * MPG group. This is because the hybrid mode stores information
+         * internally like a MPG domain, but if the entry does have the
+         * original GID set, we want to avoid returning the MPG group
+         * by name. We first search the 'real' group space explicitly
+         * to make sure that we handle the situation where a real group
+         * exists with the same name as the MPG group.
+         */
+        ret = sysdb_getgrnam_grp(tmp_ctx, domain,
+                                 sanitized_name, lc_sanitized_name,
+                                 &res);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "sysdb_getgrnam_grp failed [%d]: %s\n",
+                  ret, sss_strerror(ret));
+            goto done;
+        }
+
+        if (res->count > 0) {
+            DEBUG(SSSDBG_TRACE_INTERNAL, "Found a real group in a hybrid-MPG domain\n");
+            /* Found something, let's process the result */
+            break;
+        }
+
+        /* Otherwise try the MPG space */
+        ret = sysdb_getgrnam_mpg(tmp_ctx, domain,
+                                 sanitized_name, lc_sanitized_name,
+                                 &res);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "sysdb_getgrnam_mpg failed [%d]: %s\n",
+                  ret, sss_strerror(ret));
+            goto done;
+        }
+
+        if (res->count > 0) {
+            /* If this is a user with the original gid set, we should ignore this result */
+            orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
+                                                domain, res->msgs[0],
+                                                SYSDB_PRIMARY_GROUP_GIDNUM,
+                                                0);
+            if (orig_gid != 0) {
+                DEBUG(SSSDBG_TRACE_INTERNAL,
+                      "Ignoring MPG group for a user with %s set\n",
+                      SYSDB_PRIMARY_GROUP_GIDNUM);
+                res->count = 0;
+                talloc_zfree(res->msgs);
+                break;
+            }
+            /* We found a user with no original GID, we can return the result as
+             * their MPG group
+             */
+        }
+        break;
+    case MPG_ENABLED:
         /* In case the domain supports magic private groups we *must*
          * check whether the searched name is the very same as the
          * originalADname attribute.
@@ -988,6 +1047,9 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
                                  sanitized_name, lc_sanitized_name,
                                  &res);
         if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "sysdb_getgrnam_mpg failed [%d]: %s\n",
+                  ret, sss_strerror(ret));
             goto done;
         }
 
@@ -1001,17 +1063,25 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
                                          sanitized_name, lc_sanitized_name,
                                          &res);
                 if (ret != EOK) {
+                    DEBUG(SSSDBG_OP_FAILURE,
+                          "sysdb_getgrnam_grp failed [%d]: %s\n",
+                          ret, sss_strerror(ret));
                     goto done;
                 }
             }
         }
-    } else {
+        break;
+    case MPG_DISABLED:
         ret = sysdb_getgrnam_grp(tmp_ctx, domain,
                                  sanitized_name, lc_sanitized_name,
                                  &res);
         if (ret != EOK) {
+            DEBUG(SSSDBG_OP_FAILURE,
+                  "sysdb_getgrnam_grp failed [%d]: %s\n",
+                  ret, sss_strerror(ret));
             goto done;
         }
+        break;
     }
 
     ret = mpg_res_convert(res);
@@ -1203,6 +1273,8 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
     int ret;
     static const char *default_attrs[] = SYSDB_GRSRC_ATTRS;
     const char **attrs = NULL;
+    enum sss_domain_mpg_mode mpg_mode = get_domain_mpg_mode(domain);
+    gid_t orig_gid;
 
     tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
@@ -1220,7 +1292,52 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
         }
     }
 
-    if (sss_domain_is_mpg(domain)) {
+    switch (mpg_mode) {
+    case MPG_HYBRID:
+        /* In the hybrid MPG domain, we first search for the real group
+         * and only if it's not found, we fall back to searching the
+         * MPG group. This is because the hybrid mode stores information
+         * internally like a MPG domain, but if the entry does have the
+         * original GID set, we want to avoid returning the MPG group
+         * by ID. We first search the 'real' group space explicitly
+         * to make sure that we handle the situation where a real group
+         * exists with the same ID as the MPG group.
+         */
+        ret = sysdb_getgrgid_attrs_grp(mem_ctx, domain,
+                                       gid, attrs,
+                                       &res);
+        if (ret != EOK) {
+            goto done;
+        }
+
+        if (res->count > 0) {
+            /* Found something, let's process the result */
+            break;
+        }
+
+        /* Otherwise try the MPG space */
+        ret = sysdb_getgrgid_attrs_mpg(mem_ctx, domain, gid, attrs, &res);
+        if (ret != EOK) {
+            goto done;
+        }
+
+        if (res->count > 0) {
+            /* If this is a user with the original gid set, we should ignore this result */
+            orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
+                                                domain, res->msgs[0],
+                                                SYSDB_PRIMARY_GROUP_GIDNUM,
+                                                0);
+            if (orig_gid != 0) {
+                res->count = 0;
+                talloc_zfree(res->msgs);
+                break;
+            }
+            /* We found a user with no original GID, we can return the result as
+             * their MPG group
+             */
+        }
+        break;
+    case MPG_ENABLED:
         /* In case the domain supports magic private groups we *must*
          * check whether the searched gid is the very same as the
          * originalADgidNumber attribute.
@@ -1247,11 +1364,13 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
                 }
             }
         }
-    } else {
+        break;
+    case MPG_DISABLED:
         ret = sysdb_getgrgid_attrs_grp(mem_ctx, domain, gid, attrs, &res);
         if (ret != EOK) {
             goto done;
         }
+        break;
     }
 
     ret = mpg_res_convert(res);
