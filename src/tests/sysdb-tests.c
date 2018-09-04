@@ -1113,6 +1113,56 @@ START_TEST(test_user_group_by_name)
 }
 END_TEST
 
+START_TEST(test_user_group_by_name_hybrid)
+{
+    struct sysdb_test_ctx *test_ctx;
+    struct ldb_message *msg;
+    int ret;
+    struct sysdb_attrs *attrs;
+
+    /* Setup */
+    ret = setup_sysdb_tests(&test_ctx);
+    if (ret != EOK) {
+        fail("Could not set up the test");
+        return;
+    }
+
+    test_ctx->domain->provider = discard_const_p(char, "ldap");
+    test_ctx->domain->mpg_mode = MPG_HYBRID;
+
+    /* giduser has a group GID stored in SYSDB_PRIMARY_GROUP_GIDNUM where his
+     * original primary group is referenced
+     */
+    ret = sysdb_store_group(test_ctx->domain,
+                            "gidgroup", 8764, NULL, 0, 0);
+    ck_assert_int_eq(ret, EOK);
+
+    attrs = sysdb_new_attrs(test_ctx);
+    fail_if(attrs == NULL);
+    ret = sysdb_attrs_add_uint32(attrs, SYSDB_PRIMARY_GROUP_GIDNUM, 8764);
+    ck_assert_int_eq(ret, EOK);
+
+    ret = sysdb_store_user(test_ctx->domain,
+                           "giduser", "x",
+                           8765, 0,
+                           "giduser",
+                           "/home/giduser",
+                           "/bin/bash",
+                           NULL, attrs, NULL, -1, 0);
+    ck_assert_int_eq(ret, EOK);
+
+    /* We shouldn't be able to find this user's MPG, because in hybrid domain,
+     * because this entry has the original group GID set
+     */
+    ret = sysdb_search_group_by_name(test_ctx,
+                                     test_ctx->domain,
+                                     "giduser",
+                                     NULL,
+                                     &msg);
+    ck_assert_int_eq(ret, ENOENT);
+}
+END_TEST
+
 START_TEST(test_user_group_by_name_local)
 {
     struct sysdb_test_ctx *test_ctx;
@@ -7391,6 +7441,8 @@ Suite *create_sysdb_suite(void)
     tcase_add_test(tc_sysdb, test_sysdb_add_nonposix_user);
     tcase_add_test(tc_sysdb, test_sysdb_add_nonposix_group);
 
+    /* Tests for the hybrid MPG mapping */
+    tcase_add_test(tc_sysdb, test_user_group_by_name_hybrid);
 /* ===== NETGROUP TESTS ===== */
 
     /* Create a new netgroup */
