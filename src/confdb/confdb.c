@@ -1011,9 +1011,10 @@ static int confdb_get_domain_internal(struct confdb_ctx *cdb,
         ret = get_entry_as_bool(res->msgs[0], &domain->enumerate,
                                 CONFDB_DOMAIN_ENUMERATE, enum_default);
         if(ret != EOK) {
-            DEBUG(SSSDBG_FATAL_FAILURE,
-                  "Invalid value for %s\n", CONFDB_DOMAIN_ENUMERATE);
-            goto done;
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                  "Invalid value for %s using %s\n",
+                  CONFDB_DOMAIN_ENUMERATE, enum_default ? "true" : "false");
+                  domain->enumerate = enum_default;
         }
     }
 
