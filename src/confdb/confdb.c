@@ -1524,6 +1524,9 @@ int confdb_get_domains(struct confdb_ctx *cdb,
             DEBUG(SSSDBG_FATAL_FAILURE,
                   "Error (%d [%s]) retrieving domain [%s], skipping!\n",
                   ret, sss_strerror(ret), domlist[i]);
+            sss_log(SSS_LOG_ALERT,
+                    "Error (%d [%s]) retrieving domain [%s], skipping!\n",
+                    ret, sss_strerror(ret), domlist[i]);
             continue;
         }
 
