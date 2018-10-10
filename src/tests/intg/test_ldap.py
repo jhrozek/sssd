@@ -1455,19 +1455,19 @@ def test_ldap_auto_private_groups_direct_no_gid(ldap_conn, mpg_setup_no_gid):
 @pytest.fixture
 def mpg_setup_hybrid(request, ldap_conn):
     """
-    This setup stores the primari GID in the "mail" attribute to simulate
-    the scenario where only some user have the gidNumber set at all.
+    This setup creates two users - one with a GID that corresponds to
+    a group and another with GID that does not.
     """
     ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
 
-    ent_list.add_user("user_with_gid", 1001, 5555, mail='2001')
-    ent_list.add_group_bis("group1", 2001)
-    ent_list.add_group_bis("with_gid_group1", 10010, ["user_with_gid"])
-    ent_list.add_group_bis("with_gid_group2", 10011, ["user_with_gid"])
+    ent_list.add_user("user_with_group", 1001, 2001)
+    ent_list.add_group_bis("user_with_group_pvt", 2001)
+    ent_list.add_group_bis("with_group_group1", 10010, ["user_with_group"])
+    ent_list.add_group_bis("with_group_group2", 10011, ["user_with_group"])
 
-    ent_list.add_user("user_with_no_gid", 1002, 6666)
-    ent_list.add_group_bis("no_gid_group1", 10020, ["user_with_no_gid"])
-    ent_list.add_group_bis("no_gid_group2", 10021, ["user_with_no_gid"])
+    ent_list.add_user("user_with_no_group", 1002, 1002)
+    ent_list.add_group_bis("no_group_group1", 10020, ["user_with_no_group"])
+    ent_list.add_group_bis("no_group_group2", 10021, ["user_with_no_group"])
 
     create_ldap_entries(ldap_conn, ent_list)
     create_ldap_cleanup(request, ldap_conn, None)
@@ -1477,7 +1477,6 @@ def mpg_setup_hybrid(request, ldap_conn):
         unindent("""
             [domain/LDAP]
             auto_private_groups = hybrid
-            ldap_user_gid_number = mail
         """).format(**locals())
     create_conf_fixture(request, conf)
     create_sssd_fixture(request)
@@ -1492,8 +1491,8 @@ def test_ldap_auto_private_groups_hybrid_direct(ldap_conn, mpg_setup_hybrid):
     See also ticket https://pagure.io/SSSD/sssd/issue/1872
     """
     # Make sure the user's GID is taken from their gidNumber, if available
-    ent.assert_passwd_by_name("user_with_gid",
-                              dict(name="user_with_gid", uid=1001, gid=2001))
+    ent.assert_passwd_by_name("user_with_group",
+                              dict(name="user_with_group", uid=1001, gid=2001))
 
     # The user's secondary groups list must be correct as well and include
     # the primary gid, too
@@ -1507,8 +1506,8 @@ def test_ldap_auto_private_groups_hybrid_direct(ldap_conn, mpg_setup_hybrid):
             ", ".join(["%s" % s for s in sorted(user_with_gid_ids)])
         )
 
-    # On the other hand, if no gidNumber is available, sssd should generate
-    # the private group on its own
+    # On the other hand, if the gidNumber is the same as UID, SSSD should
+    # just autogenerate the private group on its own
     ent.assert_passwd_by_name("user_with_no_gid",
                               dict(name="user_with_no_gid",
                                    uid=1002, gid=1002))
