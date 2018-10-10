@@ -3003,9 +3003,14 @@ subdomain_inherit = ldap_purge_cache_timeout
                                     <term>hybrid</term>
                                     <listitem>
                                         <para>
-                                            Use the user's primary GID number if available. If the primary GID
-                                            number is not available, generate a private user group using the
-                                            user's UID number.
+                                            Use the user's primary GID
+                                            number if available and if the
+                                            GID number has a different
+                                            value from the user's UID
+                                            number. If the primary GID
+                                            has the same value as the UID,
+                                            generate a private user group
+                                            using the user's UID/GID number.
                                         </para>
                                     </listitem>
                                 </varlistentry>

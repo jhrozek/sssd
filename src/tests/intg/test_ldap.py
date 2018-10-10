@@ -1466,6 +1466,7 @@ def mpg_setup_hybrid(request, ldap_conn):
     ent_list.add_group_bis("with_group_group2", 10011, ["user_with_group"])
 
     ent_list.add_user("user_with_no_group", 1002, 1002)
+    # Note - there is no group for the GID 1002
     ent_list.add_group_bis("no_group_group1", 10020, ["user_with_no_group"])
     ent_list.add_group_bis("no_group_group2", 10021, ["user_with_no_group"])
 
@@ -1496,32 +1497,32 @@ def test_ldap_auto_private_groups_hybrid_direct(ldap_conn, mpg_setup_hybrid):
 
     # The user's secondary groups list must be correct as well and include
     # the primary gid, too
-    user_with_gid_ids = [2001, 10010, 10011]
-    (res, errno, gids) = sssd_id.call_sssd_initgroups("user_with_gid", 2001)
+    user_with_group_ids = [2001, 10010, 10011]
+    (res, errno, gids) = sssd_id.call_sssd_initgroups("user_with_group", 2001)
     assert res == sssd_id.NssReturnCode.SUCCESS
 
-    assert sorted(gids) == sorted(user_with_gid_ids), \
+    assert sorted(gids) == sorted(user_with_group_ids), \
         "result: %s\n expected %s" % (
             ", ".join(["%s" % s for s in sorted(gids)]),
-            ", ".join(["%s" % s for s in sorted(user_with_gid_ids)])
+            ", ".join(["%s" % s for s in sorted(user_with_group_ids)])
         )
 
     # On the other hand, if the gidNumber is the same as UID, SSSD should
     # just autogenerate the private group on its own
-    ent.assert_passwd_by_name("user_with_no_gid",
-                              dict(name="user_with_no_gid",
+    ent.assert_passwd_by_name("user_with_no_group",
+                              dict(name="user_with_no_group",
                                    uid=1002, gid=1002))
 
     # The user's secondary groups list must be correct as well. Since there was
     # no original GID, it is not added to the list
-    user_without_gid_ids = [1002, 10020, 10021]
-    (res, errno, gids) = sssd_id.call_sssd_initgroups("user_with_no_gid", 1002)
+    user_without_group_ids = [1002, 10020, 10021]
+    (res, errno, gids) = sssd_id.call_sssd_initgroups("user_with_no_group", 1002)
     assert res == sssd_id.NssReturnCode.SUCCESS
 
-    assert sorted(gids) == sorted(user_without_gid_ids), \
+    assert sorted(gids) == sorted(user_without_group_ids), \
         "result: %s\n expected %s" % (
             ", ".join(["%s" % s for s in sorted(gids)]),
-            ", ".join(["%s" % s for s in sorted(user_without_gid_ids)])
+            ", ".join(["%s" % s for s in sorted(user_without_group_ids)])
         )
 
 
@@ -1535,8 +1536,8 @@ def test_ldap_auto_private_groups_hybrid_priv_group(ldap_conn,
     """
     # Make sure the private group of user who has this group set in their
     # gidNumber is resolvable by name and by GID
-    ent.assert_group_by_name("group1", dict(gid=2001, mem=ent.contains_only()))
-    ent.assert_group_by_gid(2001, dict(name="group1", mem=ent.contains_only()))
+    ent.assert_group_by_name("user_with_group_pvt", dict(gid=2001, mem=ent.contains_only()))
+    ent.assert_group_by_gid(2001, dict(name="user_with_group_pvt", mem=ent.contains_only()))
 
 
 def rename_setup_no_cleanup(request, ldap_conn, cleanup_ent=None):
