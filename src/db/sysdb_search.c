@@ -1298,10 +1298,11 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
          * and only if it's not found, we fall back to searching the
          * MPG group. This is because the hybrid mode stores information
          * internally like a MPG domain, but if the entry does have the
-         * original GID set, we want to avoid returning the MPG group
-         * by ID. We first search the 'real' group space explicitly
-         * to make sure that we handle the situation where a real group
-         * exists with the same ID as the MPG group.
+         * original GID set, we want to only return the user entry if
+         * the original GID has the same value as the UID.  We first
+         * search the 'real' group space explicitly to make sure that
+         * we handle the situation where a real group exists with the
+         * same ID as the MPG group.
          */
         ret = sysdb_getgrgid_attrs_grp(mem_ctx, domain,
                                        gid, attrs,
@@ -1322,7 +1323,12 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
         }
 
         if (res->count > 0) {
-            /* If this is a user with the original gid set, we should ignore this result */
+            /* If this is a user with the original gid different from the UID,
+             * we should ignore the result
+             */
+            uid_t uid;
+
+            uid =
             orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
                                                 domain, res->msgs[0],
                                                 SYSDB_PRIMARY_GROUP_GIDNUM,
