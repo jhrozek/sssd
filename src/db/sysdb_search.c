@@ -1328,12 +1328,15 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
              */
             uid_t uid;
 
-            uid =
+            uid = sss_view_ldb_msg_find_attr_as_uint64(
+                                                domain, res->msgs[0],
+                                                SYSDB_UIDNUM,
+                                                0);
             orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
                                                 domain, res->msgs[0],
                                                 SYSDB_PRIMARY_GROUP_GIDNUM,
                                                 0);
-            if (orig_gid != 0) {
+            if (orig_gid != uid) {
                 res->count = 0;
                 talloc_zfree(res->msgs);
                 break;
