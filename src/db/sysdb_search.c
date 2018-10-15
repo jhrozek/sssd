@@ -1016,12 +1016,20 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
         }
 
         if (res->count > 0) {
-            /* If this is a user with the original gid set, we should ignore this result */
+            /* If this is a user with the original gid different from the UID,
+             * we should ignore the result
+             */
+            uid_t uid;
+
+            uid = sss_view_ldb_msg_find_attr_as_uint64(
+                                                domain, res->msgs[0],
+                                                SYSDB_UIDNUM,
+                                                0);
             orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
                                                 domain, res->msgs[0],
                                                 SYSDB_PRIMARY_GROUP_GIDNUM,
                                                 0);
-            if (orig_gid != 0) {
+            if (orig_gid != uid) {
                 DEBUG(SSSDBG_TRACE_INTERNAL,
                       "Ignoring MPG group for a user with %s set\n",
                       SYSDB_PRIMARY_GROUP_GIDNUM);
@@ -1029,8 +1037,8 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
                 talloc_zfree(res->msgs);
                 break;
             }
-            /* We found a user with no original GID, we can return the result as
-             * their MPG group
+            /* We found a user with uidNumber equal to the gidNumber, so we
+             * can return the result as their MPG group
              */
         }
         break;
@@ -1341,8 +1349,8 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
                 talloc_zfree(res->msgs);
                 break;
             }
-            /* We found a user with no original GID, we can return the result as
-             * their MPG group
+            /* We found a user with uidNumber equal to the gidNumber, so we
+             * can return the result as their MPG group
              */
         }
         break;
