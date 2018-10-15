@@ -917,7 +917,7 @@ static int sysdb_getgrnam_mpg(TALLOC_CTX *mem_ctx,
     const char *fmt_filter = SYSDB_GRNAM_MPG_FILTER;
     int ret;
 
-    base_dn = sysdb_base_dn(domain->sysdb, mem_ctx);
+    base_dn = sysdb_domain_dn(mem_ctx, domain);
     if (base_dn == NULL) {
         return ENOMEM;
     }
@@ -1158,7 +1158,7 @@ static int sysdb_getgrgid_attrs_mpg(TALLOC_CTX *mem_ctx,
     const char *fmt_filter = SYSDB_GRGID_MPG_FILTER;
     int ret;
 
-    base_dn = sysdb_base_dn(domain->sysdb, mem_ctx);
+    base_dn = sysdb_domain_dn(mem_ctx, domain);
     if (base_dn == NULL) {
         return ENOMEM;
     }
