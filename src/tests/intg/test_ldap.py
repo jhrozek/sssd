@@ -35,7 +35,6 @@ import ldap_ent
 import sssd_id
 import sssd_ldb
 from util import unindent
-from util import run_shell
 from sssd_nss import NssReturnCode
 from sssd_passwd import call_sssd_getpwnam, call_sssd_getpwuid
 from sssd_group import call_sssd_getgrnam, call_sssd_getgrgid

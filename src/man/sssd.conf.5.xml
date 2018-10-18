@@ -2995,7 +2995,8 @@ subdomain_inherit = ldap_purge_cache_timeout
                                     <term>false</term>
                                     <listitem>
                                         <para>
-                                            Always use the user's primary GID number.
+                                            Always use the user's primary GID number. The GID number must refer
+                                            to a group object in the LDAP database.
                                         </para>
                                     </listitem>
                                 </varlistentry>
@@ -3003,14 +3004,16 @@ subdomain_inherit = ldap_purge_cache_timeout
                                     <term>hybrid</term>
                                     <listitem>
                                         <para>
-                                            Use the user's primary GID
-                                            number if available and if the
-                                            GID number has a different
-                                            value from the user's UID
-                                            number. If the primary GID
-                                            has the same value as the UID,
-                                            generate a private user group
-                                            using the user's UID/GID number.
+                                            If the primary GID number in the user object is different from the UID
+                                            number value, its value must correspond to a group object. However, if
+                                            the GID number is the same as the UID number value and the corresponding
+                                            group object does not exist, a user private group is automatically
+                                            generated.
+                                        </para>
+                                        <para>
+                                            This feature is useful for environments that wish to stop maintaining
+                                            a separate group objects for the user private groups, but also wish
+                                            to retain the existing user private groups.
                                         </para>
                                     </listitem>
                                 </varlistentry>
