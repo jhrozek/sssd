@@ -1,0 +1,94 @@
+---
+# See https://lgtm.com/help/lgtm/customizing-file-classification
+
+path_classifiers:
+  src:
+    - src
+extraction:
+  cpp:
+    prepare:
+      packages:
+        - autoconf
+        - automake
+        - autopoint
+        - check
+        - cifs-utils
+        - clang
+        - dh-apparmor
+        - dnsutils
+        - docbook-xml
+        - docbook-xsl
+        - gettext
+        - krb5-config
+        - libc-ares-dev
+        - libcmocka-dev
+        - libcollection-dev
+        - libdbus-1-dev
+        - libdhash-dev
+        - libglib2.0-dev
+        - libini-config-dev
+        - libkeyutils-dev
+        - libkrb5-dev
+        - libldap2-dev
+        - libldb-dev
+        - libltdl-dev
+        - libnfsidmap-dev
+        - libnl-3-dev
+        - libnl-route-3-dev
+        - libnspr4-dev
+        - libnss3-dev
+        - libpam0g-dev
+        - libpcre3-dev
+        - libpopt-dev
+        - libsasl2-dev
+        - libselinux1-dev
+        - libsemanage1-dev
+        - libsmbclient-dev
+        - libsystemd-dev
+        - libtalloc-dev
+        - libtdb-dev
+        - libtevent-dev
+        - libtool
+        - libtool-bin
+        - libxml2-utils
+        - make
+        - python-dev
+        - python3-dev
+        - samba-dev
+        - systemd
+        - xml-core
+        - xsltproc
+        - libssl-dev
+        - fakeroot
+        - libnss-wrapper
+        - libuid-wrapper
+        - libpam-wrapper
+        - python-pytest
+        - python-ldap
+        - python-ldb
+        - python-requests
+        - python-psutil
+        - ldap-utils
+        - slapd
+        - systemtap-sdt-dev
+        - libhttp-parser-dev
+        - libjansson-dev
+        - libcurl4-openssl-dev
+        - krb5-kdc
+        - krb5-admin-server
+        - krb5-user
+        - uuid-dev
+        - dbus
+        - python-dbus
+        - pep8
+        - libssl-dev
+        - gnutls-bin
+        - softhsm2
+        - libp11-kit-dev
+    configure:
+      command:
+        - autoreconf --install --force
+        - ./configure
+    index:
+      build_command:
+        - make -j2 -s
