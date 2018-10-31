@@ -424,9 +424,8 @@ static void users_get_search(struct tevent_req *req)
     }
 
     subreq = sdap_get_users_send(state, state->ev,
-                                 state->domain, state->sysdb,
+                                 state->sdom,
                                  state->ctx->opts,
-                                 state->sdom->user_search_bases,
                                  sdap_id_op_handle(state->op),
                                  state->attrs, state->filter,
                                  dp_opt_get_int(state->ctx->opts->basic,
@@ -955,7 +954,8 @@ static void groups_get_done(struct tevent_req *subreq)
     }
 
     if (ret == ENOENT
-            && sss_domain_is_mpg(state->domain) == true
+            && (get_domain_mpg_mode(state->domain) == MPG_ENABLED
+                || get_domain_mpg_mode(state->domain) == MPG_HYBRID)
             && !state->conn->no_mpg_user_fallback) {
         /* The requested filter did not find a group. Before giving up, we must
          * also check if the GID can be resolved through a primary group of a

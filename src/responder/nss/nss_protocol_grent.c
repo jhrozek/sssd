@@ -325,7 +325,6 @@ nss_protocol_fill_initgr(struct nss_ctx *nss_ctx,
     size_t body_len;
     size_t rp;
     gid_t gid;
-    gid_t uid;
     gid_t orig_gid;
     errno_t ret;
     int i;
@@ -345,19 +344,10 @@ nss_protocol_fill_initgr(struct nss_ctx *nss_ctx,
     rp = 2 * sizeof(uint32_t);
 
     user = result->msgs[0];
-    uid = sss_view_ldb_msg_find_attr_as_uint64(domain, user, SYSDB_UIDNUM, 0);
     gid = sss_view_ldb_msg_find_attr_as_uint64(domain, user, SYSDB_GIDNUM, 0);
     orig_gid = sss_view_ldb_msg_find_attr_as_uint64(domain, user,
                                                     SYSDB_PRIMARY_GROUP_GIDNUM,
                                                     0);
-    if (get_domain_mpg_mode(domain) == MPG_HYBRID
-            && orig_gid != 0
-            && orig_gid != uid) {
-        /* The hybrid domain uses the original gidNumber (the one set in the user
-         * entry) if and only if the uidNumber value is different
-         */
-        gid = orig_gid;
-    }
 
     /* If the GID of the original primary group is available but equal to the
      * current primary GID it must not be added. */
