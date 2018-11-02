@@ -79,3 +79,22 @@ class TestSanitySSSD(object):
                 start_krb5kdc = 'systemctl start krb5kdc'
                 multihost.master[0].run_command(start_dirsrv)
                 multihost.master[0].run_command(start_krb5kdc)
+
+
+    def test_nonprivileged_user(self, multihost):
+        """ Test that SSSD is able to run as a non-privileged user """
+        multihost.master[0].transport.get_file('/etc/sssd/sssd.conf',
+                                               '/tmp/sssd.conf')
+        sssdconfig = ConfigParser.RawConfigParser()
+        sssdconfig.read('/tmp/sssd.conf')
+        sssd_section = "sssd"
+        if sssd_section in sssdconfig.sections():
+            sssdconfig.set(sssd_section, 'user', 'sssd')
+            with open('/tmp/sssd.conf', "w") as fd:
+                sssdconfig.write(fd)
+        else:
+            print("Could not fetch sssd.conf")
+            assert False
+        multihost.master[0].transport.put_file('/tmp/sssd.conf',
+                                               '/etc/sssd/sssd.conf')
+        multihost.master[0].service_sssd('restart')
