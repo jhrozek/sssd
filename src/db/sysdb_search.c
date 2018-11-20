@@ -951,6 +951,12 @@ static int sysdb_getgrnam_grp(TALLOC_CTX *mem_ctx,
     return ret;
 }
 
+static int sysdb_getgrgid_attrs_grp(TALLOC_CTX *mem_ctx,
+                                    struct sss_domain_info *domain,
+                                    gid_t gid,
+                                    const char **attrs,
+                                    struct ldb_result **_res);
+
 int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
                    struct sss_domain_info *domain,
                    const char *name,
@@ -964,7 +970,6 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
     const char *originalad_sanitized_name;
     int ret;
     enum sss_domain_mpg_mode mpg_mode = get_domain_mpg_mode(domain);
-    gid_t orig_gid;
 
     tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
@@ -1020,16 +1025,18 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
              * we should ignore the result
              */
             uid_t uid;
+            uid_t gid;
+            struct ldb_result *real_group_res;
 
             uid = sss_view_ldb_msg_find_attr_as_uint64(
                                                 domain, res->msgs[0],
                                                 SYSDB_UIDNUM,
                                                 0);
-            orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
+            gid = sss_view_ldb_msg_find_attr_as_uint64(
                                                 domain, res->msgs[0],
-                                                SYSDB_PRIMARY_GROUP_GIDNUM,
+                                                SYSDB_GIDNUM,
                                                 0);
-            if (orig_gid != uid) {
+            if (gid != uid) {
                 DEBUG(SSSDBG_TRACE_INTERNAL,
                       "Ignoring MPG group for a user with %s set\n",
                       SYSDB_PRIMARY_GROUP_GIDNUM);
@@ -1037,6 +1044,23 @@ int sysdb_getgrnam(TALLOC_CTX *mem_ctx,
                 talloc_zfree(res->msgs);
                 break;
             }
+
+            /* We also need to ignore the result if there is a real group
+             * with this GID. Since the BE_REQ_USER call already fetches
+             * the primary group, checking the cache is enough
+             */
+            ret = sysdb_getgrgid_attrs_grp(mem_ctx, domain,
+                                           gid, attrs,
+                                           &real_group_res);
+            if (ret == EOK && real_group_res->count > 0) {
+                DEBUG(SSSDBG_TRACE_INTERNAL,
+                      "Ignoring MPG group for a user with %s set\n",
+                      SYSDB_PRIMARY_GROUP_GIDNUM);
+                res->count = 0;
+                talloc_zfree(res->msgs);
+                break;
+            }
+
             /* We found a user with uidNumber equal to the gidNumber, so we
              * can return the result as their MPG group
              */
@@ -1282,7 +1306,6 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
     static const char *default_attrs[] = SYSDB_GRSRC_ATTRS;
     const char **attrs = NULL;
     enum sss_domain_mpg_mode mpg_mode = get_domain_mpg_mode(domain);
-    gid_t orig_gid;
 
     tmp_ctx = talloc_new(NULL);
     if (!tmp_ctx) {
@@ -1340,11 +1363,7 @@ int sysdb_getgrgid_attrs(TALLOC_CTX *mem_ctx,
                                                 domain, res->msgs[0],
                                                 SYSDB_UIDNUM,
                                                 0);
-            orig_gid = sss_view_ldb_msg_find_attr_as_uint64(
-                                                domain, res->msgs[0],
-                                                SYSDB_PRIMARY_GROUP_GIDNUM,
-                                                0);
-            if (orig_gid != uid) {
+            if (gid != uid) {
                 res->count = 0;
                 talloc_zfree(res->msgs);
                 break;
