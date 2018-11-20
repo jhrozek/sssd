@@ -424,9 +424,8 @@ static void users_get_search(struct tevent_req *req)
     }
 
     subreq = sdap_get_users_send(state, state->ev,
-                                 state->domain, state->sysdb,
+                                 state->sdom,
                                  state->ctx->opts,
-                                 state->sdom->user_search_bases,
                                  sdap_id_op_handle(state->op),
                                  state->attrs, state->filter,
                                  dp_opt_get_int(state->ctx->opts->basic,

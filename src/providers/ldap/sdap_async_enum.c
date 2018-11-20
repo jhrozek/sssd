@@ -524,11 +524,10 @@ static struct tevent_req *enum_users_send(TALLOC_CTX *memctx,
      * search base at a time.
      */
 
-    subreq = sdap_get_users_send(state, state->ev,
-                                 state->sdom->dom,
-                                 state->sdom->dom->sysdb,
+    subreq = sdap_get_users_send(state,
+                                 state->ev,
+                                 state->sdom,
                                  state->ctx->opts,
-                                 state->sdom->user_search_bases,
                                  sdap_id_op_handle(state->op),
                                  state->attrs, state->filter,
                                  dp_opt_get_int(state->ctx->opts->basic,

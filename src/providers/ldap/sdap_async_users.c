@@ -743,7 +743,6 @@ done:
     return ret;
 }
 
-
 /* ==Search-Users-with-filter============================================= */
 
 struct sdap_search_user_state {
@@ -986,12 +985,192 @@ int sdap_search_user_recv(TALLOC_CTX *memctx, struct tevent_req *req,
     return EOK;
 }
 
+struct sdap_get_users_primary_group_state {
+    struct tevent_context *ev;
+    struct sdap_domain *sdom;
+    struct sdap_options *opts;
+    struct sdap_handle *sh;
+    struct sysdb_attrs **users;
+    size_t count;
+
+    const char *oc_list;
+    const char **attrs;
+    size_t idx;
+    char *filter;
+};
+
+static int sdap_get_users_primary_group_step(struct tevent_req *req);
+static void sdap_get_users_primary_group_step_done(struct tevent_req *subreq);
+
+static struct tevent_req *
+sdap_get_users_primary_group_send(TALLOC_CTX *mem_ctx,
+                                  struct tevent_context *ev,
+                                  struct sdap_domain *sdom,
+                                  struct sdap_options *opts,
+                                  struct sdap_handle *sh,
+                                  struct sysdb_attrs **users,
+                                  size_t count)
+{
+    struct tevent_req *req;
+    struct sdap_get_users_primary_group_state *state;
+    errno_t ret;
+    const char *member_filter[2] = { NULL, NULL };
+
+    req = tevent_req_create(mem_ctx, &state, struct sdap_get_users_primary_group_state);
+    if (req == NULL) {
+        return NULL;
+    }
+    state->ev = ev;
+    state->sdom = sdom;
+    state->opts = opts;
+    state->sh = sh;
+    state->users = users;
+    state->count = count;
+
+    /* Since the groups are created as incomplete, don't bother fetching any possible
+     * members to speed up parsing
+     */
+    member_filter[0] = (const char *) opts->group_map[SDAP_AT_GROUP_MEMBER].name;
+    member_filter[1] = NULL;
+
+    ret = build_attrs_from_map(state, opts->group_map, SDAP_OPTS_GROUP,
+                               member_filter, &state->attrs, NULL);
+    if (ret != EOK) {
+        goto immediate;
+    }
+
+    state->oc_list = sdap_make_oc_list(state, opts->group_map);
+    if (state->oc_list == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to create objectClass list.\n");
+        ret = ENOMEM;
+        goto immediate;
+    }
+
+    ret = sdap_get_users_primary_group_step(req);
+    if (ret != EAGAIN) {
+        goto immediate;
+    }
+
+    return req;
+
+immediate:
+    if (ret == EOK) {
+        tevent_req_done(req);
+    } else if (ret != EAGAIN) {
+        tevent_req_error(req, ret);
+    }
+    tevent_req_post(req, ev);
+    return req;
+}
+
+static int sdap_get_users_primary_group_step(struct tevent_req *req)
+{
+    struct sdap_get_users_primary_group_state *state = tevent_req_data(req,
+                                    struct sdap_get_users_primary_group_state);
+    struct tevent_req *subreq = NULL;
+    uid_t uid;
+    uid_t gid;
+    errno_t ret;
+
+    talloc_zfree(state->filter);
+
+    for (; state->idx < state->count; state->idx++) {
+        ret = sysdb_attrs_get_uint32_t(state->users[state->idx],
+                                       SYSDB_GIDNUM,
+                                       &gid);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_MINOR_FAILURE, "The user has no UID\n");
+            continue;
+        }
+
+        ret = sysdb_attrs_get_uint32_t(state->users[state->idx],
+                                       SYSDB_UIDNUM,
+                                       &uid);
+        if (ret != EOK) {
+            DEBUG(SSSDBG_MINOR_FAILURE, "The user has no GID\n");
+            continue;
+        }
+
+        if (uid == gid) {
+            /* This user is a candidate for gid check, run the search */
+            break;
+        }
+    }
+
+    if (state->idx >= state->count) {
+        return EOK;
+    }
+
+    state->filter = talloc_asprintf(
+                            state,
+                            "(&(%s=%"SPRIgid")(%s)(%s=*)(&(%s=*)(!(%s=0))))",
+                            state->opts->group_map[SDAP_AT_GROUP_GID].name,
+                            gid,
+                            state->oc_list,
+                            state->opts->group_map[SDAP_AT_GROUP_NAME].name,
+                            state->opts->group_map[SDAP_AT_GROUP_GID].name,
+                            state->opts->group_map[SDAP_AT_GROUP_GID].name);
+    if (state->filter == NULL) {
+        return ENOMEM;
+    }
+
+    subreq = sdap_get_groups_send(state, state->ev, state->sdom,
+                                  state->opts, state->sh, state->attrs,
+                                  state->filter,
+                                  dp_opt_get_int(state->opts->basic,
+                                                 SDAP_SEARCH_TIMEOUT),
+                                  SDAP_LOOKUP_SINGLE,
+                                  true); /* no_members = true */
+    if (subreq == NULL) {
+        return ENOMEM;
+    }
+    tevent_req_set_callback(subreq, sdap_get_users_primary_group_step_done, req);
+
+    return EAGAIN;
+}
+
+static void sdap_get_users_primary_group_step_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct sdap_get_users_primary_group_state *state = tevent_req_data(req,
+                                    struct sdap_get_users_primary_group_state);
+    errno_t ret;
+
+    ret = sdap_get_groups_recv(subreq, state, NULL);
+    talloc_zfree(subreq);
+    if (ret != EOK && ret != ENOENT) {
+        /* Explicitly ignore ENOENT */
+        tevent_req_error(req, ret);
+        return;
+    }
+
+    state->idx++;
+    ret = sdap_get_users_primary_group_step(req);
+    if (ret != EAGAIN && ret != EOK) {
+        tevent_req_error(req, ret);
+        return;
+    } else if (ret == EOK) {
+        tevent_req_done(req);
+        return;
+    }
+
+    /* another loop continues */
+}
+
+static int sdap_get_users_primary_group_recv(struct tevent_req *req)
+{
+    TEVENT_REQ_RETURN_ON_ERROR(req);
+    return EOK;
+}
+
 /* ==Search-And-Save-Users-with-filter============================================= */
 struct sdap_get_users_state {
-    struct sysdb_ctx *sysdb;
+    struct tevent_context *ev;
+    struct sdap_domain *sdom;
     struct sdap_options *opts;
-    struct sss_domain_info *dom;
     const char *filter;
+    struct sdap_handle *sh;
 
     char *higher_usn;
     struct sysdb_attrs **users;
@@ -1000,13 +1179,12 @@ struct sdap_get_users_state {
 };
 
 static void sdap_get_users_done(struct tevent_req *subreq);
+static void sdap_get_users_pgroups_resolved(struct tevent_req *subreq);
 
 struct tevent_req *sdap_get_users_send(TALLOC_CTX *memctx,
                                        struct tevent_context *ev,
-                                       struct sss_domain_info *dom,
-                                       struct sysdb_ctx *sysdb,
+                                       struct sdap_domain *sdom,
                                        struct sdap_options *opts,
-                                       struct sdap_search_base **search_bases,
                                        struct sdap_handle *sh,
                                        const char **attrs,
                                        const char *filter,
@@ -1022,9 +1200,10 @@ struct tevent_req *sdap_get_users_send(TALLOC_CTX *memctx,
     req = tevent_req_create(memctx, &state, struct sdap_get_users_state);
     if (!req) return NULL;
 
-    state->sysdb = sysdb;
+    state->ev = ev;
+    state->sdom = sdom;
     state->opts = opts;
-    state->dom = dom;
+    state->sh = sh;
 
     state->filter = filter;
     PROBE(SDAP_SEARCH_USER_SEND, state->filter);
@@ -1046,7 +1225,8 @@ struct tevent_req *sdap_get_users_send(TALLOC_CTX *memctx,
         }
     }
 
-    subreq = sdap_search_user_send(state, ev, dom, opts, search_bases,
+    subreq = sdap_search_user_send(state, ev, state->sdom->dom,
+                                   opts, state->sdom->user_search_bases,
                                    sh, attrs, filter, timeout, lookup_type);
     if (subreq == NULL) {
         ret = ENOMEM;
@@ -1085,8 +1265,8 @@ static void sdap_get_users_done(struct tevent_req *subreq)
 
     PROBE(SDAP_SEARCH_USER_SAVE_BEGIN, state->filter);
 
-    ret = sdap_save_users(state, state->sysdb,
-                          state->dom, state->opts,
+    ret = sdap_save_users(state, state->sdom->dom->sysdb,
+                          state->sdom->dom, state->opts,
                           state->users, state->count,
                           state->mapped_attrs,
                           &state->higher_usn);
@@ -1099,6 +1279,38 @@ static void sdap_get_users_done(struct tevent_req *subreq)
     }
 
     DEBUG(SSSDBG_TRACE_ALL, "Saving %zu Users - Done\n", state->count);
+
+    if (get_domain_mpg_mode(state->sdom->dom) != MPG_HYBRID) {
+        tevent_req_done(req);
+        return;
+    }
+
+    subreq = sdap_get_users_primary_group_send(state,
+                                               state->ev,
+                                               state->sdom,
+                                               state->opts,
+                                               state->sh,
+                                               state->users,
+                                               state->count);
+    if (subreq == NULL) {
+        tevent_req_error(req, ENOMEM);
+        return;
+    }
+    tevent_req_set_callback(subreq, sdap_get_users_pgroups_resolved, req);
+}
+
+static void sdap_get_users_pgroups_resolved(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    errno_t ret;
+
+    ret = sdap_get_users_primary_group_recv(subreq);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        tevent_req_error(req, ret);
+        return;
+    }
 
     tevent_req_done(req);
 }
