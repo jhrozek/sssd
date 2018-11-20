@@ -249,7 +249,6 @@
                         NULL}
 
 #define SYSDB_GRSRC_ATTRS {SYSDB_NAME, SYSDB_GIDNUM, \
-                           SYSDB_PRIMARY_GROUP_GIDNUM, \
                            SYSDB_UIDNUM, \
                            SYSDB_MEMBERUID, \
                            SYSDB_MEMBER, \
