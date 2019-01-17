@@ -30,7 +30,7 @@
 #include "sss_client/sudo/sss_sudo.h"
 #include "sss_client/sudo/sss_sudo_private.h"
 
-int sss_sudo_create_query(uid_t uid,
+static int sss_sudo_create_query(uid_t uid,
                           const char *username,
                           uint8_t **_query,
                           size_t *_query_len);
@@ -120,7 +120,7 @@ int sss_sudo_send_recv_defaults(uid_t uid,
                                       _error, _domainname, _result);
 }
 
-int sss_sudo_create_query(uid_t uid, const char *username,
+static int sss_sudo_create_query(uid_t uid, const char *username,
                           uint8_t **_query, size_t *_query_len)
 {
     uint8_t *data = NULL;
