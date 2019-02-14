@@ -244,6 +244,12 @@ BuildRequires: libcurl-devel
 BuildRequires: gdm-pam-extensions-devel
 %endif
 
+# Test CA requires openssl independent if SSSD is build with NSS or openssl,
+# openssh is needed for ssh-keygen and iNSS builds need nss-tools for certutil
+BuildRequires: openssl
+BuildRequires: openssh
+BuildRequires: nss-tools
+
 %description
 Provides a set of daemons to manage access to remote directories and
 authentication mechanisms. It provides an NSS and PAM interface toward
