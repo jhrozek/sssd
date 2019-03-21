@@ -162,7 +162,10 @@ typedef void (be_svc_callback_fn_t)(void *, struct fo_server *);
 
 int be_init_failover(struct be_ctx *ctx);
 int be_fo_is_srv_identifier(const char *server);
-int be_fo_add_service(struct be_ctx *ctx, const char *service_name,
+int be_fo_add_service(struct be_ctx *ctx,
+                      const char *service_name,
+                      size_t n_lookahead_primary,
+                      size_t n_lookahead_backup,
                       datacmp_fn user_data_cmp);
 int be_fo_service_add_callback(TALLOC_CTX *memctx,
                                struct be_ctx *ctx, const char *service_name,

@@ -241,6 +241,7 @@ static int test_fo_setup(void **state)
     assert_non_null(test_ctx->fo_ctx);
 
     ret = fo_new_service(test_ctx->fo_ctx, "ldap",
+                         0, 0,
                          test_fo_srv_data_cmp,
                          &test_ctx->fo_svc);
     assert_int_equal(ret, ERR_OK);

@@ -1031,7 +1031,7 @@ int ipa_service_init(TALLOC_CTX *memctx, struct be_ctx *ctx,
         goto done;
     }
 
-    ret = be_fo_add_service(ctx, "IPA", ipa_user_data_cmp);
+    ret = be_fo_add_service(ctx, "IPA", 0, 0, ipa_user_data_cmp);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to create failover service!\n");
         goto done;

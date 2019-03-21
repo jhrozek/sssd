@@ -766,13 +766,13 @@ ad_failover_init(TALLOC_CTX *mem_ctx, struct be_ctx *bectx,
         goto done;
     }
 
-    ret = be_fo_add_service(bectx, ad_service, ad_user_data_cmp);
+    ret = be_fo_add_service(bectx, ad_service, 0, 0, ad_user_data_cmp);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to create failover service!\n");
         goto done;
     }
 
-    ret = be_fo_add_service(bectx, ad_gc_service, ad_user_data_cmp);
+    ret = be_fo_add_service(bectx, ad_gc_service, 0, 0, ad_user_data_cmp);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to create GC failover service!\n");
         goto done;

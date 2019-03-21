@@ -76,6 +76,13 @@ struct fo_service {
      * is needed in fail over duplicate servers detection.
      */
     datacmp_fn user_data_cmp;
+    /* How many host names should be resolved after service resolution
+     * This is typically set if the resolve callback needs a certain
+     * number of server names to e.g. write them to the kdcinfo
+     * plugin
+     */
+    size_t n_lookahead_primary;
+    size_t n_lookahead_backup;
 };
 
 struct fo_server {
@@ -426,6 +433,8 @@ service_destructor(struct fo_service *service)
 
 int
 fo_new_service(struct fo_ctx *ctx, const char *name,
+               size_t n_lookahead_primary,
+               size_t n_lookahead_backup,
                datacmp_fn user_data_cmp,
                struct fo_service **_service)
 {
@@ -455,6 +464,8 @@ fo_new_service(struct fo_ctx *ctx, const char *name,
     }
 
     service->user_data_cmp = user_data_cmp;
+    service->n_lookahead_primary = n_lookahead_primary;
+    service->n_lookahead_backup = n_lookahead_backup;
 
     service->ctx = ctx;
     DLIST_ADD(ctx->service_list, service);
@@ -981,6 +992,7 @@ set_lookup_hook(struct tevent_context *ev,
 
 struct resolve_service_state {
     struct fo_server *server;
+    struct fo_service *service;
 
     struct resolv_ctx *resolv;
     struct tevent_context *ev;
@@ -988,6 +1000,10 @@ struct resolve_service_state {
     struct fo_ctx *fo_ctx;
 
     int gethostbyname_ret;
+
+    bool srv_resolved;
+    size_t n_primary_names;
+    size_t n_backup_names;
 };
 
 static errno_t fo_resolve_service_activate_timeout(struct tevent_req *req,
@@ -996,6 +1012,8 @@ static void fo_resolve_service_cont(struct tevent_req *subreq);
 static void fo_resolve_service_done(struct tevent_req *subreq);
 static void fo_resolve_service_notify(struct tevent_req *req);
 static bool fo_resolve_service_server(struct tevent_req *req);
+static int fo_resolve_service_lookahead(struct tevent_req *req);
+static void fo_resolve_lookahead_done(struct tevent_req *subreq);
 
 /* Forward declarations for SRV resolving */
 
@@ -1032,6 +1050,7 @@ fo_resolve_service_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
     state->resolv = resolv;
     state->ev = ev;
     state->fo_ctx = ctx;
+    state->service = service;
 
     ret = get_first_server_entity(service, &server);
     if (ret != EOK) {
@@ -1126,6 +1145,7 @@ fo_resolve_service_cont(struct tevent_req *subreq)
     int ret;
 
     ret = resolve_srv_recv(subreq, &state->server);
+    state->srv_resolved = true;
     talloc_zfree(subreq);
 
     /* We will proceed normally on ERR_SRV_DUPLICATES and if the server
@@ -1170,7 +1190,24 @@ fo_resolve_service_server(struct tevent_req *req)
             return true;
         }
         break;
-    default: /* The name is already resolved. Return immediately. */
+    default: /* The name is already resolved */
+
+        /* Check if we need to resolve additional names */
+        ret = fo_resolve_service_lookahead(req);
+        if (ret == EAGAIN) {
+            /* If yes, the request must be added to the waiting queue */
+            ret = set_lookup_hook(state->ev, state->server, req);
+            if (ret != EOK) {
+                tevent_req_error(req, ret);
+                return true;
+            }
+            return false;
+        } else if (ret != EOK) {
+            tevent_req_error(req, ret);
+            return true;
+        }
+
+        /* If not, just mark the request as done */
         tevent_req_done(req);
         return true;
     }
@@ -1187,6 +1224,7 @@ fo_resolve_service_done(struct tevent_req *subreq)
                                         struct resolve_service_state);
     struct server_common *common;
     int resolv_status;
+    int lookahead_ret;
 
     common = state->server->common;
     if (common->rhostent != NULL) {
@@ -1211,13 +1249,21 @@ fo_resolve_service_done(struct tevent_req *subreq)
             state->gethostbyname_ret = EAGAIN;
         }
         set_server_common_status(common, SERVER_NOT_WORKING);
-    } else {
-        set_server_common_status(common, SERVER_NAME_RESOLVED);
+        goto done;
+    }
+
+    set_server_common_status(common, SERVER_NAME_RESOLVED);
+
+    lookahead_ret = fo_resolve_service_lookahead(req);
+    if (lookahead_ret == EAGAIN) {
+        return;
     }
 
     /* If we are not resolving other names, just use gethostbyname_ret
      * to mark the request done
      */
+done:
+    /* Take care of all requests for this server. */
     fo_resolve_service_notify(req);
 }
 
@@ -1245,6 +1291,69 @@ static void fo_resolve_service_notify(struct tevent_req *req)
             tevent_req_done(request->req);
         }
     }
+}
+
+static int
+fo_resolve_service_lookahead(struct tevent_req *req)
+{
+    struct resolve_service_state *state = tevent_req_data(req,
+                                        struct resolve_service_state);
+    struct fo_server *srv_iter;
+    struct tevent_req *subreq;
+
+    if (state->service->n_lookahead_primary == 0
+            && state->service->n_lookahead_backup == 0) {
+        return EOK;
+    }
+
+    DLIST_FOR_EACH(srv_iter, state->server) {
+        if (state->n_primary_names >= state->service->n_lookahead_primary
+              && state->n_backup_names >= state->service->n_lookahead_backup) {
+            return EOK;
+        }
+
+        if (fo_is_srv_lookup(srv_iter) && state->srv_resolved == false) {
+            subreq = resolve_srv_send(state, state->ev, state->resolv,
+                                      state->fo_ctx, srv_iter,
+                                      RESOLVE_SRV_FLG_STATELESS);
+            if (subreq == NULL) {
+                return ENOMEM;
+            }
+
+            tevent_req_set_callback(subreq, fo_resolve_lookahead_done, req);
+            return EAGAIN;
+        }
+
+        if (fo_get_server_name(srv_iter) != NULL) {
+            srv_iter->primary ? \
+                state->n_primary_names++ : \
+                state->n_backup_names++;
+            continue;
+        }
+    }
+
+    return EOK;
+}
+
+static void
+fo_resolve_lookahead_done(struct tevent_req *subreq)
+{
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    errno_t ret;
+
+    ret = resolve_srv_recv(subreq, NULL);
+    talloc_zfree(subreq);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE, "SRV resolution failed: %d\n", ret);
+        /* Don't fail the whole request */
+    }
+
+    /* We already resolved the SRV query and since there can be only
+     * one per failover service and we already resolved the name,
+     * just mark the request as done
+     */
+    fo_resolve_service_notify(req);
 }
 
 int

@@ -954,7 +954,7 @@ int krb5_service_init(TALLOC_CTX *memctx, struct be_ctx *ctx,
         goto done;
     }
 
-    ret = be_fo_add_service(ctx, service_name, krb5_user_data_cmp);
+    ret = be_fo_add_service(ctx, service_name, 0, 0, krb5_user_data_cmp);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to create failover service!\n");
         goto done;

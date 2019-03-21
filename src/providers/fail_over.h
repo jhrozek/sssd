@@ -104,6 +104,8 @@ typedef int (*datacmp_fn)(void*, void*);
  */
 int fo_new_service(struct fo_ctx *ctx,
                    const char *name,
+                   size_t n_lookahead_primary,
+                   size_t n_lookahead_backup,
                    datacmp_fn user_data_cmp,
                    struct fo_service **_service);
 
