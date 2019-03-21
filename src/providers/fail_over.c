@@ -995,10 +995,17 @@ static void fo_resolve_service_done(struct tevent_req *subreq);
 static bool fo_resolve_service_server(struct tevent_req *req);
 
 /* Forward declarations for SRV resolving */
+
+/* If the flag is set, resolve_srv_send will not
+ * touch any state, just resolve servers
+ */
+#define RESOLVE_SRV_FLG_STATELESS   0x001
+
 static struct tevent_req *
 resolve_srv_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
                     struct resolv_ctx *resolv, struct fo_ctx *ctx,
-                    struct fo_server *server);
+                    struct fo_server *server,
+                    int flags);
 static int
 resolve_srv_recv(struct tevent_req *req, struct fo_server **server);
 
@@ -1041,7 +1048,7 @@ fo_resolve_service_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
     if (fo_is_srv_lookup(server)) {
         /* Don't know the server yet, must do a SRV lookup */
         subreq = resolve_srv_send(state, ev, resolv,
-                                  ctx, server);
+                                  ctx, server, 0);
         if (subreq == NULL) {
             ret = ENOMEM;
             goto done;
@@ -1258,12 +1265,14 @@ struct resolve_srv_state {
     struct resolv_ctx *resolv;
     struct tevent_context *ev;
     struct fo_ctx *fo_ctx;
+    int flags;
 };
 
 static struct tevent_req *
 resolve_srv_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
                  struct resolv_ctx *resolv, struct fo_ctx *ctx,
-                 struct fo_server *server)
+                 struct fo_server *server,
+                 int flags)
 {
     int ret;
     struct tevent_req *req;
@@ -1280,6 +1289,7 @@ resolve_srv_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
     state->resolv = resolv;
     state->fo_ctx = ctx;
     state->meta = server->srv_data->meta;
+    state->flags = flags;
 
     status = get_srv_data_status(server->srv_data);
     DEBUG(SSSDBG_FUNC_DATA, "The status of SRV lookup is %s\n",
@@ -1440,10 +1450,16 @@ resolve_srv_done(struct tevent_req *subreq)
         state->out = state->meta->next;
 
         /* And remove meta server from the server list. It will be
-         * inserted again during srv collapse. */
+         * inserted again during srv collapse. Note that this needs
+         * to be done even in the stateless run.
+         */
         DLIST_REMOVE(state->service->server_list, state->meta);
-        if (state->service->last_tried_server == state->meta) {
-            state->service->last_tried_server = state->out;
+
+        if ((state->flags & RESOLVE_SRV_FLG_STATELESS) == false) {
+            /* Stateless runs do not alter service state */
+            if (state->service->last_tried_server == state->meta) {
+                state->service->last_tried_server = state->out;
+            }
         }
 
         set_srv_data_status(state->meta->srv_data, SRV_RESOLVED);
