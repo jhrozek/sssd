@@ -986,12 +986,15 @@ struct resolve_service_state {
     struct tevent_context *ev;
     struct tevent_timer *timeout_handler;
     struct fo_ctx *fo_ctx;
+
+    int gethostbyname_ret;
 };
 
 static errno_t fo_resolve_service_activate_timeout(struct tevent_req *req,
             struct tevent_context *ev, const unsigned long timeout_seconds);
 static void fo_resolve_service_cont(struct tevent_req *subreq);
 static void fo_resolve_service_done(struct tevent_req *subreq);
+static void fo_resolve_service_notify(struct tevent_req *req);
 static bool fo_resolve_service_server(struct tevent_req *req);
 
 /* Forward declarations for SRV resolving */
@@ -1154,8 +1157,7 @@ fo_resolve_service_server(struct tevent_req *req)
             tevent_req_error(req, ENOMEM);
             return true;
         }
-        tevent_req_set_callback(subreq, fo_resolve_service_done,
-                                state->server->common);
+        tevent_req_set_callback(subreq, fo_resolve_service_done, req);
         fo_set_server_status(state->server, SERVER_RESOLVING_NAME);
         /* FALLTHROUGH */
         SSS_ATTRIBUTE_FALLTHROUGH;
@@ -1179,21 +1181,23 @@ fo_resolve_service_server(struct tevent_req *req)
 static void
 fo_resolve_service_done(struct tevent_req *subreq)
 {
-    struct server_common *common = tevent_req_callback_data(subreq,
-                                                        struct server_common);
+    struct tevent_req *req = tevent_req_callback_data(subreq,
+                                                      struct tevent_req);
+    struct resolve_service_state *state = tevent_req_data(req,
+                                        struct resolve_service_state);
+    struct server_common *common;
     int resolv_status;
-    struct resolve_service_request *request;
-    int ret;
 
+    common = state->server->common;
     if (common->rhostent != NULL) {
         talloc_zfree(common->rhostent);
     }
 
-    ret = resolv_gethostbyname_recv(subreq, common,
-                                    &resolv_status, NULL,
-                                    &common->rhostent);
+    state->gethostbyname_ret = resolv_gethostbyname_recv(subreq, common,
+                                                         &resolv_status, NULL,
+                                                         &common->rhostent);
     talloc_zfree(subreq);
-    if (ret != EOK) {
+    if (state->gethostbyname_ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to resolve server '%s': %s\n",
                   common->name,
                   resolv_strerror(resolv_status));
@@ -1203,15 +1207,29 @@ fo_resolve_service_done(struct tevent_req *subreq)
          * If there are no more servers to try, the next request would
          * just shortcut with ENOENT.
          */
-        if (ret == ENOENT) {
-            ret = EAGAIN;
+        if (state->gethostbyname_ret == ENOENT) {
+            state->gethostbyname_ret = EAGAIN;
         }
         set_server_common_status(common, SERVER_NOT_WORKING);
     } else {
         set_server_common_status(common, SERVER_NAME_RESOLVED);
     }
 
-    /* Take care of all requests for this server. */
+    /* If we are not resolving other names, just use gethostbyname_ret
+     * to mark the request done
+     */
+    fo_resolve_service_notify(req);
+}
+
+static void fo_resolve_service_notify(struct tevent_req *req)
+{
+    struct resolve_service_request *request;
+    struct resolve_service_state *state = tevent_req_data(req,
+                                        struct resolve_service_state);
+    struct server_common *common;
+
+    common = state->server->common;
+
     while ((request = common->request_list) != NULL) {
         DLIST_REMOVE(common->request_list, request);
 
@@ -1221,8 +1239,8 @@ fo_resolve_service_done(struct tevent_req *subreq)
          */
         tevent_req_defer_callback(request->req, request->ev);
 
-        if (ret) {
-            tevent_req_error(request->req, ret);
+        if (state->gethostbyname_ret) {
+            tevent_req_error(request->req, state->gethostbyname_ret);
         } else {
             tevent_req_done(request->req);
         }
