@@ -184,7 +184,6 @@ static void test_kcm_ccache_marshall_unmarshall(void **state)
 
     ret = kcm_ccache_to_sec_input(test_ctx,
                                   cc,
-                                  &owner,
                                   &payload);
     assert_int_equal(ret, EOK);
 
@@ -248,7 +247,6 @@ static void test_kcm_ccache_no_princ(void **state)
 
     ret = kcm_ccache_to_sec_input(test_ctx,
                                   cc,
-                                  &owner,
                                   &payload);
     assert_int_equal(ret, EOK);
 

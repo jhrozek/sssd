@@ -206,7 +206,7 @@ static errno_t kcm_ccache_to_secdb_kv(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
-    ret = kcm_ccache_to_sec_input(mem_ctx, cc, client, &payload);
+    ret = kcm_ccache_to_sec_input(mem_ctx, cc, &payload);
     if (ret != EOK) {
         DEBUG(SSSDBG_CRIT_FAILURE,
               "Cannot convert ccache to a secret [%d][%s]\n", ret, sss_strerror(ret));
@@ -1233,7 +1233,7 @@ static struct tevent_req *ccdb_secdb_mod_send(TALLOC_CTX *mem_ctx,
 
     kcm_mod_cc(cc, mod_cc);
 
-    ret = kcm_ccache_to_sec_input(state, cc, client, &payload);
+    ret = kcm_ccache_to_sec_input(state, cc, &payload);
     if (ret != EOK) {
         goto immediate;
     }
@@ -1309,7 +1309,7 @@ static struct tevent_req *ccdb_secdb_store_cred_send(TALLOC_CTX *mem_ctx,
         goto immediate;
     }
 
-    ret = kcm_ccache_to_sec_input(state, cc, client, &payload);
+    ret = kcm_ccache_to_sec_input(state, cc, &payload);
     if (ret != EOK) {
         goto immediate;
     }

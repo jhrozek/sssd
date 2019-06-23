@@ -339,7 +339,6 @@ errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
 /* Convert a kcm_ccache to a key-value pair to be stored in secrets */
 errno_t kcm_ccache_to_sec_input(TALLOC_CTX *mem_ctx,
                                 struct kcm_ccache *cc,
-                                struct cli_creds *client,
                                 struct sss_iobuf **_payload);
 
 #endif /* _KCMSRV_CCACHE_H_ */
