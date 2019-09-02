@@ -912,6 +912,22 @@ AC_DEFUN([WITH_KCM],
     AM_CONDITIONAL([BUILD_KCM], [test x"$with_kcm" = xyes])
   ])
 
+AC_DEFUN([WITH_OPENSHIFT],
+  [ AC_ARG_WITH([openshift],
+                [AC_HELP_STRING([--with-openshift],
+                                [Whether to build with OpenShift provider [no]]
+                               )
+                ],
+                [with_openshift=$withval],
+                with_openshift=no
+               )
+
+    if test x"$with_openshift" = xyes; then
+        AC_DEFINE(BUILD_OPENSHIFT, 1, [whether to build with OpenShift provider])
+    fi
+    AM_CONDITIONAL([BUILD_OPENSHIFT], [test x"$with_openshift" = xyes])
+  ])
+
 AC_DEFUN([WITH_SECRETS_DB_PATH],
   [ AC_ARG_WITH([secrets-db-path],
                 [AC_HELP_STRING([--with-secrets-db-path=PATH],

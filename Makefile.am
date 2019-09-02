@@ -386,6 +386,12 @@ sssdlib_LTLIBRARIES += \
     $(NULL)
 endif # HAVE_INOTIFY
 
+if BUILD_OPENSHIFT
+sssdlib_LTLIBRARIES += \
+    libsss_openshift.la \
+    $(NULL)
+endif # BUILD_OPENSHIFT
+
 ldblib_LTLIBRARIES = \
     memberof.la
 
@@ -849,6 +855,7 @@ dist_noinst_HEADERS = \
     src/providers/ad/ad_subdomains.h \
     src/providers/proxy/proxy.h \
     src/providers/files/files_private.h \
+    src/providers/openshift/openshift_private.h \
     src/tools/tools_util.h \
     src/tools/sss_sync_ops.h \
     src/resolv/async_resolv.h \
@@ -4563,6 +4570,26 @@ libsss_ad_la_LIBADD = \
 libsss_ad_la_LDFLAGS = \
     -avoid-version \
     -module
+
+libsss_openshift_la_SOURCES = \
+    src/providers/openshift/openshift_init.c \
+    src/providers/openshift/openshift_id.c \
+    src/providers/openshift/openshift_auth.c \
+    $(NULL)
+libsss_openshift_la_CFLAGS = \
+    $(AM_CFLAGS) \
+    $(NULL)
+libsss_openshift_la_LIBADD = \
+    $(TALLOC_LIBS) \
+    $(TEVENT_LIBS) \
+    $(LDB_LIBS) \
+    $(PAM_LIBS) \
+    $(SSSD_INTERNAL_LTLIBS) \
+    $(NULL)
+libsss_openshift_la_LDFLAGS = \
+    -avoid-version \
+    -module \
+    $(NULL)
 
 krb5_child_SOURCES = \
     src/providers/krb5/krb5_child.c \

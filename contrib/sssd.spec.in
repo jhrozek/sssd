@@ -148,6 +148,11 @@
     %global enable_local_provider --enable-local-provider
 %endif
 
+%global with_openshift 1
+%if (0%{?with_openshift} == 1)
+    %global with_openshift_option --with-openshift
+%endif
+
 Name: @PACKAGE_NAME@
 Version: @PACKAGE_VERSION@
 Release: 0@PRERELEASE_VERSION@%{?dist}
@@ -282,6 +287,8 @@ BuildRequires: systemtap-sdt-devel
 %endif
 %if (0%{?with_secrets} == 1)
 BuildRequires: http-parser-devel
+%endif
+%if (0%{?with_secrets} == 1 || 0%{?with_openshift} == 1)
 BuildRequires: libcurl-devel
 %endif
 %if (0%{?with_kcm} == 1)
@@ -777,6 +784,18 @@ An implementation of a Kerberos KCM server. Use this package if you want to
 use the KCM: Kerberos credentials cache.
 %endif
 
+%if (0%{?with_openshift} == 1)
+%package openshift
+Summary: An openshift provider for SSSD
+Group:  Applications/System
+License: GPLv3+
+Requires: sssd-common = %{version}-%{release}
+%{?systemd_requires}
+
+%description openshift
+An openshift provider for SSSD
+%endif
+
 %prep
 %setup -q -n %{name}-%{version}
 
@@ -813,6 +832,7 @@ autoreconf -ivf
     %{?with_secret_responder} \
     %{?with_kcm_option} \
     %{?with_idmap_version} \
+    %{?with_openshift_option} \
     %{?enable_local_provider} \
     %{?experimental}
 
@@ -916,6 +936,9 @@ do
             ;;
         sssd-ad*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_ad.lang
+            ;;
+        sssd-openshift*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_openshift.lang
             ;;
         sssd-proxy*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_proxy.lang
@@ -1375,6 +1398,13 @@ done
 %{_unitdir}/sssd-secrets.service
 %{_mandir}/man5/sssd-secrets.5*
 %endif
+%endif
+
+%if (0%{?with_openshift} == 1)
+%files openshift
+#%files openshift -f sssd_openshift.lang
+%license COPYING
+%{_libdir}/%{name}/libsss_openshift.so
 %endif
 
 %pre common

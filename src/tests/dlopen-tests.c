@@ -145,6 +145,10 @@ struct so {
     { "libsss_ad_tests.so", { LIBPFX"libdlopen_test_providers.so",
                               LIBPFX"libsss_ad_tests.so", NULL } },
 #endif
+#ifdef BUILD_OPENSHIFT
+    { "libsss_openshift.so", { LIBPFX"libdlopen_test_providers.so",
+                               LIBPFX"libsss_openshift.so", NULL } },
+#endif /* BUILD_OPENSHIFT */
     { NULL }
 };
 
