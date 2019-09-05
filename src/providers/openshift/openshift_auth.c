@@ -32,13 +32,20 @@
  * non-qualified, but SSSD stores both user and group names qualified
  * with the SSSD domain name. Turn a ocp_user_info structure with
  * raw names into one with names qualified based on a given domain.
+ *
+ * In addition, the "additional_group" is added, if present, as if it
+ * was a group stored in OCP. This is done to prevent the group from
+ * being presumed removed from the server side and then removed from
+ * cache.
  */
 static struct ocp_user_info *ocp_user_domain_qualify(TALLOC_CTX *mem_ctx,
                                                      struct sss_domain_info *domain,
+                                                     const char *additional_group,
                                                      struct ocp_user_info *raw)
 {
     errno_t ret;
     struct ocp_user_info *qualified = NULL;
+    size_t i;
 
     qualified = talloc_zero(mem_ctx, struct ocp_user_info);
     if (qualified == NULL) {
@@ -55,13 +62,13 @@ static struct ocp_user_info *ocp_user_domain_qualify(TALLOC_CTX *mem_ctx,
 
     qualified->groups = talloc_zero_array(qualified,
                                           const char *,
-                                          raw->ngroups + 1);
+                                          raw->ngroups + 2); /* NULL terminator and the additional group */
     if (qualified->groups == NULL) {
         ret = ENOMEM;
         goto done;
     }
 
-    for (size_t i = 0; i < raw->ngroups; i++) {
+    for (i = 0; i < raw->ngroups; i++) {
         qualified->groups[i] = sss_create_internal_fqname(qualified->groups,
                                                           raw->groups[i],
                                                           domain->name);
@@ -71,6 +78,15 @@ static struct ocp_user_info *ocp_user_domain_qualify(TALLOC_CTX *mem_ctx,
         }
     }
     qualified->ngroups = raw->ngroups;
+
+    if (additional_group != NULL) {
+        qualified->groups[i] = additional_group;
+        if (qualified->groups[i] == NULL) {
+            ret = ENOMEM;
+            goto done;
+        }
+        qualified->ngroups++;
+    }
 
     ret = EOK;
 done:
@@ -101,7 +117,7 @@ static errno_t add_missing_groups(struct sss_domain_info *domain,
     bool in_transaction = false;
     TALLOC_CTX *tmp_ctx;
     struct ldb_result *res;
-    struct sysdb_attrs *group_attrs;
+    struct sysdb_attrs *group_attrs = NULL;
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -295,6 +311,7 @@ done:
 }
 
 struct openshift_auth_state {
+    struct openshift_auth_ctx *auth_ctx;
     struct sss_domain_info *dom;
     struct pam_data *pd;
 };
@@ -322,9 +339,9 @@ openshift_auth_handler_send(TALLOC_CTX *mem_ctx,
         state->pd->pam_status = PAM_SYSTEM_ERR;
         goto immediately;
     }
-
     state->pd = pd;
     state->pd->pam_status = PAM_SYSTEM_ERR;
+    state->auth_ctx = auth_ctx;
 
     subreq = token_review_auth_send(state,
                                     auth_ctx->be->ev,
@@ -369,6 +386,7 @@ static void openshift_auth_handler_done(struct tevent_req *subreq)
      */
     sss_user_info = ocp_user_domain_qualify(state,
                                             state->dom,
+                                            state->auth_ctx->additional_group,
                                             raw_user_info);
     if (sss_user_info == NULL) {
         ret = ENOMEM;

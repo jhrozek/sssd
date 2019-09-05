@@ -22,6 +22,7 @@
 
 #include "providers/data_provider/dp.h"
 #include "providers/openshift/openshift_private.h"
+#include "providers/openshift/openshift_opts.h"
 
 #include "util/strtonum.h" /* strtouint32() */
 
@@ -114,6 +115,7 @@ static errno_t resolve_ocp_user(TALLOC_CTX *mem_ctx,
     uid_t user_uid;
     struct timeval tv;
     struct ocp_user_removal_ctx  *user_rm_ctx;
+    char *add_groups[2];
 
     tmp_ctx = talloc_new(NULL);
     if (tmp_ctx == NULL) {
@@ -169,6 +171,8 @@ static errno_t resolve_ocp_user(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
+    /* FIXME: transaction!! */
+
     /* create the user */
     ret = sysdb_store_user(id_ctx->domain,
                            name,
@@ -186,6 +190,28 @@ static errno_t resolve_ocp_user(TALLOC_CTX *mem_ctx,
     if (ret != EOK) {
         DEBUG(SSSDBG_OP_FAILURE,
               "Could not store the user %s [%d]: %s\n",
+              name, ret, sss_strerror(ret));
+        goto done;
+    }
+
+    /*
+     * Explicitly add the user into the additional group even before
+     * authentication. This might not actually be needed, but some
+     * clients might use the list of groups returned before auth as
+     * canonical and if the group is only added during auth, it might
+     * be missing from the effective list.
+     */
+    add_groups[0] = dp_opt_get_string(id_ctx->id_opts, OCP_ADDTL_GROUP);
+    add_groups[1] = NULL;
+
+    DEBUG(SSSDBG_TRACE_INTERNAL,
+          "Updating memberships for %s\n", name);
+    ret = sysdb_update_members(id_ctx->domain, name, SYSDB_MEMBER_USER,
+                               (const char *const *) add_groups,
+                               NULL);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE,
+              "Could not update sysdb memberships for %s: %d [%s]\n",
               name, ret, sss_strerror(ret));
         goto done;
     }

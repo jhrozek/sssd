@@ -24,8 +24,16 @@
 
 #include "src/providers/data_provider.h"
 
+extern struct dp_option id_opts[];
 extern struct dp_option auth_opts[];
 extern struct dp_option access_opts[];
+
+enum ocp_id_opt {
+    OCP_ADDTL_GROUP = 0,
+
+    OCP_OPTS_ID /* opts counter */
+};
+
 
 enum ocp_auth_opt {
     API_SERVER_URL = 0,

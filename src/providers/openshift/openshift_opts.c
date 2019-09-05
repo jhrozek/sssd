@@ -21,6 +21,11 @@
 
 #include "src/providers/data_provider.h"
 
+struct dp_option id_opts[] = {
+    { "ocp_additional_group_name", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+    DP_OPTION_TERMINATOR
+};
+
 struct dp_option auth_opts[] = {
     { "ocp_api_server_url", DP_OPT_STRING, NULL_STRING, NULL_STRING },
     DP_OPTION_TERMINATOR

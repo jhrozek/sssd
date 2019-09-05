@@ -34,6 +34,8 @@ struct openshift_init_ctx {
     struct openshift_id_ctx  *id_ctx;
     struct openshift_auth_ctx *auth_ctx;
     struct openshift_access_ctx *access_ctx;
+
+    const char *additional_group;
 };
 
 struct openshift_id_ctx {
@@ -41,6 +43,7 @@ struct openshift_id_ctx {
     struct      sss_domain_info *domain;
     size_t      user_quota;
     unsigned    remove_user_timeout;
+    struct dp_option *id_opts;
 };
 
 struct openshift_auth_ctx {
@@ -48,6 +51,7 @@ struct openshift_auth_ctx {
     struct tcurl_ctx *tc_ctx;
 
     struct dp_option *auth_opts;
+    const char *additional_group; /* Pointer to memory owned by init_ctx..hacky? */
 };
 
 struct openshift_access_ctx {

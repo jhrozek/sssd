@@ -25,6 +25,19 @@
 #include "util/util.h"
 #include "util/tev_curl.h"
 
+/* FIXME: perhaps it would be nice to rather check the wheel group's
+ * GID from /etc/group and add wheel to the sssd cache as well?
+ */
+static errno_t create_additional_group(struct sss_domain_info *domain,
+                                       const char *name)
+{
+    if (name == NULL) {
+        return EOK;
+    }
+
+    return sysdb_add_group(domain, name, 0, NULL, 0, time(NULL));
+}
+
 int sssm_openshift_init(TALLOC_CTX *mem_ctx,
                         struct be_ctx *be_ctx,
                         struct data_provider *provider,
@@ -33,6 +46,7 @@ int sssm_openshift_init(TALLOC_CTX *mem_ctx,
 {
     errno_t ret;
     struct openshift_init_ctx *init_ctx;
+    const char *additional_group;
 
     init_ctx = talloc_zero(mem_ctx, struct openshift_init_ctx);
     if (init_ctx == NULL) {
@@ -52,12 +66,48 @@ int sssm_openshift_init(TALLOC_CTX *mem_ctx,
     init_ctx->id_ctx->domain->id_min = 10000;    /* FIXME: make customizable */
     init_ctx->id_ctx->domain->id_max = 20000;    /* FIXME: make customizable */
 
+    ret = dp_get_options(init_ctx->id_ctx,
+                         be_ctx->cdb,
+                         be_ctx->conf_path,
+                         id_opts,
+                         OCP_OPTS_ID,
+                         &init_ctx->id_ctx->id_opts);
+    if (ret != EOK) {
+        goto fail;
+    }
+
+    /* This is the group that the user will be added to, typically in order
+     * to be allowed to run sudo. In contrast to the OpenShift groups which
+     * are non-POSIX (have no GID), this one will be added as a regular POSIX
+     * group, otherwise sudo wouldn't see the group
+     */
+    additional_group = dp_opt_get_string(init_ctx->id_ctx->id_opts,
+                                         OCP_ADDTL_GROUP);
+    if (additional_group != NULL) {
+        init_ctx->additional_group = \
+                    sss_create_internal_fqname(init_ctx,
+                                               additional_group,
+                                               be_ctx->domain->name);
+        if (init_ctx->additional_group == NULL) {
+            goto fail;
+        }
+
+        ret = create_additional_group(be_ctx->domain,
+                                      init_ctx->additional_group);
+        if (ret != EOK && ret != EEXIST) {
+            DEBUG(SSSDBG_MINOR_FAILURE,
+                "Could not add additional group, sudo might not be allowed\n");
+            /* not fatal */
+        }
+    }
+
     init_ctx->auth_ctx = talloc_zero(mem_ctx, struct openshift_auth_ctx);
     if (init_ctx->auth_ctx == NULL) {
         ret = ENOMEM;
         goto fail;
     }
     init_ctx->auth_ctx->be = be_ctx;
+    init_ctx->auth_ctx->additional_group = init_ctx->additional_group;
 
     ret = dp_get_options(init_ctx->auth_ctx,
                          be_ctx->cdb,
