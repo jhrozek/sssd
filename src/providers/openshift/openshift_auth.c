@@ -204,10 +204,10 @@ done:
  * but let's do it past the POC stage.
  */
 static errno_t populate_user_groups(struct ocp_user_info *user,
+                                    struct ldb_result *res,
                                     struct sss_domain_info *domain)
 {
     TALLOC_CTX *tmp_ctx;
-    struct ldb_result *res;
     errno_t ret;
     const char **cache_group_list;
     size_t gi;
@@ -227,15 +227,6 @@ static errno_t populate_user_groups(struct ocp_user_info *user,
         goto done;
     }
     in_transaction = true;
-
-    /* Read the user entry from the cache.. */
-    ret = sysdb_initgroups(tmp_ctx,
-                           domain,
-                           user->name,
-                           &res);
-    if (ret != EOK) {
-        goto done;
-    }
 
     cache_group_list = talloc_zero_array(tmp_ctx, const char *, res->count);
     if (cache_group_list == NULL) {
@@ -291,6 +282,89 @@ static errno_t populate_user_groups(struct ocp_user_info *user,
     }
 
     /* TODO: remove orphaned groups? */
+
+    ret = sysdb_transaction_commit(domain->sysdb);
+    if (ret != EOK) {
+        goto done;
+    }
+    in_transaction = false;
+
+    ret = EOK;
+done:
+    if (in_transaction) {
+        tret = sysdb_transaction_cancel(domain->sysdb);
+        if (tret != EOK) {
+            DEBUG(SSSDBG_CRIT_FAILURE, "Failed to cancel transaction\n");
+        }
+    }
+    talloc_free(tmp_ctx);
+    return ret;
+}
+
+static errno_t post_login_transaction(struct ocp_user_info *user,
+                                      struct be_ctx *be_ctx,
+                                      struct sss_domain_info *domain)
+{
+    errno_t ret;
+    int tret;
+    bool in_transaction = false;
+    TALLOC_CTX *tmp_ctx;
+    struct sysdb_attrs *user_attrs = NULL;
+    struct ldb_result *res;
+
+    tmp_ctx = talloc_new(NULL);
+    if (tmp_ctx == NULL) {
+        return ENOMEM;
+    }
+
+    ret = sysdb_transaction_start(domain->sysdb);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to start transaction\n");
+        goto done;
+    }
+    in_transaction = true;
+
+    user_attrs = sysdb_new_attrs(tmp_ctx);
+    if (user_attrs == NULL) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_new_attrs failed.\n");
+        ret = ENOMEM;
+        goto done;
+    }
+
+    ret = sysdb_attrs_add_time_t(user_attrs,
+                                 SYSDB_LAST_ONLINE_AUTH,
+                                 time(NULL));
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_add_time_t failed");
+        goto done;
+    }
+
+    /* Read the user entry from the cache.. */
+    ret = sysdb_initgroups(tmp_ctx,
+                           domain,
+                           user->name,
+                           &res);
+    if (ret != EOK) {
+        goto done;
+    }
+
+    ret = sysdb_set_entry_attr(domain->sysdb,
+                               res->msgs[0]->dn,
+                               user_attrs,
+                               SYSDB_MOD_REP);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_OP_FAILURE, "sysdb_set_entry_attr failed.\n");
+        goto done;
+    }
+
+    ret = populate_user_groups(user, res, domain);
+    if (ret != EOK) {
+        goto done;
+    }
+
+
+    /* Signal nss to drop memcache */
+    dp_sbus_reset_users_memcache(be_ctx->provider);
 
     ret = sysdb_transaction_commit(domain->sysdb);
     if (ret != EOK) {
@@ -402,8 +476,8 @@ static void openshift_auth_handler_done(struct tevent_req *subreq)
         goto done;
     }
 
-    /* Populate groups for access control later.. */
-    ret = populate_user_groups(sss_user_info, state->dom);
+    /* Set login timestamps, populate groups for access control later, etc... */
+    ret = post_login_transaction(sss_user_info, state->auth_ctx->be, state->dom);
     if (ret != EOK) {
         DEBUG(SSSDBG_MINOR_FAILURE,
               "Could not add groups for %s, the user might be denied access\n",
