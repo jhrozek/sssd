@@ -4577,6 +4577,7 @@ libsss_openshift_la_SOURCES = \
     src/providers/openshift/openshift_id.c \
     src/providers/openshift/openshift_auth.c \
     src/providers/openshift/openshift_auth_tokenreview.c \
+    src/providers/openshift/openshift_auth_tilda.c \
     src/providers/openshift/openshift_access.c \
     src/providers/openshift/openshift_opts.c \
     src/util/tev_curl.c \

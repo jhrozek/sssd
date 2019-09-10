@@ -417,12 +417,13 @@ openshift_auth_handler_send(TALLOC_CTX *mem_ctx,
     state->pd->pam_status = PAM_SYSTEM_ERR;
     state->auth_ctx = auth_ctx;
 
-    subreq = token_review_auth_send(state,
-                                    auth_ctx->be->ev,
-                                    auth_ctx->tc_ctx,
-                                    dp_opt_get_cstring(auth_ctx->auth_opts,
-                                                       API_SERVER_URL),
-                                    pd->authtok);
+    subreq = tilda_auth_send(state,
+                             auth_ctx->be->ev,
+                             auth_ctx->tc_ctx,
+                             pd->user,
+                             dp_opt_get_cstring(auth_ctx->auth_opts,
+                                                API_SERVER_URL),
+                             pd->authtok);
     if (subreq == NULL) {
         state->pd->pam_status = PAM_SYSTEM_ERR;
         goto immediately;
@@ -448,7 +449,7 @@ static void openshift_auth_handler_done(struct tevent_req *subreq)
     req = tevent_req_callback_data(subreq, struct tevent_req);
     state = tevent_req_data(req, struct openshift_auth_state);
 
-    ret = token_review_auth_recv(state, subreq, &raw_user_info);
+    ret = tilda_auth_recv(state, subreq, &raw_user_info);
     talloc_free(subreq);
     if (ret != EOK) {
         /* http errors go here.. */

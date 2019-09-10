@@ -101,6 +101,19 @@ token_review_auth_recv(TALLOC_CTX *mem_ctx,
                        struct tevent_req *req,
                        struct ocp_user_info **_user_info);
 
+/* openshift_auth_tilda.c */
+struct tevent_req *
+tilda_auth_send(TALLOC_CTX *mem_ctx,
+                struct tevent_context *ev,
+                struct tcurl_ctx *tc_ctx,
+                const char *username,
+                const char *api_server_url,
+                struct sss_auth_token *token);
+errno_t
+tilda_auth_recv(TALLOC_CTX *mem_ctx,
+                struct tevent_req *req,
+                struct ocp_user_info **_user_info);
+
 /* openshift_access.c */
 struct tevent_req *
 openshift_access_handler_send(TALLOC_CTX *mem_ctx,
