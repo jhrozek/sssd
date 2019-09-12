@@ -856,6 +856,7 @@ dist_noinst_HEADERS = \
     src/providers/proxy/proxy.h \
     src/providers/files/files_private.h \
     src/providers/openshift/openshift_private.h \
+    src/providers/openshift/openshift_opts.h \
     src/tools/tools_util.h \
     src/tools/sss_sync_ops.h \
     src/resolv/async_resolv.h \
@@ -4575,15 +4576,23 @@ libsss_openshift_la_SOURCES = \
     src/providers/openshift/openshift_init.c \
     src/providers/openshift/openshift_id.c \
     src/providers/openshift/openshift_auth.c \
+    src/providers/openshift/openshift_auth_tokenreview.c \
+    src/providers/openshift/openshift_opts.c \
+    src/util/tev_curl.c \
+    src/util/sss_iobuf.c \
     $(NULL)
 libsss_openshift_la_CFLAGS = \
     $(AM_CFLAGS) \
+    $(CURL_CFLAGS) \
+    $(JANSSON_CFLAGS) \
     $(NULL)
 libsss_openshift_la_LIBADD = \
     $(TALLOC_LIBS) \
     $(TEVENT_LIBS) \
     $(LDB_LIBS) \
     $(PAM_LIBS) \
+    $(CURL_LIBS) \
+    $(JANSSON_LIBS) \
     $(SSSD_INTERNAL_LTLIBS) \
     $(NULL)
 libsss_openshift_la_LDFLAGS = \

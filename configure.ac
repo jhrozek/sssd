@@ -212,9 +212,12 @@ m4_include([src/external/service.m4])
 m4_include([src/external/test_ca.m4])
 m4_include([src/external/ax_valgrind_check.m4])
 
+if test x$with_secrets = xyes -o x$with_openshift = xyes; then
+    m4_include([src/external/libcurl.m4])
+fi
+
 if test x$with_secrets = xyes; then
     m4_include([src/external/libhttp_parser.m4])
-    m4_include([src/external/libcurl.m4])
 fi
 
 if test x$with_kcm = xyes; then
