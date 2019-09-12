@@ -1542,10 +1542,15 @@ int sysdb_get_new_id(struct sss_domain_info *domain,
         return ENOMEM;
     }
 
-    if (!local_provider_is_built()
-            || strcasecmp(domain->provider, "local") != 0) {
+    /* Openshift domains are also allowed to autogenerate IDs.
+     * FIXME: This should really be a domain property set during initialization
+     * time, not a strcmp in the generate function..
+     */
+    if ((!local_provider_is_built()
+            || strcasecmp(domain->provider, "local") != 0)
+            && strcasecmp(domain->provider, "openshift") != 0) {
         DEBUG(SSSDBG_CRIT_FAILURE,
-              "Generating new ID is only supported in the local domain!\n");
+              "Generating new ID is not supported in this domain\n");
         return ENOTSUP;
     }
 
