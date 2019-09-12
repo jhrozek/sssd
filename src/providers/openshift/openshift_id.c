@@ -194,6 +194,19 @@ static errno_t resolve_ocp_user(TALLOC_CTX *mem_ctx,
         goto done;
     }
 
+    ret = sysdb_store_group(id_ctx->domain,
+                            name,
+                            user_uid,
+                            NULL,
+                            id_ctx->domain->group_timeout,
+                            0);
+    if (ret != EOK) {
+        DEBUG(SSSDBG_MINOR_FAILURE,
+              "Could not store the user group %s [%d]: %s\n",
+              name, ret, sss_strerror(ret));
+        /* Non fatal */
+    }
+
     /*
      * Explicitly add the user into the additional group even before
      * authentication. This might not actually be needed, but some
