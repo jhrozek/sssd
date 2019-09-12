@@ -30,7 +30,6 @@ int sssm_openshift_init(TALLOC_CTX *mem_ctx,
                         void **_module_data)
 {
     struct openshift_id_ctx *ctx;
-    errno_t ret;
 
     ctx = talloc_zero(mem_ctx, struct openshift_id_ctx);
     if (ctx == NULL) {
@@ -39,14 +38,13 @@ int sssm_openshift_init(TALLOC_CTX *mem_ctx,
 
     ctx->be = be_ctx;
     ctx->domain = be_ctx->domain;
+    ctx->remove_user_timeout = 10;  /* FIXME: make customizable */
+    ctx->user_quota = 10;           /* FIXME: make customizable */
+    ctx->domain->id_min = 10000;    /* FIXME: make customizable */
+    ctx->domain->id_max = 20000;    /* FIXME: make customizable */
 
     *_module_data = ctx;
-    ret = EOK;
-done:
-    if (ret != EOK) {
-        talloc_free(ctx);
-    }
-    return ret;
+    return EOK;
 }
 
 int sssm_openshift_id_init(TALLOC_CTX *mem_ctx,
@@ -61,6 +59,8 @@ int sssm_openshift_id_init(TALLOC_CTX *mem_ctx,
         return EINVAL;
     }
 
+    /* User/Group/... resolution request handlers
+     */
     dp_set_method(dp_methods, DPM_ACCOUNT_HANDLER,
                   openshift_account_info_handler_send,
                   openshift_account_info_handler_recv,

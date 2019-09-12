@@ -31,8 +31,10 @@
 #include "providers/data_provider/dp.h"
 
 struct openshift_id_ctx {
-    struct be_ctx *be;
-    struct sss_domain_info *domain;
+    struct      be_ctx *be;
+    struct      sss_domain_info *domain;
+    size_t      user_quota;
+    unsigned    remove_user_timeout;
 };
 
 /* openshift_id.c */
