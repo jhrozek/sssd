@@ -75,6 +75,23 @@ int sssm_openshift_init(TALLOC_CTX *mem_ctx,
         goto fail;
     }
 
+    init_ctx->access_ctx = talloc_zero(mem_ctx, struct openshift_access_ctx);
+    if (init_ctx->access_ctx == NULL) {
+        ret = ENOMEM;
+        goto fail;
+    }
+    init_ctx->access_ctx->be = be_ctx;
+
+    ret = dp_get_options(init_ctx->access_ctx,
+                         be_ctx->cdb,
+                         be_ctx->conf_path,
+                         access_opts,
+                         OCP_OPTS_ACCESS,
+                         &init_ctx->access_ctx->access_opts);
+    if (ret != EOK) {
+        goto fail;
+    }
+
     *_module_data = init_ctx;
     return EOK;
 
@@ -138,6 +155,69 @@ int sssm_openshift_auth_init(TALLOC_CTX *mem_ctx,
                   openshift_auth_handler_send,
                   openshift_auth_handler_recv,
                   auth_ctx, struct openshift_auth_ctx,
+                  struct pam_data, struct pam_data *);
+
+    return EOK;
+}
+
+errno_t sssm_openshift_access_init(TALLOC_CTX *mem_ctx,
+                                   struct be_ctx *be_ctx,
+                                   void *module_data,
+                                   struct dp_method *dp_methods)
+{
+    struct openshift_init_ctx *init_ctx;
+    struct openshift_access_ctx *access_ctx;
+    errno_t ret;
+    char **raw_allowed_groups;
+    int acl_len;
+
+    init_ctx = talloc_get_type(module_data, struct openshift_init_ctx);
+    if (init_ctx == NULL) {
+        DEBUG(SSSDBG_CRIT_FAILURE, "Did not receive openshift_init_ctx\n");
+        return EINVAL;
+    }
+    access_ctx = init_ctx->access_ctx;
+
+    /* Split the comma-separated list of allowed groupnames into
+     * an array of strings
+     */
+    ret = split_on_separator(access_ctx,
+                             dp_opt_get_string(access_ctx->access_opts,
+                                               OCP_ACCT_ACL_LIST),
+                             ',', true, true,
+                             &raw_allowed_groups, &acl_len);
+    if (ret != EOK) {
+        /* Just fail the initialization, we'd have do deny everyone anyway */
+        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to parse the ACL\n");
+        return ret;
+    }
+
+    /* Turn the raw names into sssd-format of usernames qualified with
+     * the domain name
+     */
+    access_ctx->allowed_groups = talloc_zero_array(access_ctx,
+                                                   char *,
+                                                   acl_len + 1);
+    if (access_ctx->allowed_groups == NULL) {
+        return ENOMEM;
+    }
+
+    for (int i = 0; i < acl_len; i++) {
+        access_ctx->allowed_groups[i] = \
+                    sss_create_internal_fqname(access_ctx,
+                                               raw_allowed_groups[i],
+                                               access_ctx->be->domain->name);
+        if (access_ctx->allowed_groups[i] == NULL) {
+            return ENOMEM;
+        }
+    }
+    talloc_free(raw_allowed_groups);
+
+    /* Set the access control handlers */
+    dp_set_method(dp_methods, DPM_ACCESS_HANDLER,
+                  openshift_access_handler_send,
+                  openshift_access_handler_recv,
+                  access_ctx, struct openshift_access_ctx,
                   struct pam_data, struct pam_data *);
 
     return EOK;

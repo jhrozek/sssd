@@ -25,11 +25,18 @@
 #include "src/providers/data_provider.h"
 
 extern struct dp_option auth_opts[];
+extern struct dp_option access_opts[];
 
 enum ocp_auth_opt {
     API_SERVER_URL = 0,
 
     OCP_OPTS_AUTH /* opts counter */
+};
+
+enum ocp_access_opt {
+    OCP_ACCT_ACL_LIST = 0,
+
+    OCP_OPTS_ACCESS /* opts counter */
 };
 
 #endif /* LDAP_OPTS_H_ */

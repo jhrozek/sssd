@@ -33,6 +33,7 @@
 struct openshift_init_ctx {
     struct openshift_id_ctx  *id_ctx;
     struct openshift_auth_ctx *auth_ctx;
+    struct openshift_access_ctx *access_ctx;
 };
 
 struct openshift_id_ctx {
@@ -47,6 +48,13 @@ struct openshift_auth_ctx {
     struct tcurl_ctx *tc_ctx;
 
     struct dp_option *auth_opts;
+};
+
+struct openshift_access_ctx {
+    struct be_ctx *be;
+
+    struct dp_option *access_opts;
+    char **allowed_groups;
 };
 
 /* openshift_id.c */
@@ -88,5 +96,15 @@ errno_t
 token_review_auth_recv(TALLOC_CTX *mem_ctx,
                        struct tevent_req *req,
                        struct ocp_user_info **_user_info);
+
+/* openshift_access.c */
+struct tevent_req *
+openshift_access_handler_send(TALLOC_CTX *mem_ctx,
+                              struct openshift_access_ctx *access_ctx,
+                              struct pam_data *pd,
+                              struct dp_req_params *params);
+errno_t openshift_access_handler_recv(TALLOC_CTX *mem_ctx,
+                                      struct tevent_req *req,
+                                      struct pam_data **_data);
 
 #endif
