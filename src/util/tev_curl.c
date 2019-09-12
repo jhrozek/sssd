@@ -973,9 +973,17 @@ struct tcurl_request *tcurl_http(TALLOC_CTX *mem_ctx,
         }
         break;
     case TCURL_HTTP_POST:
-        ret = tcurl_set_option(tcurl_req, CURLOPT_CUSTOMREQUEST, "POST");
+        ret = tcurl_set_option(tcurl_req, CURLOPT_POST, 1L);
         if (ret != EOK) {
             goto done;
+        }
+
+        if (body != NULL) {
+            ret = tcurl_set_option(tcurl_req, CURLOPT_POSTFIELDSIZE,
+                                   (curl_off_t)sss_iobuf_get_size(body));
+            if (ret != EOK) {
+                goto done;
+            }
         }
         break;
     case TCURL_HTTP_DELETE:
